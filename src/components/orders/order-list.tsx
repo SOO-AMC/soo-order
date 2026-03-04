@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Camera, ChevronRight, ShoppingCart } from "lucide-react";
+import { Camera, ChevronRight, CircleAlert, ShoppingCart } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
     const { data, error } = await supabase
       .from("orders")
       .select("*, requester:profiles!requester_id(full_name)")
+      .eq("type", "order")
       .eq("status", "pending")
       .order("created_at", { ascending: false });
 
@@ -60,7 +61,12 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
     }
   }, [fetchOrders, initialData]);
 
-  const pendingOrders = orders.filter((o) => o.status === "pending");
+  const sortedOrders = [...orders].sort((a, b) => {
+    if (a.is_urgent !== b.is_urgent) return a.is_urgent ? -1 : 1;
+    return 0;
+  });
+
+  const pendingOrders = sortedOrders.filter((o) => o.status === "pending");
   const allPendingSelected =
     pendingOrders.length > 0 &&
     pendingOrders.every((o) => selectedIds.has(o.id));
@@ -123,7 +129,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
     );
   }
 
-  if (orders.length === 0) {
+  if (sortedOrders.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <p className="text-muted-foreground">
@@ -164,7 +170,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
             </TableRow>
           </TableHeader>
           <TableBody>
-            {orders.map((order) => {
+            {sortedOrders.map((order) => {
               const isPending = order.status === "pending";
               const showCheckbox = isAdmin && isPending;
 
@@ -190,9 +196,16 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
                   <TableCell>
                     <OrderStatusBadge status={order.status} />
                   </TableCell>
-                  <TableCell className="font-medium">{order.item_name}</TableCell>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-1.5">
+                      {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
+                      {order.item_name}
+                    </span>
+                  </TableCell>
                   <TableCell>
-                    {order.quantity}{order.unit ? ` ${order.unit}` : ""}
+                    {order.quantity > 0
+                      ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
+                      : <span className="text-muted-foreground">(사진 참고)</span>}
                   </TableCell>
                   <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
                   <TableCell>{formatDate(order.created_at)}</TableCell>
@@ -213,7 +226,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
 
       {/* 모바일/태블릿 카드 뷰 */}
       <div className="lg:hidden space-y-2">
-        {orders.map((order) => {
+        {sortedOrders.map((order) => {
           const isPending = order.status === "pending";
           const showCheckbox = isAdmin && isPending;
 
@@ -236,10 +249,15 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
                   <div className="flex items-center gap-2">
                     <OrderTypeBadge type={order.type} />
                     <OrderStatusBadge status={order.status} />
+                    {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
                     <span className="truncate font-medium">{order.item_name}</span>
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>수량: {order.quantity}{order.unit ? ` ${order.unit}` : ""}</span>
+                    <span>
+                      {order.quantity > 0
+                        ? `수량: ${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
+                        : <span className="text-muted-foreground">(사진 참고)</span>}
+                    </span>
                     <span>·</span>
                     <span>{formatDate(order.created_at)}</span>
                     {order.photo_urls?.length > 0 && (

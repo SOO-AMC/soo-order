@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Camera, ChevronRight, Download, Search, SlidersHorizontal } from "lucide-react";
+import { Camera, ChevronRight, CircleAlert, Download, Search, SlidersHorizontal } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,7 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "*, requester:profiles!requester_id(full_name), updater:profiles!updated_by(full_name), inspector:profiles!inspected_by(full_name)"
+        "*, requester:profiles!requester_id(full_name), updater:profiles!updated_by(full_name), inspector:profiles!inspected_by(full_name), return_requester:profiles!return_requested_by(full_name)"
       )
       .order("created_at", { ascending: false });
 
@@ -85,6 +85,10 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
     () => [...new Set(orders.map((o) => o.inspector?.full_name).filter(Boolean))] as string[],
     [orders]
   );
+  const returnRequesterNames = useMemo(
+    () => [...new Set(orders.map((o) => o.return_requester?.full_name).filter(Boolean))] as string[],
+    [orders]
+  );
 
   // 활성 필터 개수
   const activeFilterCount = useMemo(() => {
@@ -95,16 +99,23 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
     if (filters.updaterName !== "all") count++;
     if (filters.inspectorName !== "all") count++;
     if (filters.dateFrom || filters.dateTo) count++;
+    if (filters.orderedDateFrom || filters.orderedDateTo) count++;
     if (filters.inspectedDateFrom || filters.inspectedDateTo) count++;
+    if (filters.returnRequesterName !== "all") count++;
+    if (filters.returnDateFrom || filters.returnDateTo) count++;
     if (filters.invoiceReceived !== "all") count++;
+    if (filters.isUrgent !== "all") count++;
     return count;
   }, [filters]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
-      // 품목명 검색
-      if (searchQuery && !order.item_name.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
+      // 품목명 / 업체명 검색
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const matchItem = order.item_name.toLowerCase().includes(q);
+        const matchVendor = order.vendor_name?.toLowerCase().includes(q);
+        if (!matchItem && !matchVendor) return false;
       }
       // 유형
       if (filters.type !== "all" && order.type !== filters.type) {
@@ -135,6 +146,17 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
         const orderDate = order.created_at.slice(0, 10);
         if (orderDate > filters.dateTo) return false;
       }
+      // 발주 날짜 범위 (updated_at when status >= ordered)
+      if (filters.orderedDateFrom) {
+        if (!order.updated_at) return false;
+        const orderedDate = order.updated_at.slice(0, 10);
+        if (orderedDate < filters.orderedDateFrom) return false;
+      }
+      if (filters.orderedDateTo) {
+        if (!order.updated_at) return false;
+        const orderedDate = order.updated_at.slice(0, 10);
+        if (orderedDate > filters.orderedDateTo) return false;
+      }
       // 검수 날짜 범위
       if (filters.inspectedDateFrom) {
         if (!order.inspected_at) return false;
@@ -146,12 +168,32 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
         const inspDate = order.inspected_at.slice(0, 10);
         if (inspDate > filters.inspectedDateTo) return false;
       }
+      // 반품 신청자
+      if (filters.returnRequesterName !== "all" && order.return_requester?.full_name !== filters.returnRequesterName) {
+        return false;
+      }
+      // 반품 신청 날짜 범위
+      if (filters.returnDateFrom) {
+        if (!order.return_requested_at) return false;
+        const retDate = order.return_requested_at.slice(0, 10);
+        if (retDate < filters.returnDateFrom) return false;
+      }
+      if (filters.returnDateTo) {
+        if (!order.return_requested_at) return false;
+        const retDate = order.return_requested_at.slice(0, 10);
+        if (retDate > filters.returnDateTo) return false;
+      }
       // 거래명세서
       if (filters.invoiceReceived !== "all") {
-        if (order.status !== "inspecting") return false;
+        if (order.status !== "inspecting" && order.status !== "return_requested" && order.status !== "return_completed") return false;
         if (filters.invoiceReceived === "received" && order.invoice_received !== true) return false;
         if (filters.invoiceReceived === "not_received" && order.invoice_received !== false)
           return false;
+      }
+      // 긴급
+      if (filters.isUrgent !== "all") {
+        if (filters.isUrgent === "urgent" && !order.is_urgent) return false;
+        if (filters.isUrgent === "normal" && order.is_urgent) return false;
       }
       return true;
     });
@@ -163,6 +205,7 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
 
     // 컬럼 정의
     ws.columns = [
+      { header: "긴급", key: "is_urgent", width: 6 },
       { header: "유형", key: "type", width: 8 },
       { header: "품목명", key: "item_name", width: 22 },
       { header: "수량", key: "quantity", width: 8 },
@@ -177,6 +220,8 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
       { header: "거래명세서", key: "invoice", width: 12 },
       { header: "검수자", key: "inspector", width: 10 },
       { header: "검수일", key: "inspected_at", width: 12 },
+      { header: "반품수량", key: "return_quantity", width: 10 },
+      { header: "반품사유", key: "return_reason", width: 18 },
     ];
 
     // 헤더 스타일
@@ -206,9 +251,10 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
     filteredOrders.forEach((order, i) => {
       const wasUpdated = order.updated_at !== order.created_at;
       const row = ws.addRow({
+        is_urgent: order.is_urgent ? "Y" : "",
         type: ORDER_TYPE_LABEL[order.type],
         item_name: order.item_name,
-        quantity: order.quantity,
+        quantity: order.quantity > 0 ? order.quantity : "(사진 참고)",
         unit: order.unit,
         status: ORDER_STATUS_LABEL[order.status],
         requester: order.requester?.full_name ?? "",
@@ -225,6 +271,8 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
               : "",
         inspector: order.inspector?.full_name ?? "",
         inspected_at: order.inspected_at ? order.inspected_at.slice(0, 10) : "",
+        return_quantity: order.return_quantity ?? "",
+        return_reason: order.return_reason ?? "",
       });
 
       row.eachCell({ includeEmpty: true }, (cell) => {
@@ -295,7 +343,7 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="품목명 검색"
+            placeholder="품목명 / 업체명 검색"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -355,9 +403,16 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
                     <TableCell>
                       <OrderStatusBadge status={order.status} />
                     </TableCell>
-                    <TableCell className="font-medium">{order.item_name}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="flex items-center gap-1.5">
+                        {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
+                        {order.item_name}
+                      </span>
+                    </TableCell>
                     <TableCell>
-                      {order.quantity}{order.unit ? ` ${order.unit}` : ""}
+                      {order.quantity > 0
+                        ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
+                        : <span className="text-muted-foreground">(사진 참고)</span>}
                     </TableCell>
                     <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
                     <TableCell>{formatDate(order.created_at)}</TableCell>
@@ -389,12 +444,14 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
                   <div className="flex items-center gap-2">
                     <OrderTypeBadge type={order.type} />
                     <OrderStatusBadge status={order.status} />
+                    {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
                     <span className="truncate font-medium">{order.item_name}</span>
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
                     <span>
-                      수량: {order.quantity}
-                      {order.unit ? ` ${order.unit}` : ""}
+                      {order.quantity > 0
+                        ? `수량: ${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
+                        : "(사진 참고)"}
                     </span>
                     <span>·</span>
                     <span>{formatDate(order.created_at)}</span>
@@ -425,6 +482,7 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
         requesterNames={requesterNames}
         updaterNames={updaterNames}
         inspectorNames={inspectorNames}
+        returnRequesterNames={returnRequesterNames}
       />
       </div>
     </>

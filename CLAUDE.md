@@ -34,15 +34,18 @@ pnpm dlx shadcn@latest add <component>  # shadcn/ui 컴포넌트 추가
 (auth)/              # 인증 페이지 (탭바 없음, 중앙 정렬 레이아웃)
   login/             # 로그인 (이름+비밀번호, Server Action)
 (main)/              # 메인 페이지 (AuthGuard + 하단 탭바)
-  orders/            # 주문/반품 리스트 (Server Component)
-    new/             # 새 요청 생성 (Client Component)
+  orders/            # 주문 리스트 (Server Component, type=order만)
+    new/             # 새 주문 등록 (Client Component)
     [id]/            # 상세 뷰 (Server Component)
       edit/          # 수정 폼 (Client Component)
+  returns/           # 반품 리스트 (Server Component, status=return_requested)
+    [id]/            # 반품 상세 (Server Component, 원본주문+반품정보+반품완료)
   inspection/        # 검수 대기 리스트 (Server Component)
     [id]/            # 검수 상세 + 검수 처리 (Server Component)
   search/            # 조회 리스트 (Server Component + Client 검색/필터)
-    [id]/            # 조회 상세 (Server Component, 요청+주문+검수 정보 통합)
-  account/           # 계정관리 (내 정보, 비밀번호 변경, 로그아웃)
+    [id]/            # 조회 상세 (Server Component, 요청+주문+검수+반품 정보 통합)
+  more/              # 더보기 (사용자 정보, 메뉴 링크, 로그아웃)
+  account/           # 계정관리 (내 정보, 비밀번호 변경)
     members/         # 직원 관리 (admin only, 직원 CRUD + 비밀번호 초기화)
 admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 ~offline/            # PWA 오프라인 폴백
@@ -94,8 +97,8 @@ admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 
 ### orders 테이블
 - 주문/반품 요청 관리
-- 필드: id(UUID auto), type(order/return), item_name, quantity, unit(단위, 기본값 ''), status(pending/ordered/inspecting), requester_id(FK→profiles), updated_by(FK→profiles, nullable, 수정자 추적), vendor_name(업체명, 발주 시 입력), confirmed_quantity(검수 확인 수량), invoice_received(거래명세서 수령 여부), inspected_by(FK→profiles, 검수자), inspected_at(검수일시), photo_urls(text[] DEFAULT '{}', 사진 경로 배열, 최대 5장), created_at, updated_at
-- 상태 흐름: pending(요청중) → ordered(발주완료/검수대기) → inspecting(검수완료)
+- 필드: id(UUID auto), type(order/return), item_name, quantity, unit(단위, 기본값 ''), status(pending/ordered/inspecting/return_requested/return_completed), requester_id(FK→profiles), updated_by(FK→profiles, nullable, 수정자 추적), vendor_name(업체명, 발주 시 입력), confirmed_quantity(검수 확인 수량), invoice_received(거래명세서 수령 여부), inspected_by(FK→profiles, 검수자), inspected_at(검수일시), photo_urls(text[] DEFAULT '{}', 사진 경로 배열, 최대 5장), is_urgent(BOOLEAN NOT NULL DEFAULT false, 긴급 여부), return_quantity(INTEGER, 반품 수량), return_reason(TEXT, 반품 사유), return_requested_by(FK→profiles, 반품 신청자), return_requested_at(TIMESTAMPTZ, 반품 신청일시), created_at, updated_at
+- 상태 흐름: pending(요청중) → ordered(발주완료/검수대기) → inspecting(검수완료) → return_requested(반품신청) → return_completed(반품완료)
 - update_updated_at() 트리거 재사용
 
 ### 반응형 레이아웃
@@ -112,12 +115,12 @@ admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 - `src/hooks/use-media-query.ts`: useMediaQuery 훅 (SSR에서 false 반환, Sheet 방향 동적 전환에 사용)
 
 ## 주요 공유 컴포넌트
-- `src/components/app-sidebar.tsx`: PC 좌측 사이드바 (lg:flex, 4탭 네비게이션, 앱 로고)
-- `src/components/bottom-nav.tsx`: 하단 4탭 네비게이션 (pathname.startsWith로 활성 탭 감지, lg:hidden)
+- `src/components/app-sidebar.tsx`: PC 좌측 사이드바 (lg:flex, 5탭 네비게이션 + 하단 로그아웃, 앱 로고)
+- `src/components/bottom-nav.tsx`: 하단 5탭 네비게이션 (주문/반품/검수/조회/더보기, pathname.startsWith로 활성 탭 감지, lg:hidden)
 - `src/components/orders/order-form.tsx`: 주문 생성/수정 공용 폼 (defaultValues로 모드 전환)
 - `src/components/orders/item-name-autocomplete.tsx`: 단순 드롭다운 기반 자동완성 (300ms 디바운스, Supabase ilike 쿼리)
 - `src/components/orders/order-type-badge.tsx`: 주문(default)/반품(secondary) 뱃지
-- `src/components/orders/order-status-badge.tsx`: 요청중(outline)/발주완료(default)/검수완료(secondary) 뱃지
+- `src/components/orders/order-status-badge.tsx`: 요청중(outline)/발주완료(default)/검수완료(secondary)/반품신청(destructive)/반품완료(secondary) 뱃지
 - `src/components/orders/order-admin-action.tsx`: 관리자 전용 개별 발주 (업체명 입력 + 발주 버튼, pending일 때만 표시)
 - `src/components/orders/photo-picker.tsx`: 사진 선택 UI (촬영/갤러리/파일선택, 썸네일 그리드, 최대 5장)
 - `src/components/orders/photo-gallery.tsx`: 사진 갤러리 뷰 (읽기 전용, 클릭 시 Dialog 라이트박스, 좌우 네비게이션)
@@ -129,9 +132,13 @@ admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 - `src/components/search/search-list.tsx`: 조회 리스트 (품목명 검색 + Sheet 기반 필터 + 카드 리스트 + 관리자 엑셀 다운로드)
 - `src/components/search/search-filter-sheet.tsx`: 조회 필터 Sheet (주문유형/상태/요청자/날짜범위/발주자/검수자/검수날짜/거래명세서 필터, 초기화/적용, PC: side=right, 모바일: side=bottom)
 - `src/components/search/cancel-inspection-button.tsx`: 검수 취소 버튼 (Dialog 확인 후 ordered로 되돌리기, 검수자/관리자만)
+- `src/components/search/return-request-button.tsx`: 반품 신청 버튼 (Dialog, 반품수량+사유 입력, 검수완료 상태에서 표시)
+- `src/components/returns/return-list.tsx`: 반품 리스트 (체크박스 일괄 반품완료, PC 테이블 + 모바일 카드)
+- `src/components/returns/return-complete-button.tsx`: 반품 완료 버튼 (개별 반품 상세에서 사용)
+- `src/components/more/more-page.tsx`: 더보기 페이지 (사용자 정보, 계정관리/직원관리 메뉴, 로그아웃)
 - `src/lib/utils.ts`: cn() (shadcn/ui 유틸, clsx + tailwind-merge)
 - `src/lib/utils/auth.ts`: nameToEmail(), validatePassword() 인증 유틸리티
-- `src/components/account/account-page.tsx`: 계정 정보 + 비밀번호 변경 + 로그아웃 + 직원 관리 링크(admin)
+- `src/components/account/account-page.tsx`: 계정 정보 + 비밀번호 변경 (뒤로가기→/more)
 - `src/components/ui/spinner.tsx`: 로딩 스피너 (primary 컬러, 선택적 text prop)
 - `src/components/account/staff-management.tsx`: 직원 목록 + 추가/수정/삭제/비밀번호 초기화 Dialog
 
@@ -141,24 +148,38 @@ badge, button, card, checkbox, command, dialog, input, label, popover, select, s
 ## 구현 상태
 - [x] 프로젝트 세팅 (Next.js + Supabase + shadcn/ui + PWA)
 - [x] 인증 (이름+비밀번호 로그인, 회원가입 제거, middleware, AuthGuard/AdminGuard)
-- [x] 주문/반품 탭 (리스트, 생성, 상세, 수정, 삭제)
+- [x] 주문 탭 (리스트, 생성, 상세, 수정, 삭제, type=order만 필터)
 - [x] 수정자 추적 (updated_by 필드, 상세 페이지에서 수정자 표시)
 - [x] 관리자 발주 기능 (상세 페이지 개별 발주 + 리스트 일괄 발주)
 - [x] 검수 탭 (리스트, 상세, 개별/일괄 검수 완료, 주문 취소)
 - [x] 조회 탭 (리스트 검색/필터, 상세 통합 조회, 검수 취소, 관리자 엑셀 다운로드)
-- [x] 계정관리 탭 (내 정보, 비밀번호 변경, 로그아웃)
+- [x] 반품 탭 (조회 상세에서 검수완료 품목 반품 신청, 반품 리스트, 반품 상세, 일괄/개별 반품 완료)
+- [x] 더보기 탭 (사용자 정보, 계정관리/직원관리 메뉴, 로그아웃)
+- [x] 계정관리 (내 정보, 비밀번호 변경, 뒤로가기→더보기)
 - [x] 직원 관리 (admin only, 계정 추가/수정/삭제/비밀번호 초기화/권한 변경)
 - [x] 화면 전환 애니메이션 (Spinner 로딩, page-enter fade-in, 로그인 slide-up)
 - [x] 성능 최적화 (getUser→getSession, Server prefetch + initialData, Promise.all 병렬화, 검수 일괄 병렬 처리)
 - [x] 태블릿/PC 반응형 최적화 (AppSidebar, 콘텐츠 너비 확장, 상세 2컬럼 그리드, floating 버튼 오프셋)
 - [x] PC 레이아웃 최적화 (리스트 테이블 뷰, max-width 확장, 상세 3컬럼 그리드, 필터 Sheet 우측 패널)
 - [x] 주문 사진 첨부 (최대 5장, WebP 압축, 카메라/갤러리/파일선택, 갤러리 라이트박스, 리스트 아이콘 표시, 삭제 시 스토리지 정리)
+- [x] 긴급 주문 (is_urgent 체크박스, 리스트 최상단 정렬, 빨간 CircleAlert 아이콘, 상세 긴급 뱃지, 조회 필터, 엑셀 컬럼)
 
 ## 기획 메모
-- 주문/반품 요청 → 관리자가 발주 실행 → 발주 완료된 품목은 검수 탭에 검수 대기로 표시 → 확인 수량 + 거래명세서 수령 여부 입력 후 검수 완료
+- 주문 요청 → 관리자가 발주 실행 → 발주 완료된 품목은 검수 탭에 검수 대기로 표시 → 확인 수량 + 거래명세서 수령 여부 입력 후 검수 완료 → 조회 상세에서 반품 신청 → 반품 탭에서 반품 완료 처리
 - 검수 대기 품목 주문 취소: 요청중으로 되돌리기 또는 완전 삭제 선택 가능 (관리자 또는 요청자)
 - 품목명: 자유 텍스트 입력 + 이전 입력값 기반 자동완성
 - Supabase 설정: Authentication → Providers → Email → Confirm email **OFF**, Minimum password length → 4
 - 환경변수: `SUPABASE_SERVICE_ROLE_KEY` (서버 전용, admin client용)
 - Supabase Storage: `order-photos` 버킷 (public), 경로 `{orderId}/{uuid}.webp`, RLS: authenticated INSERT/SELECT, owner/admin DELETE
 - DB 마이그레이션: `ALTER TABLE orders ADD COLUMN photo_urls text[] DEFAULT '{}'`
+- DB 마이그레이션: `ALTER TABLE orders ADD COLUMN is_urgent BOOLEAN NOT NULL DEFAULT false`
+- DB 마이그레이션: 반품 기능 추가
+  ```sql
+  ALTER TABLE public.orders DROP CONSTRAINT orders_status_check;
+  ALTER TABLE public.orders ADD CONSTRAINT orders_status_check CHECK (status IN ('pending', 'ordered', 'inspecting', 'return_requested', 'return_completed'));
+  ALTER TABLE public.orders ADD COLUMN return_quantity INTEGER;
+  ALTER TABLE public.orders ADD COLUMN return_reason TEXT DEFAULT '';
+  ALTER TABLE public.orders ADD COLUMN return_requested_by UUID REFERENCES public.profiles(id);
+  ALTER TABLE public.orders ADD COLUMN return_requested_at TIMESTAMPTZ;
+  ```
+- 네비게이션: 4탭(주문/검수/조회/계정관리) → 5탭(주문/반품/검수/조회/더보기)

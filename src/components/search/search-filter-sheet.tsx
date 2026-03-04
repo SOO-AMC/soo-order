@@ -24,15 +24,21 @@ import { Separator } from "@/components/ui/separator";
 
 export interface SearchFilters {
   type: "all" | "order" | "return";
-  status: "all" | "pending" | "ordered" | "inspecting";
+  status: "all" | "pending" | "ordered" | "inspecting" | "return_requested" | "return_completed";
   requesterName: string;
   updaterName: string;
   inspectorName: string;
   dateFrom: string;
   dateTo: string;
+  orderedDateFrom: string;
+  orderedDateTo: string;
   inspectedDateFrom: string;
   inspectedDateTo: string;
+  returnRequesterName: string;
+  returnDateFrom: string;
+  returnDateTo: string;
   invoiceReceived: "all" | "received" | "not_received";
+  isUrgent: "all" | "urgent" | "normal";
 }
 
 export const defaultFilters: SearchFilters = {
@@ -43,9 +49,15 @@ export const defaultFilters: SearchFilters = {
   inspectorName: "all",
   dateFrom: "",
   dateTo: "",
+  orderedDateFrom: "",
+  orderedDateTo: "",
   inspectedDateFrom: "",
   inspectedDateTo: "",
+  returnRequesterName: "all",
+  returnDateFrom: "",
+  returnDateTo: "",
   invoiceReceived: "all",
+  isUrgent: "all",
 };
 
 interface SearchFilterSheetProps {
@@ -56,6 +68,7 @@ interface SearchFilterSheetProps {
   requesterNames: string[];
   updaterNames: string[];
   inspectorNames: string[];
+  returnRequesterNames: string[];
 }
 
 export function SearchFilterSheet({
@@ -66,6 +79,7 @@ export function SearchFilterSheet({
   requesterNames,
   updaterNames,
   inspectorNames,
+  returnRequesterNames,
 }: SearchFilterSheetProps) {
   const [local, setLocal] = useState<SearchFilters>(filters);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -123,20 +137,43 @@ export function SearchFilterSheet({
           <div className="space-y-2">
             <Label className="text-sm font-medium">주문 상태</Label>
             <div className="flex flex-wrap gap-2">
-              {(["all", "pending", "ordered", "inspecting"] as const).map((value) => (
+              {(["all", "pending", "ordered", "inspecting", "return_requested", "return_completed"] as const).map((value) => {
+                const label = {
+                  all: "전체",
+                  pending: "요청중",
+                  ordered: "발주완료",
+                  inspecting: "검수완료",
+                  return_requested: "반품신청",
+                  return_completed: "반품완료",
+                }[value];
+                return (
+                  <Badge
+                    key={value}
+                    variant={local.status === value ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => setLocal((p) => ({ ...p, status: value }))}
+                  >
+                    {label}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* 긴급 */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">긴급 여부</Label>
+            <div className="flex flex-wrap gap-2">
+              {(["all", "urgent", "normal"] as const).map((value) => (
                 <Badge
                   key={value}
-                  variant={local.status === value ? "default" : "outline"}
+                  variant={local.isUrgent === value ? "default" : "outline"}
                   className="cursor-pointer"
-                  onClick={() => setLocal((p) => ({ ...p, status: value }))}
+                  onClick={() => setLocal((p) => ({ ...p, isUrgent: value }))}
                 >
-                  {value === "all"
-                    ? "전체"
-                    : value === "pending"
-                      ? "요청중"
-                      : value === "ordered"
-                        ? "발주완료"
-                        : "검수완료"}
+                  {value === "all" ? "전체" : value === "urgent" ? "긴급" : "일반"}
                 </Badge>
               ))}
             </div>
@@ -212,6 +249,28 @@ export function SearchFilterSheet({
 
           <Separator />
 
+          {/* 발주 날짜 범위 */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">발주 날짜 범위</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={local.orderedDateFrom}
+                onChange={(e) => setLocal((p) => ({ ...p, orderedDateFrom: e.target.value }))}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              />
+              <span className="shrink-0 text-muted-foreground">~</span>
+              <input
+                type="date"
+                value={local.orderedDateTo}
+                onChange={(e) => setLocal((p) => ({ ...p, orderedDateTo: e.target.value }))}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              />
+            </div>
+          </div>
+
+          <Separator />
+
           {/* 검수자 */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">검수자</Label>
@@ -250,6 +309,51 @@ export function SearchFilterSheet({
                 type="date"
                 value={local.inspectedDateTo}
                 onChange={(e) => setLocal((p) => ({ ...p, inspectedDateTo: e.target.value }))}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* 반품 신청자 */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">반품 신청자</Label>
+            <Select
+              value={local.returnRequesterName}
+              onValueChange={(v) => setLocal((p) => ({ ...p, returnRequesterName: v }))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="전체" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체</SelectItem>
+                {returnRequesterNames.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+
+          {/* 반품 신청 날짜 범위 */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">반품 신청 날짜 범위</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={local.returnDateFrom}
+                onChange={(e) => setLocal((p) => ({ ...p, returnDateFrom: e.target.value }))}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              />
+              <span className="shrink-0 text-muted-foreground">~</span>
+              <input
+                type="date"
+                value={local.returnDateTo}
+                onChange={(e) => setLocal((p) => ({ ...p, returnDateTo: e.target.value }))}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               />
             </div>

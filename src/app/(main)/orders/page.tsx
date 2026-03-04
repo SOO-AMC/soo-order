@@ -33,6 +33,7 @@ export default async function OrdersPage() {
     supabase
       .from("orders")
       .select("*, requester:profiles!requester_id(full_name)")
+      .eq("type", "order")
       .eq("status", "pending")
       .order("created_at", { ascending: false }),
   ]);

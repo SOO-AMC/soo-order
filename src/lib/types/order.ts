@@ -1,5 +1,5 @@
 export type OrderType = "order" | "return";
-export type OrderStatus = "pending" | "ordered" | "inspecting";
+export type OrderStatus = "pending" | "ordered" | "inspecting" | "return_requested" | "return_completed";
 
 export interface Order {
   id: string;
@@ -16,6 +16,11 @@ export interface Order {
   inspected_by: string | null;
   inspected_at: string | null;
   photo_urls: string[];
+  is_urgent: boolean;
+  return_quantity: number | null;
+  return_reason: string | null;
+  return_requested_by: string | null;
+  return_requested_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +35,9 @@ export interface OrderWithRequester extends Order {
   inspector: {
     full_name: string | null;
   } | null;
+  return_requester: {
+    full_name: string | null;
+  } | null;
 }
 
 export const ORDER_TYPE_LABEL: Record<OrderType, string> = {
@@ -41,4 +49,6 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   pending: "요청중",
   ordered: "발주완료",
   inspecting: "검수완료",
+  return_requested: "반품신청",
+  return_completed: "반품완료",
 };

@@ -4,11 +4,13 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { CancelInspectionButton } from "@/components/search/cancel-inspection-button";
+import { ReturnRequestButton } from "@/components/search/return-request-button";
 import { PhotoGallery } from "@/components/orders/photo-gallery";
 import { formatDateTime } from "@/lib/utils/format";
 import type { OrderType, OrderStatus } from "@/lib/types/order";
@@ -32,7 +34,7 @@ export default async function SearchDetailPage({
     supabase
       .from("orders")
       .select(
-        "*, requester:profiles!requester_id(full_name), updater:profiles!updated_by(full_name), inspector:profiles!inspected_by(full_name)"
+        "*, requester:profiles!requester_id(full_name), updater:profiles!updated_by(full_name), inspector:profiles!inspected_by(full_name), return_requester:profiles!return_requested_by(full_name)"
       )
       .eq("id", id)
       .single(),
@@ -66,6 +68,7 @@ export default async function SearchDetailPage({
         <div className="flex items-center gap-2">
           <OrderTypeBadge type={order.type as OrderType} />
           <OrderStatusBadge status={order.status as OrderStatus} />
+          {order.is_urgent && <Badge variant="destructive">긴급</Badge>}
         </div>
 
         {/* 섹션 1: 주문/반품 요청 정보 */}
@@ -86,8 +89,9 @@ export default async function SearchDetailPage({
             <div>
               <dt className="text-sm text-muted-foreground">요청 수량</dt>
               <dd className="mt-0.5 font-medium">
-                {order.quantity}
-                {order.unit ? ` ${order.unit}` : ""}
+                {order.quantity > 0
+                  ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
+                  : <span className="text-muted-foreground">(사진 참고)</span>}
               </dd>
             </div>
             <div>
@@ -130,7 +134,7 @@ export default async function SearchDetailPage({
         </div>
 
         {/* 섹션 2: 주문 정보 (ordered 이상) */}
-        {(order.status === "ordered" || order.status === "inspecting") && (
+        {(order.status === "ordered" || order.status === "inspecting" || order.status === "return_requested" || order.status === "return_completed") && (
           <>
             <Separator />
             <div>
@@ -147,8 +151,8 @@ export default async function SearchDetailPage({
           </>
         )}
 
-        {/* 섹션 3: 검수 정보 (inspecting일 때) */}
-        {order.status === "inspecting" && (
+        {/* 섹션 3: 검수 정보 (inspecting 이상) */}
+        {(order.status === "inspecting" || order.status === "return_requested" || order.status === "return_completed") && (
           <>
             <Separator />
             <div>
@@ -191,11 +195,62 @@ export default async function SearchDetailPage({
           </>
         )}
 
+        {/* 섹션 4: 반품 정보 (반품 상태일 때) */}
+        {(order.status === "return_requested" || order.status === "return_completed") && (
+          <>
+            <Separator />
+            <div>
+              <h2 className="font-semibold">반품 정보</h2>
+              <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
+                <div>
+                  <dt className="text-sm text-muted-foreground">반품 수량</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {order.return_quantity ?? order.quantity}
+                    {order.unit ? ` ${order.unit}` : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-muted-foreground">반품 사유</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {order.return_reason || "-"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-muted-foreground">반품 신청자</dt>
+                  <dd className="mt-0.5 font-medium">
+                    {order.return_requester?.full_name ?? "알 수 없음"}
+                  </dd>
+                </div>
+                {order.return_requested_at && (
+                  <div>
+                    <dt className="text-sm text-muted-foreground">반품 신청일시</dt>
+                    <dd className="mt-0.5 font-medium">
+                      {formatDateTime(order.return_requested_at)}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+          </>
+        )}
+
         {/* 검수 취소 버튼 */}
         {canCancelInspection && (
           <>
             <Separator />
             <CancelInspectionButton orderId={order.id} />
+          </>
+        )}
+
+        {/* 반품 신청 버튼 (검수완료 상태일 때) */}
+        {order.status === "inspecting" && (
+          <>
+            <Separator />
+            <ReturnRequestButton
+              orderId={order.id}
+              defaultQuantity={order.confirmed_quantity ?? order.quantity}
+              unit={order.unit}
+            />
           </>
         )}
       </div>

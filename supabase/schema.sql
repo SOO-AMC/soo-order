@@ -80,9 +80,9 @@ CREATE TABLE public.orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type TEXT NOT NULL CHECK (type IN ('order', 'return')),
   item_name TEXT NOT NULL,
-  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   unit TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ordered', 'inspecting')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ordered', 'inspecting', 'return_requested', 'return_completed')),
   requester_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   updated_by UUID REFERENCES public.profiles(id),
   vendor_name TEXT NOT NULL DEFAULT '',
@@ -90,6 +90,11 @@ CREATE TABLE public.orders (
   invoice_received BOOLEAN,
   inspected_by UUID REFERENCES public.profiles(id),
   inspected_at TIMESTAMPTZ,
+  is_urgent BOOLEAN NOT NULL DEFAULT false,
+  return_quantity INTEGER,
+  return_reason TEXT DEFAULT '',
+  return_requested_by UUID REFERENCES public.profiles(id),
+  return_requested_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { SearchList } from "@/components/search/search-list";
+import { ReturnList } from "@/components/returns/return-list";
 import type { OrderWithRequester } from "@/lib/types/order";
 
 export const metadata: Metadata = {
-  title: "조회",
+  title: "반품",
 };
 
-export default async function SearchPage() {
+export default async function ReturnsPage() {
   const supabase = await createClient();
 
   const {
@@ -30,20 +30,26 @@ export default async function SearchPage() {
     supabase
       .from("orders")
       .select(
-        "*, requester:profiles!requester_id(full_name), updater:profiles!updated_by(full_name), inspector:profiles!inspected_by(full_name), return_requester:profiles!return_requested_by(full_name)"
+        "*, requester:profiles!requester_id(full_name), return_requester:profiles!return_requested_by(full_name)"
       )
-      .order("created_at", { ascending: false }),
+      .eq("status", "return_requested")
+      .order("return_requested_at", { ascending: false }),
   ]);
 
   const isAdmin = profile?.role === "admin";
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <SearchList
-        isAdmin={isAdmin}
-        currentUserId={userId}
-        initialData={(orders as OrderWithRequester[]) ?? []}
-      />
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3">
+        <h1 className="text-lg font-bold">반품</h1>
+      </header>
+      <div className="p-4">
+        <ReturnList
+          isAdmin={isAdmin}
+          currentUserId={userId}
+          initialData={(orders as OrderWithRequester[]) ?? []}
+        />
+      </div>
     </div>
   );
 }
