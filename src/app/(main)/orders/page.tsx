@@ -8,7 +8,7 @@ import { OrderList } from "@/components/orders/order-list";
 import type { OrderWithRequester } from "@/lib/types/order";
 
 export const metadata: Metadata = {
-  title: "주문/반품",
+  title: "주문",
 };
 
 export default async function OrdersPage() {
@@ -40,9 +40,9 @@ export default async function OrdersPage() {
   const isAdmin = profile?.role === "admin";
 
   return (
-    <div className="mx-auto max-w-md">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3">
-        <h1 className="text-lg font-bold">주문/반품</h1>
+        <h1 className="text-lg font-bold">주문</h1>
         <Button size="icon" asChild>
           <Link href="/orders/new">
             <Plus />

@@ -15,6 +15,7 @@ export interface Order {
   invoice_received: boolean | null;
   inspected_by: string | null;
   inspected_at: string | null;
+  photo_urls: string[];
   created_at: string;
   updated_at: string;
 }

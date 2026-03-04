@@ -1,11 +1,20 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, ShoppingCart } from "lucide-react";
+import { Camera, ChevronRight, ShoppingCart } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { OrderTypeBadge } from "./order-type-badge";
 import { OrderStatusBadge } from "./order-status-badge";
 import { formatDate } from "@/lib/utils/format";
@@ -25,6 +34,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isOrdering, setIsOrdering] = useState(false);
   const supabase = createClient();
+  const router = useRouter();
 
   const fetchOrders = useCallback(async () => {
     const { data, error } = await supabase
@@ -117,10 +127,10 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <p className="text-muted-foreground">
-          등록된 주문/반품이 없습니다.
+          등록된 주문이 없습니다.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          상단의 + 버튼으로 새 요청을 등록하세요.
+          새 주문을 등록하세요.
         </p>
       </div>
     );
@@ -138,47 +148,122 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
         </label>
       )}
 
-      {orders.map((order) => {
-        const isPending = order.status === "pending";
-        const showCheckbox = isAdmin && isPending;
+      {/* PC 테이블 뷰 */}
+      <div className="hidden lg:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {isAdmin && <TableHead className="w-10" />}
+              <TableHead>유형</TableHead>
+              <TableHead>상태</TableHead>
+              <TableHead>품목명</TableHead>
+              <TableHead>수량</TableHead>
+              <TableHead>요청자</TableHead>
+              <TableHead>요청일</TableHead>
+              <TableHead className="w-12">사진</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {orders.map((order) => {
+              const isPending = order.status === "pending";
+              const showCheckbox = isAdmin && isPending;
 
-        return (
-          <div
-            key={order.id}
-            className="flex items-center gap-3 rounded-lg border p-3 transition-colors"
-          >
-            {showCheckbox && (
-              <Checkbox
-                checked={selectedIds.has(order.id)}
-                onCheckedChange={() => toggleSelect(order.id)}
-              />
-            )}
-            <Link
-              href={`/orders/${order.id}`}
-              className="flex flex-1 items-center gap-3 min-w-0 active:opacity-70"
+              return (
+                <TableRow
+                  key={order.id}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/orders/${order.id}`)}
+                >
+                  {isAdmin && (
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {showCheckbox && (
+                        <Checkbox
+                          checked={selectedIds.has(order.id)}
+                          onCheckedChange={() => toggleSelect(order.id)}
+                        />
+                      )}
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    <OrderTypeBadge type={order.type} />
+                  </TableCell>
+                  <TableCell>
+                    <OrderStatusBadge status={order.status} />
+                  </TableCell>
+                  <TableCell className="font-medium">{order.item_name}</TableCell>
+                  <TableCell>
+                    {order.quantity}{order.unit ? ` ${order.unit}` : ""}
+                  </TableCell>
+                  <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
+                  <TableCell>{formatDate(order.created_at)}</TableCell>
+                  <TableCell>
+                    {order.photo_urls?.length > 0 && (
+                      <span className="flex items-center gap-1 text-muted-foreground">
+                        <Camera className="h-3.5 w-3.5" />
+                        {order.photo_urls.length}
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* 모바일/태블릿 카드 뷰 */}
+      <div className="lg:hidden space-y-2">
+        {orders.map((order) => {
+          const isPending = order.status === "pending";
+          const showCheckbox = isAdmin && isPending;
+
+          return (
+            <div
+              key={order.id}
+              className="flex items-center gap-3 rounded-lg border p-3 transition-colors"
             >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <OrderTypeBadge type={order.type} />
-                  <OrderStatusBadge status={order.status} />
-                  <span className="truncate font-medium">{order.item_name}</span>
+              {showCheckbox && (
+                <Checkbox
+                  checked={selectedIds.has(order.id)}
+                  onCheckedChange={() => toggleSelect(order.id)}
+                />
+              )}
+              <Link
+                href={`/orders/${order.id}`}
+                className="flex flex-1 items-center gap-3 min-w-0 active:opacity-70"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <OrderTypeBadge type={order.type} />
+                    <OrderStatusBadge status={order.status} />
+                    <span className="truncate font-medium">{order.item_name}</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>수량: {order.quantity}{order.unit ? ` ${order.unit}` : ""}</span>
+                    <span>·</span>
+                    <span>{formatDate(order.created_at)}</span>
+                    {order.photo_urls?.length > 0 && (
+                      <>
+                        <span>·</span>
+                        <span className="flex items-center gap-0.5">
+                          <Camera className="h-3 w-3" />
+                          {order.photo_urls.length}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>수량: {order.quantity}{order.unit ? ` ${order.unit}` : ""}</span>
-                  <span>·</span>
-                  <span>{formatDate(order.created_at)}</span>
-                </div>
-              </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-            </Link>
-          </div>
-        );
-      })}
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </Link>
+            </div>
+          );
+        })}
+      </div>
 
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-20 left-0 right-0 z-50 flex justify-center px-4">
+        <div className="fixed bottom-20 left-0 right-0 z-50 flex justify-center px-4 lg:left-60 lg:bottom-4">
           <Button
-            className="w-full max-w-md shadow-lg"
+            className="w-full max-w-md md:max-w-2xl lg:max-w-full shadow-lg"
             onClick={handleBulkOrder}
             disabled={isOrdering}
           >

@@ -38,7 +38,7 @@ export default async function SearchPage() {
   const isAdmin = profile?.role === "admin";
 
   return (
-    <div className="mx-auto max-w-md">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <SearchList
         isAdmin={isAdmin}
         currentUserId={userId}

@@ -65,7 +65,7 @@ export function StaffManagement({ members }: StaffManagementProps) {
   };
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Link href="/account">

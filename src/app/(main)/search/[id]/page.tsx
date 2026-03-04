@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { CancelInspectionButton } from "@/components/search/cancel-inspection-button";
+import { PhotoGallery } from "@/components/orders/photo-gallery";
 import { formatDateTime } from "@/lib/utils/format";
 import type { OrderType, OrderStatus } from "@/lib/types/order";
 import { ORDER_TYPE_LABEL } from "@/lib/types/order";
@@ -50,7 +51,7 @@ export default async function SearchDetailPage({
   const wasUpdated = order.updated_at !== order.created_at;
 
   return (
-    <div className="mx-auto max-w-md">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-6xl">
       <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/search">
@@ -71,7 +72,7 @@ export default async function SearchDetailPage({
         <Separator />
         <div>
           <h2 className="font-semibold">요청 정보</h2>
-          <dl className="mt-3 space-y-4">
+          <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
             <div>
               <dt className="text-sm text-muted-foreground">유형</dt>
               <dd className="mt-0.5 font-medium">
@@ -120,6 +121,12 @@ export default async function SearchDetailPage({
               </>
             )}
           </dl>
+          {order.photo_urls?.length > 0 && (
+            <div className="mt-4">
+              <dt className="text-sm text-muted-foreground mb-2">사진</dt>
+              <PhotoGallery photoUrls={order.photo_urls} />
+            </div>
+          )}
         </div>
 
         {/* 섹션 2: 주문 정보 (ordered 이상) */}
@@ -128,7 +135,7 @@ export default async function SearchDetailPage({
             <Separator />
             <div>
               <h2 className="font-semibold">주문 정보</h2>
-              <dl className="mt-3 space-y-4">
+              <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
                 <div>
                   <dt className="text-sm text-muted-foreground">업체명</dt>
                   <dd className="mt-0.5 font-medium">
@@ -146,7 +153,7 @@ export default async function SearchDetailPage({
             <Separator />
             <div>
               <h2 className="font-semibold">검수 정보</h2>
-              <dl className="mt-3 space-y-4">
+              <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
                 <div>
                   <dt className="text-sm text-muted-foreground">확인 수량</dt>
                   <dd className="mt-0.5 font-medium">

@@ -18,6 +18,7 @@
 - **UI**: shadcn/ui (new-york style, cyan-blue theme, lucide icons) + Tailwind CSS v4
 - **PWA**: Serwist (@serwist/next)
 - **Excel**: ExcelJS (exceljs) — 클라이언트 사이드 엑셀 파일 생성 (스타일링 지원)
+- **Image Compression**: browser-image-compression — 클라이언트 사이드 이미지 WebP 압축
 - **Package Manager**: pnpm
 
 ## 주요 명령어
@@ -51,7 +52,7 @@ admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 
 ### Route Groups
 - `(auth)`: 인증 페이지용 레이아웃 (탭바 없음)
-- `(main)`: 메인 페이지용 레이아웃 (AuthGuard + BottomNav)
+- `(main)`: 메인 페이지용 레이아웃 (AuthGuard + BottomNav + AppSidebar)
 - URL에 그룹명 미포함 (예: `/login`, `/orders`)
 
 ### Server vs Client 컴포넌트 분리
@@ -93,23 +94,40 @@ admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 
 ### orders 테이블
 - 주문/반품 요청 관리
-- 필드: id(UUID auto), type(order/return), item_name, quantity, unit(단위, 기본값 ''), status(pending/ordered/inspecting), requester_id(FK→profiles), updated_by(FK→profiles, nullable, 수정자 추적), vendor_name(업체명, 발주 시 입력), confirmed_quantity(검수 확인 수량), invoice_received(거래명세서 수령 여부), inspected_by(FK→profiles, 검수자), inspected_at(검수일시), created_at, updated_at
+- 필드: id(UUID auto), type(order/return), item_name, quantity, unit(단위, 기본값 ''), status(pending/ordered/inspecting), requester_id(FK→profiles), updated_by(FK→profiles, nullable, 수정자 추적), vendor_name(업체명, 발주 시 입력), confirmed_quantity(검수 확인 수량), invoice_received(거래명세서 수령 여부), inspected_by(FK→profiles, 검수자), inspected_at(검수일시), photo_urls(text[] DEFAULT '{}', 사진 경로 배열, 최대 5장), created_at, updated_at
 - 상태 흐름: pending(요청중) → ordered(발주완료/검수대기) → inspecting(검수완료)
 - update_updated_at() 트리거 재사용
 
+### 반응형 레이아웃
+- **모바일(<md)**: BottomNav + max-w-md, 사이드바 없음, 카드 리스트 뷰 (기존 UX 유지)
+- **태블릿(md~lg)**: BottomNav + max-w-2xl(672px), 상세 페이지 dl 2컬럼 그리드, 카드 리스트 뷰
+- **PC(lg+)**: BottomNav 숨김, 좌측 사이드바(240px) 표시, 콘텐츠 lg:pl-60 오프셋
+  - 리스트 페이지: lg:max-w-6xl, 테이블 뷰 (`hidden lg:block` / `lg:hidden` 패턴)
+  - 상세 페이지: lg:max-w-4xl, dl 3컬럼 그리드 (lg:grid-cols-3)
+  - 폼 페이지: lg:max-w-2xl
+  - 계정 페이지: lg:max-w-4xl
+- 폼 페이지는 md:max-w-xl(576px)로 약간만 확장 (사용성 유지)
+- Floating 버튼: PC에서 lg:left-60 + lg:bottom-4 적용, lg:max-w-6xl
+- 조회 필터 Sheet: PC에서 side="right" w-96, 모바일에서 side="bottom" max-h-[85vh]
+- `src/hooks/use-media-query.ts`: useMediaQuery 훅 (SSR에서 false 반환, Sheet 방향 동적 전환에 사용)
+
 ## 주요 공유 컴포넌트
-- `src/components/bottom-nav.tsx`: 하단 4탭 네비게이션 (pathname.startsWith로 활성 탭 감지)
+- `src/components/app-sidebar.tsx`: PC 좌측 사이드바 (lg:flex, 4탭 네비게이션, 앱 로고)
+- `src/components/bottom-nav.tsx`: 하단 4탭 네비게이션 (pathname.startsWith로 활성 탭 감지, lg:hidden)
 - `src/components/orders/order-form.tsx`: 주문 생성/수정 공용 폼 (defaultValues로 모드 전환)
 - `src/components/orders/item-name-autocomplete.tsx`: 단순 드롭다운 기반 자동완성 (300ms 디바운스, Supabase ilike 쿼리)
 - `src/components/orders/order-type-badge.tsx`: 주문(default)/반품(secondary) 뱃지
 - `src/components/orders/order-status-badge.tsx`: 요청중(outline)/발주완료(default)/검수완료(secondary) 뱃지
 - `src/components/orders/order-admin-action.tsx`: 관리자 전용 개별 발주 (업체명 입력 + 발주 버튼, pending일 때만 표시)
+- `src/components/orders/photo-picker.tsx`: 사진 선택 UI (촬영/갤러리/파일선택, 썸네일 그리드, 최대 5장)
+- `src/components/orders/photo-gallery.tsx`: 사진 갤러리 뷰 (읽기 전용, 클릭 시 Dialog 라이트박스, 좌우 네비게이션)
+- `src/lib/utils/photo.ts`: 사진 압축(WebP 1MB)/업로드/삭제 유틸리티, Supabase Storage `order-photos` 버킷
 - `src/lib/types/order.ts`: Order 타입, OrderWithRequester, 라벨 상수 (ORDER_TYPE_LABEL, ORDER_STATUS_LABEL)
 - `src/lib/utils/format.ts`: formatDate, formatDateTime (ko-KR 로케일)
 - `src/components/inspection/inspection-list.tsx`: 검수 대기 리스트 (체크박스 일괄 검수, 인라인 확인수량/거래명세서 입력)
 - `src/components/inspection/inspection-actions.tsx`: 검수 상세 액션 (검수 완료 폼 + 주문 취소 Dialog)
 - `src/components/search/search-list.tsx`: 조회 리스트 (품목명 검색 + Sheet 기반 필터 + 카드 리스트 + 관리자 엑셀 다운로드)
-- `src/components/search/search-filter-sheet.tsx`: 조회 필터 Sheet (주문유형/상태/요청자/날짜범위/발주자/검수자/검수날짜/거래명세서 필터, 초기화/적용)
+- `src/components/search/search-filter-sheet.tsx`: 조회 필터 Sheet (주문유형/상태/요청자/날짜범위/발주자/검수자/검수날짜/거래명세서 필터, 초기화/적용, PC: side=right, 모바일: side=bottom)
 - `src/components/search/cancel-inspection-button.tsx`: 검수 취소 버튼 (Dialog 확인 후 ordered로 되돌리기, 검수자/관리자만)
 - `src/lib/utils.ts`: cn() (shadcn/ui 유틸, clsx + tailwind-merge)
 - `src/lib/utils/auth.ts`: nameToEmail(), validatePassword() 인증 유틸리티
@@ -118,7 +136,7 @@ admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 - `src/components/account/staff-management.tsx`: 직원 목록 + 추가/수정/삭제/비밀번호 초기화 Dialog
 
 ## 설치된 shadcn/ui 컴포넌트
-badge, button, card, checkbox, command, dialog, input, label, popover, select, separator, sheet
+badge, button, card, checkbox, command, dialog, input, label, popover, select, separator, sheet, table
 
 ## 구현 상태
 - [x] 프로젝트 세팅 (Next.js + Supabase + shadcn/ui + PWA)
@@ -132,6 +150,9 @@ badge, button, card, checkbox, command, dialog, input, label, popover, select, s
 - [x] 직원 관리 (admin only, 계정 추가/수정/삭제/비밀번호 초기화/권한 변경)
 - [x] 화면 전환 애니메이션 (Spinner 로딩, page-enter fade-in, 로그인 slide-up)
 - [x] 성능 최적화 (getUser→getSession, Server prefetch + initialData, Promise.all 병렬화, 검수 일괄 병렬 처리)
+- [x] 태블릿/PC 반응형 최적화 (AppSidebar, 콘텐츠 너비 확장, 상세 2컬럼 그리드, floating 버튼 오프셋)
+- [x] PC 레이아웃 최적화 (리스트 테이블 뷰, max-width 확장, 상세 3컬럼 그리드, 필터 Sheet 우측 패널)
+- [x] 주문 사진 첨부 (최대 5장, WebP 압축, 카메라/갤러리/파일선택, 갤러리 라이트박스, 리스트 아이콘 표시, 삭제 시 스토리지 정리)
 
 ## 기획 메모
 - 주문/반품 요청 → 관리자가 발주 실행 → 발주 완료된 품목은 검수 탭에 검수 대기로 표시 → 확인 수량 + 거래명세서 수령 여부 입력 후 검수 완료
@@ -139,3 +160,5 @@ badge, button, card, checkbox, command, dialog, input, label, popover, select, s
 - 품목명: 자유 텍스트 입력 + 이전 입력값 기반 자동완성
 - Supabase 설정: Authentication → Providers → Email → Confirm email **OFF**, Minimum password length → 4
 - 환경변수: `SUPABASE_SERVICE_ROLE_KEY` (서버 전용, admin client용)
+- Supabase Storage: `order-photos` 버킷 (public), 경로 `{orderId}/{uuid}.webp`, RLS: authenticated INSERT/SELECT, owner/admin DELETE
+- DB 마이그레이션: `ALTER TABLE orders ADD COLUMN photo_urls text[] DEFAULT '{}'`

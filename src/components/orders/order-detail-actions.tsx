@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Pencil, Trash2 } from "lucide-react";
+import { deletePhotos } from "@/lib/utils/photo";
 
 interface OrderDetailActionsProps {
   orderId: string;
@@ -28,6 +29,14 @@ export function OrderDetailActions({ orderId }: OrderDetailActionsProps) {
 
   const handleDelete = async () => {
     setIsDeleting(true);
+
+    // Fetch photo_urls before deleting
+    const { data: order } = await supabase
+      .from("orders")
+      .select("photo_urls")
+      .eq("id", orderId)
+      .single();
+
     const { error } = await supabase
       .from("orders")
       .delete()
@@ -37,6 +46,11 @@ export function OrderDetailActions({ orderId }: OrderDetailActionsProps) {
       setIsDeleting(false);
       setOpen(false);
       return;
+    }
+
+    // Clean up photos from storage
+    if (order?.photo_urls?.length > 0) {
+      await deletePhotos(supabase, order!.photo_urls).catch(() => {});
     }
 
     router.push("/orders");
@@ -62,7 +76,7 @@ export function OrderDetailActions({ orderId }: OrderDetailActionsProps) {
           <DialogHeader>
             <DialogTitle>요청 삭제</DialogTitle>
             <DialogDescription>
-              이 주문/반품 요청을 삭제하시겠습니까? 이 작업은 되돌릴 수
+              이 주문 요청을 삭제하시겠습니까? 이 작업은 되돌릴 수
               없습니다.
             </DialogDescription>
           </DialogHeader>

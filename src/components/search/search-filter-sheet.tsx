@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   Sheet,
   SheetContent,
@@ -67,6 +68,7 @@ export function SearchFilterSheet({
   inspectorNames,
 }: SearchFilterSheetProps) {
   const [local, setLocal] = useState<SearchFilters>(filters);
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   // Sheet 열릴 때 부모 필터 상태를 로컬에 복사
   const handleOpenChange = (nextOpen: boolean) => {
@@ -87,7 +89,11 @@ export function SearchFilterSheet({
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="bottom" className="max-h-[85vh] flex flex-col" showCloseButton={false}>
+      <SheetContent
+        side={isDesktop ? "right" : "bottom"}
+        className={isDesktop ? "w-96 flex flex-col" : "max-h-[85vh] flex flex-col"}
+        showCloseButton={isDesktop}
+      >
         <SheetHeader>
           <SheetTitle>필터</SheetTitle>
           <SheetDescription className="sr-only">주문 필터 옵션</SheetDescription>

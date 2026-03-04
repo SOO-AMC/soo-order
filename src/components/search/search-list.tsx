@@ -1,12 +1,21 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, Download, Search, SlidersHorizontal } from "lucide-react";
+import { Camera, ChevronRight, Download, Search, SlidersHorizontal } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { formatDate } from "@/lib/utils/format";
@@ -36,6 +45,7 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const supabase = createClient();
+  const router = useRouter();
 
   const fetchOrders = useCallback(async () => {
     const { data, error } = await supabase
@@ -315,32 +325,95 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
           <p className="text-muted-foreground">조건에 맞는 항목이 없습니다.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filteredOrders.map((order) => (
-            <Link
-              key={order.id}
-              href={`/search/${order.id}`}
-              className="flex items-center gap-3 rounded-lg border p-3 transition-colors active:opacity-70"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <OrderTypeBadge type={order.type} />
-                  <OrderStatusBadge status={order.status} />
-                  <span className="truncate font-medium">{order.item_name}</span>
+        <>
+          {/* PC 테이블 뷰 */}
+          <div className="hidden lg:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>유형</TableHead>
+                  <TableHead>상태</TableHead>
+                  <TableHead>품목명</TableHead>
+                  <TableHead>수량</TableHead>
+                  <TableHead>요청자</TableHead>
+                  <TableHead>요청일</TableHead>
+                  <TableHead>업체명</TableHead>
+                  <TableHead>검수자</TableHead>
+                  <TableHead className="w-12">사진</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredOrders.map((order) => (
+                  <TableRow
+                    key={order.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/search/${order.id}`)}
+                  >
+                    <TableCell>
+                      <OrderTypeBadge type={order.type} />
+                    </TableCell>
+                    <TableCell>
+                      <OrderStatusBadge status={order.status} />
+                    </TableCell>
+                    <TableCell className="font-medium">{order.item_name}</TableCell>
+                    <TableCell>
+                      {order.quantity}{order.unit ? ` ${order.unit}` : ""}
+                    </TableCell>
+                    <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
+                    <TableCell>{formatDate(order.created_at)}</TableCell>
+                    <TableCell>{order.vendor_name || "-"}</TableCell>
+                    <TableCell>{order.inspector?.full_name ?? "-"}</TableCell>
+                    <TableCell>
+                      {order.photo_urls?.length > 0 && (
+                        <span className="flex items-center gap-1 text-muted-foreground">
+                          <Camera className="h-3.5 w-3.5" />
+                          {order.photo_urls.length}
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* 모바일/태블릿 카드 뷰 */}
+          <div className="lg:hidden space-y-2">
+            {filteredOrders.map((order) => (
+              <Link
+                key={order.id}
+                href={`/search/${order.id}`}
+                className="flex items-center gap-3 rounded-lg border p-3 transition-colors active:opacity-70"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <OrderTypeBadge type={order.type} />
+                    <OrderStatusBadge status={order.status} />
+                    <span className="truncate font-medium">{order.item_name}</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>
+                      수량: {order.quantity}
+                      {order.unit ? ` ${order.unit}` : ""}
+                    </span>
+                    <span>·</span>
+                    <span>{formatDate(order.created_at)}</span>
+                    {order.photo_urls?.length > 0 && (
+                      <>
+                        <span>·</span>
+                        <span className="flex items-center gap-0.5">
+                          <Camera className="h-3 w-3" />
+                          {order.photo_urls.length}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>
-                    수량: {order.quantity}
-                    {order.unit ? ` ${order.unit}` : ""}
-                  </span>
-                  <span>·</span>
-                  <span>{formatDate(order.created_at)}</span>
-                </div>
-              </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-            </Link>
-          ))}
-        </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </Link>
+            ))}
+          </div>
+        </>
       )}
 
       {/* 필터 Sheet */}

@@ -10,6 +10,7 @@ import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { OrderDetailActions } from "@/components/orders/order-detail-actions";
 import { OrderAdminAction } from "@/components/orders/order-admin-action";
+import { PhotoGallery } from "@/components/orders/photo-gallery";
 import { formatDateTime } from "@/lib/utils/format";
 import type { OrderType, OrderStatus } from "@/lib/types/order";
 import { ORDER_TYPE_LABEL } from "@/lib/types/order";
@@ -47,14 +48,14 @@ export default async function OrderDetailPage({
   const wasUpdated = order.updated_at !== order.created_at;
 
   return (
-    <div className="mx-auto max-w-md">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-6xl">
       <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/orders">
             <ChevronLeft />
           </Link>
         </Button>
-        <h1 className="text-lg font-bold">주문/반품 상세</h1>
+        <h1 className="text-lg font-bold">주문 상세</h1>
       </header>
 
       <div className="space-y-6 p-4">
@@ -65,7 +66,7 @@ export default async function OrderDetailPage({
 
         <Separator />
 
-        <dl className="space-y-4">
+        <dl className="space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
           <div>
             <dt className="text-sm text-muted-foreground">유형</dt>
             <dd className="mt-0.5 font-medium">
@@ -119,6 +120,16 @@ export default async function OrderDetailPage({
             </>
           )}
         </dl>
+
+        {order.photo_urls?.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <dt className="text-sm text-muted-foreground mb-2">사진</dt>
+              <PhotoGallery photoUrls={order.photo_urls} />
+            </div>
+          </>
+        )}
 
         {isAdmin && order.status === "pending" && (
           <>

@@ -5,29 +5,34 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ItemNameAutocomplete } from "./item-name-autocomplete";
-import type { OrderType } from "@/lib/types/order";
+import { PhotoPicker, photoItemsFromPaths } from "./photo-picker";
+import type { PhotoItem } from "./photo-picker";
 
 interface OrderFormData {
-  type: OrderType;
   item_name: string;
   quantity: number;
   unit: string;
 }
 
-interface OrderFormProps {
-  defaultValues?: OrderFormData;
-  onSubmit: (data: OrderFormData) => Promise<void>;
+export interface OrderFormResult extends OrderFormData {
+  photos: PhotoItem[];
 }
 
-export function OrderForm({ defaultValues, onSubmit }: OrderFormProps) {
-  const [type, setType] = useState<OrderType>(
-    defaultValues?.type ?? "order"
-  );
+interface OrderFormProps {
+  defaultValues?: OrderFormData;
+  existingPhotoUrls?: string[];
+  onSubmit: (data: OrderFormResult) => Promise<void>;
+}
+
+export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderFormProps) {
   const [itemName, setItemName] = useState(defaultValues?.item_name ?? "");
   const [quantity, setQuantity] = useState(
     defaultValues?.quantity?.toString() ?? ""
   );
   const [unit, setUnit] = useState(defaultValues?.unit ?? "");
+  const [photos, setPhotos] = useState<PhotoItem[]>(
+    existingPhotoUrls ? photoItemsFromPaths(existingPhotoUrls) : []
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -37,19 +42,25 @@ export function OrderForm({ defaultValues, onSubmit }: OrderFormProps) {
     e.preventDefault();
     setError("");
 
-    const qty = parseInt(quantity, 10);
+    const qty = parseInt(quantity, 10) || 0;
+    const hasPhotos = photos.length > 0;
     if (!itemName.trim()) {
       setError("품목명을 입력해주세요.");
       return;
     }
-    if (!qty || qty < 1) {
-      setError("수량은 1 이상이어야 합니다.");
+    if (!hasPhotos && qty < 1) {
+      setError("수량을 입력하거나 사진을 첨부해주세요.");
       return;
     }
 
     setIsLoading(true);
     try {
-      await onSubmit({ type, item_name: itemName.trim(), quantity: qty, unit: unit.trim() });
+      await onSubmit({
+        item_name: itemName.trim(),
+        quantity: qty,
+        unit: unit.trim(),
+        photos,
+      });
     } catch {
       setError("요청 처리 중 오류가 발생했습니다.");
       setIsLoading(false);
@@ -59,25 +70,8 @@ export function OrderForm({ defaultValues, onSubmit }: OrderFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
-        <Label>유형</Label>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant={type === "order" ? "default" : "outline"}
-            className="flex-1"
-            onClick={() => setType("order")}
-          >
-            주문
-          </Button>
-          <Button
-            type="button"
-            variant={type === "return" ? "default" : "outline"}
-            className="flex-1"
-            onClick={() => setType("return")}
-          >
-            반품
-          </Button>
-        </div>
+        <Label>사진</Label>
+        <PhotoPicker photos={photos} onChange={setPhotos} />
       </div>
 
       <div className="space-y-2">
@@ -92,12 +86,11 @@ export function OrderForm({ defaultValues, onSubmit }: OrderFormProps) {
             id="quantity"
             type="number"
             inputMode="numeric"
-            min={1}
+            min={0}
             placeholder="수량"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             className="flex-1"
-            required
           />
           <Input
             id="unit"

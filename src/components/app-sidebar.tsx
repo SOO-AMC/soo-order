@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Package, ClipboardCheck, Search, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,12 +13,22 @@ const tabs = [
   { href: "/account", label: "계정관리", icon: UserCog },
 ];
 
-export function BottomNav() {
+export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden">
-      <div className="mx-auto flex h-14 max-w-md md:max-w-2xl items-center justify-around">
+    <aside className="fixed inset-y-0 left-0 z-50 hidden w-60 flex-col border-r bg-background lg:flex">
+      <div className="flex items-center gap-3 border-b px-5 py-4">
+        <Image
+          src="/icons/icon-192x192.png"
+          alt="수오더"
+          width={32}
+          height={32}
+          className="rounded-lg"
+        />
+        <span className="text-lg font-bold">수오더</span>
+      </div>
+      <nav className="flex-1 space-y-1 px-3 py-4">
         {tabs.map(({ href, label, icon: Icon }) => {
           const isActive = pathname.startsWith(href);
           return (
@@ -25,10 +36,10 @@ export function BottomNav() {
               key={href}
               href={href}
               className={cn(
-                "flex flex-col items-center gap-1 px-3 py-2 text-xs transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive
-                  ? "text-primary font-medium"
-                  : "text-muted-foreground"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               )}
             >
               <Icon className="h-5 w-5" />
@@ -36,7 +47,7 @@ export function BottomNav() {
             </Link>
           );
         })}
-      </div>
-    </nav>
+      </nav>
+    </aside>
   );
 }

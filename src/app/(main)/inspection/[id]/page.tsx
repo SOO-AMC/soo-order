@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { InspectionActions } from "@/components/inspection/inspection-actions";
+import { PhotoGallery } from "@/components/orders/photo-gallery";
 import { formatDateTime } from "@/lib/utils/format";
 import type { OrderType } from "@/lib/types/order";
 import { ORDER_TYPE_LABEL } from "@/lib/types/order";
@@ -47,7 +48,7 @@ export default async function InspectionDetailPage({
   const canCancel = isAdmin || order.requester_id === userId;
 
   return (
-    <div className="mx-auto max-w-md">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-6xl">
       <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/inspection">
@@ -64,7 +65,7 @@ export default async function InspectionDetailPage({
 
         <Separator />
 
-        <dl className="space-y-4">
+        <dl className="space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
           <div>
             <dt className="text-sm text-muted-foreground">유형</dt>
             <dd className="mt-0.5 font-medium">
@@ -101,6 +102,16 @@ export default async function InspectionDetailPage({
             </dd>
           </div>
         </dl>
+
+        {order.photo_urls?.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <dt className="text-sm text-muted-foreground mb-2">사진</dt>
+              <PhotoGallery photoUrls={order.photo_urls} />
+            </div>
+          </>
+        )}
 
         <Separator />
 
