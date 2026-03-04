@@ -25,22 +25,24 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  // getSession()으로 JWT 토큰 갱신 + 로컬 검증 (네트워크 요청 없음)
+  // getUser()는 매번 Auth 서버에 왕복하므로 제거
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
   const publicPaths = ["/login"];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
 
-  if (!user && !isPublicPath) {
+  if (!session && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && isPublicPath) {
+  if (session && isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/orders";
     return NextResponse.redirect(url);
