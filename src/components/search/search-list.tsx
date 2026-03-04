@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
-import { formatDate } from "@/lib/utils/format";
+import { formatDate, toKSTDateString } from "@/lib/utils/format";
 import {
   SearchFilterSheet,
   defaultFilters,
@@ -139,33 +139,33 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
       }
       // 요청 날짜 범위
       if (filters.dateFrom) {
-        const orderDate = order.created_at.slice(0, 10);
+        const orderDate = toKSTDateString(order.created_at);
         if (orderDate < filters.dateFrom) return false;
       }
       if (filters.dateTo) {
-        const orderDate = order.created_at.slice(0, 10);
+        const orderDate = toKSTDateString(order.created_at);
         if (orderDate > filters.dateTo) return false;
       }
       // 발주 날짜 범위 (updated_at when status >= ordered)
       if (filters.orderedDateFrom) {
         if (!order.updated_at) return false;
-        const orderedDate = order.updated_at.slice(0, 10);
+        const orderedDate = toKSTDateString(order.updated_at);
         if (orderedDate < filters.orderedDateFrom) return false;
       }
       if (filters.orderedDateTo) {
         if (!order.updated_at) return false;
-        const orderedDate = order.updated_at.slice(0, 10);
+        const orderedDate = toKSTDateString(order.updated_at);
         if (orderedDate > filters.orderedDateTo) return false;
       }
       // 검수 날짜 범위
       if (filters.inspectedDateFrom) {
         if (!order.inspected_at) return false;
-        const inspDate = order.inspected_at.slice(0, 10);
+        const inspDate = toKSTDateString(order.inspected_at);
         if (inspDate < filters.inspectedDateFrom) return false;
       }
       if (filters.inspectedDateTo) {
         if (!order.inspected_at) return false;
-        const inspDate = order.inspected_at.slice(0, 10);
+        const inspDate = toKSTDateString(order.inspected_at);
         if (inspDate > filters.inspectedDateTo) return false;
       }
       // 반품 신청자
@@ -175,12 +175,12 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
       // 반품 신청 날짜 범위
       if (filters.returnDateFrom) {
         if (!order.return_requested_at) return false;
-        const retDate = order.return_requested_at.slice(0, 10);
+        const retDate = toKSTDateString(order.return_requested_at);
         if (retDate < filters.returnDateFrom) return false;
       }
       if (filters.returnDateTo) {
         if (!order.return_requested_at) return false;
-        const retDate = order.return_requested_at.slice(0, 10);
+        const retDate = toKSTDateString(order.return_requested_at);
         if (retDate > filters.returnDateTo) return false;
       }
       // 거래명세서
@@ -258,9 +258,9 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
         unit: order.unit,
         status: ORDER_STATUS_LABEL[order.status],
         requester: order.requester?.full_name ?? "",
-        created_at: order.created_at ? order.created_at.slice(0, 10) : "",
+        created_at: order.created_at ? toKSTDateString(order.created_at) : "",
         updater: wasUpdated ? (order.updater?.full_name ?? "") : "",
-        updated_at: wasUpdated ? order.updated_at.slice(0, 10) : "",
+        updated_at: wasUpdated ? toKSTDateString(order.updated_at) : "",
         vendor_name: order.vendor_name,
         confirmed_quantity: order.confirmed_quantity ?? "",
         invoice:
@@ -270,7 +270,7 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
               ? "미수령"
               : "",
         inspector: order.inspector?.full_name ?? "",
-        inspected_at: order.inspected_at ? order.inspected_at.slice(0, 10) : "",
+        inspected_at: order.inspected_at ? toKSTDateString(order.inspected_at) : "",
         return_quantity: order.return_quantity ?? "",
         return_reason: order.return_reason ?? "",
       });
@@ -290,7 +290,7 @@ export function SearchList({ isAdmin = false, currentUserId, initialData }: Sear
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `주문조회_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `주문조회_${toKSTDateString(new Date().toISOString())}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   }, [filteredOrders]);
