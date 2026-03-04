@@ -1,0 +1,53 @@
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { InspectionList } from "@/components/inspection/inspection-list";
+import type { OrderWithRequester } from "@/lib/types/order";
+
+export const metadata: Metadata = {
+  title: "검수",
+};
+
+export default async function InspectionPage() {
+  const supabase = await createClient();
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    redirect("/login");
+  }
+
+  const userId = session.user.id;
+
+  const [{ data: profile }, { data: orders }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single(),
+    supabase
+      .from("orders")
+      .select("*, requester:profiles!requester_id(full_name)")
+      .eq("status", "ordered")
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const isAdmin = profile?.role === "admin";
+
+  return (
+    <div className="mx-auto max-w-md">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3">
+        <h1 className="text-lg font-bold">검수</h1>
+      </header>
+      <div className="p-4">
+        <InspectionList
+          isAdmin={isAdmin}
+          currentUserId={userId}
+          initialData={(orders as OrderWithRequester[]) ?? []}
+        />
+      </div>
+    </div>
+  );
+}
