@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Undo2 } from "lucide-react";
+import { X } from "lucide-react";
 
 interface CancelInspectionButtonProps {
   orderId: string;
@@ -54,7 +54,7 @@ export function CancelInspectionButton({ orderId }: CancelInspectionButtonProps)
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="destructive" className="w-full">
-          <Undo2 className="h-4 w-4" />
+          <X className="h-4 w-4" />
           검수 취소
         </Button>
       </DialogTrigger>

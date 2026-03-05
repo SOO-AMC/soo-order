@@ -53,7 +53,7 @@ export default async function SearchDetailPage({
   const wasUpdated = order.updated_at !== order.created_at;
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-6xl">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/search">

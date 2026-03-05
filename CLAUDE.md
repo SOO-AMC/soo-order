@@ -44,6 +44,7 @@ pnpm dlx shadcn@latest add <component>  # shadcn/ui 컴포넌트 추가
     [id]/            # 검수 상세 + 검수 처리 (Server Component)
   search/            # 조회 리스트 (Server Component + Client 검색/필터)
     [id]/            # 조회 상세 (Server Component, 요청+주문+검수+반품 정보 통합)
+  price-compare/     # 가격 비교 (admin only, 준비 중 페이지)
   more/              # 더보기 (사용자 정보, 메뉴 링크, 로그아웃)
   account/           # 계정관리 (내 정보, 비밀번호 변경)
     members/         # 직원 관리 (admin only, 직원 CRUD + 비밀번호 초기화)
@@ -101,6 +102,21 @@ admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 - 상태 흐름: pending(요청중) → ordered(발주완료/검수대기) → inspecting(검수완료) → return_requested(반품신청) → return_completed(반품완료)
 - update_updated_at() 트리거 재사용
 
+### vendors 테이블
+- 업체 정보 관리 (가격 비교용)
+- 필드: id(UUID auto), name(TEXT UNIQUE), created_at, updated_at
+- RLS: Admin full access (is_admin())
+
+### vendor_products 테이블
+- 업체별 원본 제품 (엑셀 파싱 데이터)
+- 필드: id(UUID auto), vendor_id(FK→vendors, CASCADE), product_name, manufacturer, spec, unit_price(INTEGER), ingredient, category, unified_product_id(FK→unified_products, SET NULL), created_at
+- 인덱스: vendor_id, unified_product_id
+
+### unified_products 테이블
+- 통합 제품 (관리자 직접 등록, 업체 제품 매핑 대상)
+- 필드: id(UUID auto), name, mg, tab, sort_order(INTEGER DEFAULT 0), created_at, updated_at
+- RLS: Admin full access (is_admin())
+
 ### 반응형 레이아웃
 - **모바일(<md)**: BottomNav + max-w-md, 사이드바 없음, 카드 리스트 뷰 (기존 UX 유지)
 - **태블릿(md~lg)**: BottomNav + max-w-2xl(672px), 상세 페이지 dl 2컬럼 그리드, 카드 리스트 뷰
@@ -115,7 +131,7 @@ admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 - `src/hooks/use-media-query.ts`: useMediaQuery 훅 (SSR에서 false 반환, Sheet 방향 동적 전환에 사용)
 
 ## 주요 공유 컴포넌트
-- `src/components/app-sidebar.tsx`: PC 좌측 사이드바 (lg:flex, 5탭 네비게이션 + 하단 로그아웃, 앱 로고)
+- `src/components/app-sidebar.tsx`: PC 좌측 사이드바 (lg:flex, 4메인탭 + 관리자탭(가격비교/직원관리) + 내 계정관리 + 하단 로그아웃)
 - `src/components/bottom-nav.tsx`: 하단 5탭 네비게이션 (주문/반품/검수/조회/더보기, pathname.startsWith로 활성 탭 감지, lg:hidden)
 - `src/components/orders/order-form.tsx`: 주문 생성/수정 공용 폼 (defaultValues로 모드 전환)
 - `src/components/orders/item-name-autocomplete.tsx`: 단순 드롭다운 기반 자동완성 (300ms 디바운스, Supabase ilike 쿼리)
@@ -141,9 +157,15 @@ admin/               # 관리자 페이지 (AdminGuard, 별도 레이아웃)
 - `src/components/account/account-page.tsx`: 계정 정보 + 비밀번호 변경 (뒤로가기→/more)
 - `src/components/ui/spinner.tsx`: 로딩 스피너 (primary 컬러, 선택적 text prop)
 - `src/components/account/staff-management.tsx`: 직원 목록 + 추가/수정/삭제/비밀번호 초기화 Dialog
+- `src/components/price-compare/price-compare-page.tsx`: 가격 비교 메인 (3탭: 비교표/업체관리/제품매핑)
+- `src/components/price-compare/vendor-management.tsx`: 업체 CRUD + 엑셀 업로드
+- `src/components/price-compare/product-mapping.tsx`: 통합 제품 CRUD + 업체 제품 매핑
+- `src/components/price-compare/comparison-table.tsx`: 가격 비교표 + 최저가 하이라이트 + 엑셀 다운로드
+- `src/lib/utils/parse-vendor-excel.ts`: 업체 엑셀 파싱 (ExcelJS, 헤더 자동 감지)
+- `src/lib/types/price-compare.ts`: Vendor, VendorProduct, UnifiedProduct 타입
 
 ## 설치된 shadcn/ui 컴포넌트
-badge, button, card, checkbox, command, dialog, input, label, popover, select, separator, sheet, table
+badge, button, card, checkbox, command, dialog, input, label, popover, select, separator, sheet, table, tabs
 
 ## 구현 상태
 - [x] 프로젝트 세팅 (Next.js + Supabase + shadcn/ui + PWA)
@@ -163,6 +185,56 @@ badge, button, card, checkbox, command, dialog, input, label, popover, select, s
 - [x] PC 레이아웃 최적화 (리스트 테이블 뷰, max-width 확장, 상세 3컬럼 그리드, 필터 Sheet 우측 패널)
 - [x] 주문 사진 첨부 (최대 5장, WebP 압축, 카메라/갤러리/파일선택, 갤러리 라이트박스, 리스트 아이콘 표시, 삭제 시 스토리지 정리)
 - [x] 긴급 주문 (is_urgent 체크박스, 리스트 최상단 정렬, 빨간 CircleAlert 아이콘, 상세 긴급 뱃지, 조회 필터, 엑셀 컬럼)
+- [x] 가격 비교 페이지 (admin only, 3탭: 비교표/업체관리/제품매핑, 엑셀 업로드→파싱→DB, 통합제품 매핑, 최저가 하이라이트, 엑셀 다운로드)
+- [x] Firestore→Supabase 실시간 동기화 (Cloud Functions 2nd Gen, Items 컬렉션 생성/수정/삭제 → orders 테이블 upsert/delete)
+
+## Firestore → Supabase 실시간 동기화
+
+### 개요
+이전 프로젝트(Firebase/Firestore)에서 새 프로젝트(Supabase)로 전환하는 기간 동안, Firestore `Items` 컬렉션의 생성/수정/삭제를 실시간으로 Supabase `orders` 테이블에 동기화.
+
+### 구조
+- **Firebase 프로젝트**: `transactionledger-3f134`
+- **Cloud Functions (2nd Gen)**: `functions/src/index.ts`
+  - `onItemCreated` → Supabase UPSERT
+  - `onItemUpdated` → Supabase UPSERT
+  - `onItemDeleted` → Supabase DELETE (firebase_id 기준)
+- **리전**: us-central1
+- **런타임**: Node.js 22
+
+### DB 마이그레이션
+```sql
+ALTER TABLE public.orders ADD COLUMN firebase_id TEXT UNIQUE;
+```
+
+### 필드 매핑 (Firestore → Supabase)
+- `doc.id` → `firebase_id` (중복 방지 UNIQUE 키)
+- `type` → `type` ("주문"→order, "반품"→return)
+- `name` → `item_name`
+- `requestQty` → `quantity` + `unit` (파싱: "2박스"→2,"박스")
+- `progress` → `status` (0→pending, 1→ordered, 2→inspecting)
+- `companyNm` → `vendor_name`
+- `requester/orderer/inspector` → profiles.id (이름→ID 매핑, 5분 캐싱)
+- `confirmQty` → `confirmed_quantity`, `hasTS` → `invoice_received`
+- `createdAt/recievedAt/lastEdited` → `created_at/inspected_at/updated_at`
+
+### 환경변수
+- `functions/.env`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (defineString으로 런타임 resolve)
+
+### 배포
+```bash
+cd functions && npm run deploy   # 또는 firebase deploy --only functions
+```
+
+### 파일
+| 파일 | 설명 |
+|---|---|
+| `functions/src/index.ts` | Cloud Function 메인 코드 |
+| `functions/package.json` | 의존성 (firebase-functions, firebase-admin, @supabase/supabase-js) |
+| `functions/tsconfig.json` | TypeScript 설정 |
+| `functions/.env` | 환경변수 (gitignore) |
+| `firebase.json` | Firebase 프로젝트 설정 |
+| `.firebaserc` | Firebase 프로젝트 alias |
 
 ## 기획 메모
 - 주문 요청 → 관리자가 발주 실행 → 발주 완료된 품목은 검수 탭에 검수 대기로 표시 → 확인 수량 + 거래명세서 수령 여부 입력 후 검수 완료 → 조회 상세에서 반품 신청 → 반품 탭에서 반품 완료 처리
@@ -183,3 +255,4 @@ badge, button, card, checkbox, command, dialog, input, label, popover, select, s
   ALTER TABLE public.orders ADD COLUMN return_requested_at TIMESTAMPTZ;
   ```
 - 네비게이션: 4탭(주문/검수/조회/계정관리) → 5탭(주문/반품/검수/조회/더보기)
+- DB 마이그레이션: 가격 비교 (vendors, vendor_products, unified_products 테이블 + RLS + 인덱스 + 트리거) → `scripts/migrate-price-compare.sql`

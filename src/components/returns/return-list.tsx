@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, CircleAlert, Undo2 } from "lucide-react";
@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils/format";
+import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { Spinner } from "@/components/ui/spinner";
 import type { OrderWithRequester } from "@/lib/types/order";
 
@@ -54,10 +55,30 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!initialData) {
       fetchOrders();
     }
+
+    const channel = supabase
+      .channel("return-list")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        () => {
+          if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+          realtimeTimer.current = setTimeout(fetchOrders, 500);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchOrders, initialData]);
 
   const sortedOrders = [...orders].sort((a, b) => {
@@ -150,6 +171,7 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
           <TableHeader>
             <TableRow>
               <TableHead className="w-10" />
+              <TableHead>상태</TableHead>
               <TableHead>품목명</TableHead>
               <TableHead>반품수량</TableHead>
               <TableHead>반품사유</TableHead>
@@ -169,6 +191,9 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
                       checked={selectedIds.has(order.id)}
                       onCheckedChange={() => toggleSelect(order.id)}
                     />
+                  </TableCell>
+                  <TableCell>
+                    <OrderStatusBadge status={order.status} />
                   </TableCell>
                   <TableCell className="font-medium">
                     <span className="flex items-center gap-1.5">
@@ -211,6 +236,7 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
                 <div className="flex items-center gap-2">
                   {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
                   <span className="truncate font-medium">{order.item_name}</span>
+                  <OrderStatusBadge status={order.status} />
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
                   <span>

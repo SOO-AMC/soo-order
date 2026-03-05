@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { OrderForm } from "@/components/orders/order-form";
 import type { OrderFormResult } from "@/components/orders/order-form";
 import type { Order } from "@/lib/types/order";
-import { uploadPhoto, deletePhotos } from "@/lib/utils/photo";
+import { enqueueEditOrderPhotos } from "@/lib/utils/upload-queue";
 
 export default function EditOrderPage() {
   const { id } = useParams<{ id: string }>();
@@ -52,20 +52,11 @@ export default function EditOrderPage() {
     const deletedPaths = existingPaths.filter((p) => !keptPaths.includes(p));
 
     // New photos to upload
-    const newPhotos = data.photos.filter((p) => p.type === "new");
+    const newFiles = data.photos
+      .filter((p) => p.type === "new")
+      .map((p) => p.file);
 
-    // Upload new photos
-    const newPaths = await Promise.all(
-      newPhotos.map((p) => uploadPhoto(supabase, id, p.file))
-    );
-
-    // Delete removed photos from storage
-    if (deletedPaths.length > 0) {
-      await deletePhotos(supabase, deletedPaths).catch(() => {});
-    }
-
-    const finalPaths = [...keptPaths, ...newPaths];
-
+    // 1. Update order text data immediately
     const { error } = await supabase
       .from("orders")
       .update({
@@ -73,13 +64,19 @@ export default function EditOrderPage() {
         item_name: data.item_name,
         quantity: data.quantity,
         unit: data.unit,
+        is_urgent: data.is_urgent,
         updated_by: user?.id,
-        photo_urls: finalPaths,
+        photo_urls: keptPaths, // set kept paths now, new ones added after upload
       })
       .eq("id", id);
 
     if (error) throw error;
+
+    // 2. Navigate immediately
     router.push(`/orders/${id}`);
+
+    // 3. Upload new photos & delete old ones in background
+    enqueueEditOrderPhotos(supabase, id, keptPaths, newFiles, deletedPaths);
   };
 
   if (isLoading) {
@@ -107,6 +104,7 @@ export default function EditOrderPage() {
               item_name: order.item_name,
               quantity: order.quantity,
               unit: order.unit,
+              is_urgent: order.is_urgent,
             }}
             existingPhotoUrls={order.photo_urls}
             onSubmit={handleSubmit}

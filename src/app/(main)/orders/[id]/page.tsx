@@ -4,9 +4,9 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { OrderDetailActions } from "@/components/orders/order-detail-actions";
 import { OrderAdminAction } from "@/components/orders/order-admin-action";
@@ -48,7 +48,7 @@ export default async function OrderDetailPage({
   const wasUpdated = order.updated_at !== order.created_at;
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-6xl">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/orders">
@@ -61,7 +61,7 @@ export default async function OrderDetailPage({
       <div className="space-y-6 p-4">
         <div className="flex items-center gap-2">
           <OrderStatusBadge status={order.status as OrderStatus} />
-          <OrderTypeBadge type={order.type as OrderType} />
+          {order.is_urgent && <Badge variant="destructive">긴급</Badge>}
         </div>
 
         <Separator />
@@ -80,7 +80,9 @@ export default async function OrderDetailPage({
           <div>
             <dt className="text-sm text-muted-foreground">요청 수량</dt>
             <dd className="mt-0.5 font-medium">
-              {order.quantity}{order.unit ? ` ${order.unit}` : ""}
+              {order.quantity > 0
+                ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
+                : <span className="text-muted-foreground">(사진 참고)</span>}
             </dd>
           </div>
           {order.vendor_name && (

@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment, useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, ChevronRight, ClipboardCheck } from "lucide-react";
+import { Camera, ChevronRight, CircleAlert, ClipboardCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -23,8 +23,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { formatDate } from "@/lib/utils/format";
+import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { Spinner } from "@/components/ui/spinner";
 import type { OrderWithRequester } from "@/lib/types/order";
 
@@ -69,14 +69,42 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!initialData) {
       fetchOrders();
     }
+
+    const channel = supabase
+      .channel("inspection-list")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        () => {
+          if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+          realtimeTimer.current = setTimeout(fetchOrders, 500);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchOrders, initialData]);
 
+  const sortedOrders = useMemo(
+    () => [...orders].sort((a, b) => {
+      if (a.is_urgent !== b.is_urgent) return a.is_urgent ? -1 : 1;
+      return 0;
+    }),
+    [orders]
+  );
+
   const allSelected =
-    orders.length > 0 && orders.every((o) => selectedIds.has(o.id));
+    sortedOrders.length > 0 && sortedOrders.every((o) => selectedIds.has(o.id));
 
   const getInspectionData = (order: OrderWithRequester): InspectionData => {
     return (
@@ -118,7 +146,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(orders.map((o) => o.id)));
+      setSelectedIds(new Set(sortedOrders.map((o) => o.id)));
     }
   };
 
@@ -188,7 +216,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
     );
   }
 
-  if (orders.length === 0) {
+  if (sortedOrders.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <p className="text-muted-foreground">검수 대기 품목이 없습니다.</p>
@@ -203,7 +231,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
           checked={allSelected}
           onCheckedChange={toggleSelectAll}
         />
-        전체 선택 ({orders.length}건)
+        전체 선택 ({sortedOrders.length}건)
       </label>
 
       {/* PC 테이블 뷰 */}
@@ -212,7 +240,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
           <TableHeader>
             <TableRow>
               <TableHead className="w-10" />
-              <TableHead>유형</TableHead>
+              <TableHead>상태</TableHead>
               <TableHead>품목명</TableHead>
               <TableHead>수량</TableHead>
               <TableHead>요청자</TableHead>
@@ -221,7 +249,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
             </TableRow>
           </TableHeader>
           <TableBody>
-            {orders.map((order) => {
+            {sortedOrders.map((order) => {
               const isSelected = selectedIds.has(order.id);
               const data = getInspectionData(order);
               const colCount = 7;
@@ -239,11 +267,18 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
                       />
                     </TableCell>
                     <TableCell>
-                      <OrderTypeBadge type={order.type} />
+                      <OrderStatusBadge status={order.status} />
                     </TableCell>
-                    <TableCell className="font-medium">{order.item_name}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="flex items-center gap-1.5">
+                        {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
+                        {order.item_name}
+                      </span>
+                    </TableCell>
                     <TableCell>
-                      {order.quantity}{order.unit ? ` ${order.unit}` : ""}
+                      {order.quantity > 0
+                        ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
+                        : <span className="text-muted-foreground">(사진 참고)</span>}
                     </TableCell>
                     <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
                     <TableCell>{formatDate(order.created_at)}</TableCell>
@@ -259,9 +294,9 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
                   {isSelected && (
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableCell colSpan={colCount}>
-                        <div className="flex items-center gap-4 py-1 pl-6">
-                          <div className="w-40">
-                            <label className="text-xs text-muted-foreground">확인 수량</label>
+                        <div className="flex items-end gap-3 py-1 pl-6">
+                          <div>
+                            <label className="block text-xs text-muted-foreground">확인 수량</label>
                             <Input
                               type="number"
                               min={1}
@@ -274,11 +309,11 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
                                   Number(e.target.value)
                                 )
                               }
-                              className="mt-0.5 h-8"
+                              className="mt-1 h-8 w-32"
                             />
                           </div>
-                          <div className="w-40">
-                            <label className="text-xs text-muted-foreground">거래명세서</label>
+                          <div>
+                            <label className="block text-xs text-muted-foreground">거래명세서</label>
                             <Select
                               value={
                                 data.invoice_received === null
@@ -295,7 +330,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
                                 )
                               }
                             >
-                              <SelectTrigger className="mt-0.5 h-8" onClick={(e) => e.stopPropagation()}>
+                              <SelectTrigger className="mt-1 h-8 w-32" onClick={(e) => e.stopPropagation()}>
                                 <SelectValue placeholder="선택" />
                               </SelectTrigger>
                               <SelectContent>
@@ -317,7 +352,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
 
       {/* 모바일/태블릿 카드 뷰 */}
       <div className="lg:hidden space-y-2">
-        {orders.map((order) => {
+        {sortedOrders.map((order) => {
           const isSelected = selectedIds.has(order.id);
           const data = getInspectionData(order);
 
@@ -337,15 +372,17 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <OrderTypeBadge type={order.type} />
+                      {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
                       <span className="truncate font-medium">
                         {order.item_name}
                       </span>
+                      <OrderStatusBadge status={order.status} />
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
                       <span>
-                        수량: {order.quantity}
-                        {order.unit ? ` ${order.unit}` : ""}
+                        {order.quantity > 0
+                          ? `수량: ${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
+                          : "(사진 참고)"}
                       </span>
                       <span>·</span>
                       <span>{formatDate(order.created_at)}</span>

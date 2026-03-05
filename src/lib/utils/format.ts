@@ -29,6 +29,24 @@ export function formatDateTime(isoString: string): string {
   return `${date} ${time}`;
 }
 
+/** 시간을 한국어 문자열로 변환 (예: "30분", "2.5시간", "1일 12시간") */
+export function formatHours(hours: number): string {
+  if (hours === 0) return "-";
+  if (hours < 1) return `${Math.round(hours * 60)}분`;
+  if (hours < 24) return `${hours.toFixed(1)}시간`;
+  const days = Math.floor(hours / 24);
+  const remaining = hours % 24;
+  return `${days}일 ${remaining.toFixed(0)}시간`;
+}
+
+/** ISO 문자열 → KST 기준 "YYYY-MM" (월별 집계용) */
+export function toKSTYearMonth(isoString: string): string {
+  const d = new Date(isoString);
+  const year = d.toLocaleDateString("en-CA", { timeZone: TZ, year: "numeric" });
+  const month = d.toLocaleDateString("en-CA", { timeZone: TZ, month: "2-digit" });
+  return `${year}-${month}`;
+}
+
 /** ISO 문자열 → KST 기준 "YYYY-MM-DD" (필터 비교용) */
 export function toKSTDateString(isoString: string): string {
   const d = new Date(isoString);

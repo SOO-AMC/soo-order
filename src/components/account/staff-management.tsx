@@ -65,46 +65,62 @@ export function StaffManagement({ members }: StaffManagementProps) {
   };
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full p-4 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3">
         <div className="flex items-center gap-2">
-          <Link href="/account">
+          <Link href="/more" className="lg:hidden">
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <h1 className="text-2xl font-bold">직원 관리</h1>
+          <h1 className="text-lg font-bold">직원 관리</h1>
         </div>
         <Button size="icon" onClick={() => openDialog("create")}>
           <Plus className="h-4 w-4" />
         </Button>
-      </div>
+      </header>
+
+      <div className="p-4 space-y-4">
 
       {members.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">
           등록된 직원이 없습니다.
         </p>
       ) : (
-        <div className="space-y-2">
-          {members.map((member) => (
-            <Card
-              key={member.id}
-              className="cursor-pointer hover:bg-accent/50 transition-colors"
-              onClick={() => openDialog("actions", member)}
-            >
-              <CardContent className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-medium">{member.full_name}</span>
-                  <Badge
-                    variant={member.role === "admin" ? "default" : "secondary"}
-                  >
-                    {ROLE_LABEL[member.role] ?? member.role}
+        <div className="space-y-6">
+          {(["admin", "user"] as const).map((role) => {
+            const group = members.filter((m) => m.role === role);
+            if (group.length === 0) return null;
+            return (
+              <div key={role} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-semibold text-muted-foreground">
+                    {ROLE_LABEL[role]}
+                  </h2>
+                  <Badge variant={role === "admin" ? "default" : "secondary"} className="text-[11px] px-1.5 py-0">
+                    {group.length}명
                   </Badge>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          ))}
+                {group.map((member) => (
+                  <Card
+                    key={member.id}
+                    className="cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => openDialog("actions", member)}
+                  >
+                    <CardContent className="flex items-center justify-between py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{member.full_name}</span>
+                        <Badge variant={member.role === "admin" ? "default" : "secondary"}>
+                          {ROLE_LABEL[member.role] ?? member.role}
+                        </Badge>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -179,6 +195,7 @@ export function StaffManagement({ members }: StaffManagementProps) {
           member={selectedMember}
         />
       )}
+      </div>
     </div>
   );
 }

@@ -21,54 +21,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-
-export interface SearchFilters {
-  type: "all" | "order" | "return";
-  status: "all" | "pending" | "ordered" | "inspecting" | "return_requested" | "return_completed";
-  requesterName: string;
-  updaterName: string;
-  inspectorName: string;
-  dateFrom: string;
-  dateTo: string;
-  orderedDateFrom: string;
-  orderedDateTo: string;
-  inspectedDateFrom: string;
-  inspectedDateTo: string;
-  returnRequesterName: string;
-  returnDateFrom: string;
-  returnDateTo: string;
-  invoiceReceived: "all" | "received" | "not_received";
-  isUrgent: "all" | "urgent" | "normal";
-}
-
-export const defaultFilters: SearchFilters = {
-  type: "all",
-  status: "all",
-  requesterName: "all",
-  updaterName: "all",
-  inspectorName: "all",
-  dateFrom: "",
-  dateTo: "",
-  orderedDateFrom: "",
-  orderedDateTo: "",
-  inspectedDateFrom: "",
-  inspectedDateTo: "",
-  returnRequesterName: "all",
-  returnDateFrom: "",
-  returnDateTo: "",
-  invoiceReceived: "all",
-  isUrgent: "all",
-};
+import { type SearchFilters, defaultFilters } from "@/lib/utils/search-params";
 
 interface SearchFilterSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   filters: SearchFilters;
   onApply: (filters: SearchFilters) => void;
-  requesterNames: string[];
-  updaterNames: string[];
-  inspectorNames: string[];
-  returnRequesterNames: string[];
+  personNames: string[];
 }
 
 export function SearchFilterSheet({
@@ -76,15 +36,11 @@ export function SearchFilterSheet({
   onOpenChange,
   filters,
   onApply,
-  requesterNames,
-  updaterNames,
-  inspectorNames,
-  returnRequesterNames,
+  personNames,
 }: SearchFilterSheetProps) {
   const [local, setLocal] = useState<SearchFilters>(filters);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  // Sheet 열릴 때 부모 필터 상태를 로컬에 복사
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       setLocal(filters);
@@ -93,7 +49,7 @@ export function SearchFilterSheet({
   };
 
   const handleReset = () => {
-    setLocal(defaultFilters);
+    setLocal({ ...defaultFilters, q: filters.q });
   };
 
   const handleApply = () => {
@@ -106,7 +62,6 @@ export function SearchFilterSheet({
       <SheetContent
         side={isDesktop ? "right" : "bottom"}
         className={isDesktop ? "w-96 flex flex-col" : "max-h-[85vh] flex flex-col"}
-        showCloseButton={isDesktop}
       >
         <SheetHeader>
           <SheetTitle>필터</SheetTitle>
@@ -169,9 +124,9 @@ export function SearchFilterSheet({
               {(["all", "urgent", "normal"] as const).map((value) => (
                 <Badge
                   key={value}
-                  variant={local.isUrgent === value ? "default" : "outline"}
+                  variant={local.urgent === value ? "default" : "outline"}
                   className="cursor-pointer"
-                  onClick={() => setLocal((p) => ({ ...p, isUrgent: value }))}
+                  onClick={() => setLocal((p) => ({ ...p, urgent: value }))}
                 >
                   {value === "all" ? "전체" : value === "urgent" ? "긴급" : "일반"}
                 </Badge>
@@ -185,15 +140,15 @@ export function SearchFilterSheet({
           <div className="space-y-2">
             <Label className="text-sm font-medium">주문 요청자</Label>
             <Select
-              value={local.requesterName}
-              onValueChange={(v) => setLocal((p) => ({ ...p, requesterName: v }))}
+              value={local.requester || "all"}
+              onValueChange={(v) => setLocal((p) => ({ ...p, requester: v === "all" ? "" : v }))}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="전체" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">전체</SelectItem>
-                {requesterNames.map((name) => (
+                {personNames.map((name) => (
                   <SelectItem key={name} value={name}>
                     {name}
                   </SelectItem>
@@ -230,15 +185,15 @@ export function SearchFilterSheet({
           <div className="space-y-2">
             <Label className="text-sm font-medium">발주자</Label>
             <Select
-              value={local.updaterName}
-              onValueChange={(v) => setLocal((p) => ({ ...p, updaterName: v }))}
+              value={local.updater || "all"}
+              onValueChange={(v) => setLocal((p) => ({ ...p, updater: v === "all" ? "" : v }))}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="전체" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">전체</SelectItem>
-                {updaterNames.map((name) => (
+                {personNames.map((name) => (
                   <SelectItem key={name} value={name}>
                     {name}
                   </SelectItem>
@@ -255,15 +210,15 @@ export function SearchFilterSheet({
             <div className="flex items-center gap-2">
               <input
                 type="date"
-                value={local.orderedDateFrom}
-                onChange={(e) => setLocal((p) => ({ ...p, orderedDateFrom: e.target.value }))}
+                value={local.ordDateFrom}
+                onChange={(e) => setLocal((p) => ({ ...p, ordDateFrom: e.target.value }))}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               />
               <span className="shrink-0 text-muted-foreground">~</span>
               <input
                 type="date"
-                value={local.orderedDateTo}
-                onChange={(e) => setLocal((p) => ({ ...p, orderedDateTo: e.target.value }))}
+                value={local.ordDateTo}
+                onChange={(e) => setLocal((p) => ({ ...p, ordDateTo: e.target.value }))}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               />
             </div>
@@ -275,15 +230,15 @@ export function SearchFilterSheet({
           <div className="space-y-2">
             <Label className="text-sm font-medium">검수자</Label>
             <Select
-              value={local.inspectorName}
-              onValueChange={(v) => setLocal((p) => ({ ...p, inspectorName: v }))}
+              value={local.inspector || "all"}
+              onValueChange={(v) => setLocal((p) => ({ ...p, inspector: v === "all" ? "" : v }))}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="전체" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">전체</SelectItem>
-                {inspectorNames.map((name) => (
+                {personNames.map((name) => (
                   <SelectItem key={name} value={name}>
                     {name}
                   </SelectItem>
@@ -300,15 +255,15 @@ export function SearchFilterSheet({
             <div className="flex items-center gap-2">
               <input
                 type="date"
-                value={local.inspectedDateFrom}
-                onChange={(e) => setLocal((p) => ({ ...p, inspectedDateFrom: e.target.value }))}
+                value={local.inspDateFrom}
+                onChange={(e) => setLocal((p) => ({ ...p, inspDateFrom: e.target.value }))}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               />
               <span className="shrink-0 text-muted-foreground">~</span>
               <input
                 type="date"
-                value={local.inspectedDateTo}
-                onChange={(e) => setLocal((p) => ({ ...p, inspectedDateTo: e.target.value }))}
+                value={local.inspDateTo}
+                onChange={(e) => setLocal((p) => ({ ...p, inspDateTo: e.target.value }))}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               />
             </div>
@@ -320,15 +275,15 @@ export function SearchFilterSheet({
           <div className="space-y-2">
             <Label className="text-sm font-medium">반품 신청자</Label>
             <Select
-              value={local.returnRequesterName}
-              onValueChange={(v) => setLocal((p) => ({ ...p, returnRequesterName: v }))}
+              value={local.retRequester || "all"}
+              onValueChange={(v) => setLocal((p) => ({ ...p, retRequester: v === "all" ? "" : v }))}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="전체" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">전체</SelectItem>
-                {returnRequesterNames.map((name) => (
+                {personNames.map((name) => (
                   <SelectItem key={name} value={name}>
                     {name}
                   </SelectItem>
@@ -345,15 +300,15 @@ export function SearchFilterSheet({
             <div className="flex items-center gap-2">
               <input
                 type="date"
-                value={local.returnDateFrom}
-                onChange={(e) => setLocal((p) => ({ ...p, returnDateFrom: e.target.value }))}
+                value={local.retDateFrom}
+                onChange={(e) => setLocal((p) => ({ ...p, retDateFrom: e.target.value }))}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               />
               <span className="shrink-0 text-muted-foreground">~</span>
               <input
                 type="date"
-                value={local.returnDateTo}
-                onChange={(e) => setLocal((p) => ({ ...p, returnDateTo: e.target.value }))}
+                value={local.retDateTo}
+                onChange={(e) => setLocal((p) => ({ ...p, retDateTo: e.target.value }))}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               />
             </div>
@@ -368,9 +323,9 @@ export function SearchFilterSheet({
               {(["all", "received", "not_received"] as const).map((value) => (
                 <Badge
                   key={value}
-                  variant={local.invoiceReceived === value ? "default" : "outline"}
+                  variant={local.invoice === value ? "default" : "outline"}
                   className="cursor-pointer"
-                  onClick={() => setLocal((p) => ({ ...p, invoiceReceived: value }))}
+                  onClick={() => setLocal((p) => ({ ...p, invoice: value }))}
                 >
                   {value === "all" ? "전체" : value === "received" ? "수령" : "미수령"}
                 </Badge>
@@ -379,7 +334,7 @@ export function SearchFilterSheet({
           </div>
         </div>
 
-        <SheetFooter className="flex-row gap-2 border-t pt-4">
+        <SheetFooter className="flex-row gap-2 border-t pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <Button variant="outline" className="flex-1" onClick={handleReset}>
             초기화
           </Button>

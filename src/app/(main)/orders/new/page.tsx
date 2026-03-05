@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { OrderForm } from "@/components/orders/order-form";
 import type { OrderFormResult } from "@/components/orders/order-form";
-import { uploadPhoto } from "@/lib/utils/photo";
+import { enqueueNewOrderPhotos } from "@/lib/utils/upload-queue";
 
 export default function NewOrderPage() {
   const router = useRouter();
@@ -27,6 +27,7 @@ export default function NewOrderPage() {
         item_name: data.item_name,
         quantity: data.quantity,
         unit: data.unit,
+        is_urgent: data.is_urgent,
         requester_id: user.id,
       })
       .select("id")
@@ -34,19 +35,14 @@ export default function NewOrderPage() {
 
     if (error || !inserted) throw error;
 
-    // 2. Upload photos if any
-    const newPhotos = data.photos.filter((p) => p.type === "new");
-    if (newPhotos.length > 0) {
-      const paths = await Promise.all(
-        newPhotos.map((p) => uploadPhoto(supabase, inserted.id, p.file))
-      );
-      await supabase
-        .from("orders")
-        .update({ photo_urls: paths })
-        .eq("id", inserted.id);
-    }
-
+    // 2. Navigate immediately
     router.push("/orders");
+
+    // 3. Upload photos in background
+    const newFiles = data.photos
+      .filter((p) => p.type === "new")
+      .map((p) => p.file);
+    enqueueNewOrderPhotos(supabase, inserted.id, newFiles);
   };
 
   return (

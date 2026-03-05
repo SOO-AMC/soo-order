@@ -58,6 +58,7 @@ export default function LoginPage() {
               type="password"
               required
             />
+            <p className="text-xs text-muted-foreground">숫자, 영문, 특수문자 조합 4자리 이상</p>
           </div>
           {state.error && (
             <p className="text-sm text-destructive">{state.error}</p>

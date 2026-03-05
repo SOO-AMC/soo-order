@@ -33,7 +33,16 @@ export default async function MembersPage() {
     .select("id, full_name, role, created_at")
     .neq("id", user.id)
     .eq("is_active", true)
-    .order("created_at", { ascending: true });
+    .order("role", { ascending: true })
+    .order("full_name", { ascending: true });
 
-  return <StaffManagement members={members ?? []} />;
+  const sorted = (members ?? []).sort((a, b) => {
+    if (a.role !== b.role) return a.role < b.role ? -1 : 1;
+    const pinA = a.full_name === "정윤혁" ? 0 : 1;
+    const pinB = b.full_name === "정윤혁" ? 0 : 1;
+    if (pinA !== pinB) return pinA - pinB;
+    return a.full_name.localeCompare(b.full_name, "ko");
+  });
+
+  return <StaffManagement members={sorted} />;
 }

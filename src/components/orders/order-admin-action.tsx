@@ -57,14 +57,14 @@ export function OrderAdminAction({ orderId }: OrderAdminActionProps) {
     <>
       <Button className="w-full" onClick={() => setOpen(true)}>
         <ShoppingCart className="h-4 w-4" />
-        발주하기
+        주문하기
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>발주하기</DialogTitle>
-            <DialogDescription>업체명을 입력하고 발주를 진행합니다.</DialogDescription>
+            <DialogTitle>주문하기</DialogTitle>
+            <DialogDescription>업체명을 입력하고 주문을 진행합니다.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="vendor-name">업체명</Label>
@@ -83,7 +83,7 @@ export function OrderAdminAction({ orderId }: OrderAdminActionProps) {
               </Button>
             </DialogClose>
             <Button onClick={handleOrder} disabled={isLoading}>
-              {isLoading ? "처리 중..." : "발주"}
+              {isLoading ? "처리 중..." : "주문"}
             </Button>
           </DialogFooter>
         </DialogContent>

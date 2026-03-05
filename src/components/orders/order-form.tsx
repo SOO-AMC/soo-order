@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ItemNameAutocomplete } from "./item-name-autocomplete";
 import { PhotoPicker, photoItemsFromPaths } from "./photo-picker";
 import type { PhotoItem } from "./photo-picker";
@@ -12,6 +13,7 @@ interface OrderFormData {
   item_name: string;
   quantity: number;
   unit: string;
+  is_urgent: boolean;
 }
 
 export interface OrderFormResult extends OrderFormData {
@@ -30,6 +32,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
     defaultValues?.quantity?.toString() ?? ""
   );
   const [unit, setUnit] = useState(defaultValues?.unit ?? "");
+  const [isUrgent, setIsUrgent] = useState(defaultValues?.is_urgent ?? false);
   const [photos, setPhotos] = useState<PhotoItem[]>(
     existingPhotoUrls ? photoItemsFromPaths(existingPhotoUrls) : []
   );
@@ -59,6 +62,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
         item_name: itemName.trim(),
         quantity: qty,
         unit: unit.trim(),
+        is_urgent: isUrgent,
         photos,
       });
     } catch {
@@ -75,7 +79,16 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="item_name">품목</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="item_name">품목</Label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <Checkbox
+              checked={isUrgent}
+              onCheckedChange={(checked) => setIsUrgent(checked === true)}
+            />
+            <span className="text-sm font-medium text-red-500">긴급</span>
+          </label>
+        </div>
         <ItemNameAutocomplete value={itemName} onChange={setItemName} />
       </div>
 

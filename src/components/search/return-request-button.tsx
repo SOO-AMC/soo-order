@@ -63,7 +63,7 @@ export function ReturnRequestButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="destructive" className="w-full">
+        <Button variant="outline" className="w-full">
           <Undo2 className="h-4 w-4" />
           반품 신청
         </Button>

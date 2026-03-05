@@ -1,12 +1,23 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Camera, ChevronRight, CircleAlert, ShoppingCart } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -15,7 +26,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { OrderTypeBadge } from "./order-type-badge";
 import { OrderStatusBadge } from "./order-status-badge";
 import { formatDate } from "@/lib/utils/format";
 import { Spinner } from "@/components/ui/spinner";
@@ -33,6 +43,10 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isOrdering, setIsOrdering] = useState(false);
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState<"all" | "individual">("all");
+  const [bulkVendorName, setBulkVendorName] = useState("");
+  const [individualVendors, setIndividualVendors] = useState<Map<string, string>>(new Map());
   const supabase = createClient();
   const router = useRouter();
 
@@ -55,10 +69,30 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!initialData) {
       fetchOrders();
     }
+
+    const channel = supabase
+      .channel("order-list")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        () => {
+          if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+          realtimeTimer.current = setTimeout(fetchOrders, 500);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchOrders, initialData]);
 
   const sortedOrders = [...orders].sort((a, b) => {
@@ -91,22 +125,52 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
     }
   };
 
+  const openBulkDialog = () => {
+    setBulkMode("all");
+    setBulkVendorName("");
+    setIndividualVendors(new Map(
+      [...selectedIds].map((id) => [id, ""])
+    ));
+    setBulkDialogOpen(true);
+  };
+
   const handleBulkOrder = async () => {
     if (selectedIds.size === 0) return;
     setIsOrdering(true);
 
     const userId = currentUserId ?? (await supabase.auth.getSession()).data.session?.user.id;
 
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: "ordered", updated_by: userId })
-      .in("id", [...selectedIds]);
+    if (bulkMode === "all") {
+      const { error } = await supabase
+        .from("orders")
+        .update({ status: "ordered", vendor_name: bulkVendorName.trim(), updated_by: userId })
+        .in("id", [...selectedIds]);
 
-    if (error) {
-      setIsOrdering(false);
-      return;
+      if (error) {
+        setIsOrdering(false);
+        return;
+      }
+    } else {
+      const results = await Promise.all(
+        [...selectedIds].map((id) =>
+          supabase
+            .from("orders")
+            .update({
+              status: "ordered",
+              vendor_name: (individualVendors.get(id) ?? "").trim(),
+              updated_by: userId,
+            })
+            .eq("id", id)
+        )
+      );
+
+      if (results.some((r) => r.error)) {
+        setIsOrdering(false);
+        return;
+      }
     }
 
+    setBulkDialogOpen(false);
     setSelectedIds(new Set());
     setIsOrdering(false);
     await fetchOrders();
@@ -160,7 +224,6 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
           <TableHeader>
             <TableRow>
               {isAdmin && <TableHead className="w-10" />}
-              <TableHead>유형</TableHead>
               <TableHead>상태</TableHead>
               <TableHead>품목명</TableHead>
               <TableHead>수량</TableHead>
@@ -190,9 +253,6 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
                       )}
                     </TableCell>
                   )}
-                  <TableCell>
-                    <OrderTypeBadge type={order.type} />
-                  </TableCell>
                   <TableCell>
                     <OrderStatusBadge status={order.status} />
                   </TableCell>
@@ -247,7 +307,6 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <OrderTypeBadge type={order.type} />
                     <OrderStatusBadge status={order.status} />
                     {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
                     <span className="truncate font-medium">{order.item_name}</span>
@@ -282,16 +341,88 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
         <div className="fixed bottom-20 left-0 right-0 z-50 flex justify-center px-4 lg:left-60 lg:bottom-4">
           <Button
             className="w-full max-w-md md:max-w-2xl lg:max-w-full shadow-lg"
-            onClick={handleBulkOrder}
-            disabled={isOrdering}
+            onClick={openBulkDialog}
           >
             <ShoppingCart className="h-4 w-4" />
-            {isOrdering
-              ? "발주 처리 중..."
-              : `선택 항목 일괄 발주 (${selectedIds.size}건)`}
+            {`선택 항목 일괄 주문 (${selectedIds.size}건)`}
           </Button>
         </div>
       )}
+
+      <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>주문하기</DialogTitle>
+            <DialogDescription>
+              선택된 {selectedIds.size}건의 품목을 주문합니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex gap-2">
+            <Button
+              variant={bulkMode === "all" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => setBulkMode("all")}
+            >
+              일괄 입력
+            </Button>
+            <Button
+              variant={bulkMode === "individual" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => setBulkMode("individual")}
+            >
+              개별 입력
+            </Button>
+          </div>
+
+          {bulkMode === "all" ? (
+            <div className="space-y-2">
+              <Label htmlFor="bulk-vendor">업체명</Label>
+              <Input
+                id="bulk-vendor"
+                placeholder="업체명 입력"
+                value={bulkVendorName}
+                onChange={(e) => setBulkVendorName(e.target.value)}
+              />
+            </div>
+          ) : (
+            <div className="max-h-60 space-y-3 overflow-y-auto">
+              {[...selectedIds].map((id) => {
+                const order = orders.find((o) => o.id === id);
+                return (
+                  <div key={id} className="space-y-1">
+                    <Label className="text-sm font-medium">
+                      {order?.item_name ?? id}
+                    </Label>
+                    <Input
+                      placeholder="업체명 입력"
+                      value={individualVendors.get(id) ?? ""}
+                      onChange={(e) =>
+                        setIndividualVendors((prev) => {
+                          const next = new Map(prev);
+                          next.set(id, e.target.value);
+                          return next;
+                        })
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">취소</Button>
+            </DialogClose>
+            <Button onClick={handleBulkOrder} disabled={isOrdering}>
+              {isOrdering ? "주문 처리 중..." : "주문"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
