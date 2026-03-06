@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Undo2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { logClientAction } from "@/app/(main)/log-action";
 
-export function ReturnCompleteButton({ orderId }: { orderId: string }) {
+export function ReturnCompleteButton({ orderId, itemName }: { orderId: string; itemName?: string }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -26,6 +27,7 @@ export function ReturnCompleteButton({ orderId }: { orderId: string }) {
       return;
     }
 
+    logClientAction("return", "complete_return", `${itemName ?? "품목"} 반품 완료`);
     router.push("/returns");
     router.refresh();
   };

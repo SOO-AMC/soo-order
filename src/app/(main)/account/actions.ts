@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { validatePassword, padPassword } from "@/lib/utils/auth";
+import { logClientAction } from "@/app/(main)/log-action";
 
 export type ChangePasswordState = {
   error?: string;
@@ -37,6 +38,8 @@ export async function changePassword(
   if (error) {
     return { error: "비밀번호 변경에 실패했습니다." };
   }
+
+  await logClientAction("account", "change_password", "비밀번호 변경");
 
   return { success: true };
 }

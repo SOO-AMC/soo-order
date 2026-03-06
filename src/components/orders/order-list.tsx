@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Camera, ChevronRight, CircleAlert, ShoppingCart } from "lucide-react";
@@ -26,9 +26,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { OrderStatusBadge } from "./order-status-badge";
+import { OrderStatusBadge, StatusLegend } from "./order-status-badge";
 import { formatDate } from "@/lib/utils/format";
 import { Spinner } from "@/components/ui/spinner";
+import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 
 interface OrderListProps {
@@ -46,7 +47,9 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkMode, setBulkMode] = useState<"all" | "individual">("all");
   const [bulkVendorName, setBulkVendorName] = useState("");
+  const [bulkOrderNotes, setBulkOrderNotes] = useState("");
   const [individualVendors, setIndividualVendors] = useState<Map<string, string>>(new Map());
+  const [individualNotes, setIndividualNotes] = useState<Map<string, string>>(new Map());
   const supabase = createClient();
   const router = useRouter();
 
@@ -95,10 +98,13 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchOrders, initialData]);
 
-  const sortedOrders = [...orders].sort((a, b) => {
-    if (a.is_urgent !== b.is_urgent) return a.is_urgent ? -1 : 1;
-    return 0;
-  });
+  const sortedOrders = useMemo(
+    () => [...orders].sort((a, b) => {
+      if (a.is_urgent !== b.is_urgent) return a.is_urgent ? -1 : 1;
+      return 0;
+    }),
+    [orders]
+  );
 
   const pendingOrders = sortedOrders.filter((o) => o.status === "pending");
   const allPendingSelected =
@@ -128,7 +134,11 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
   const openBulkDialog = () => {
     setBulkMode("all");
     setBulkVendorName("");
+    setBulkOrderNotes("");
     setIndividualVendors(new Map(
+      [...selectedIds].map((id) => [id, ""])
+    ));
+    setIndividualNotes(new Map(
       [...selectedIds].map((id) => [id, ""])
     ));
     setBulkDialogOpen(true);
@@ -143,7 +153,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
     if (bulkMode === "all") {
       const { error } = await supabase
         .from("orders")
-        .update({ status: "ordered", vendor_name: bulkVendorName.trim(), updated_by: userId })
+        .update({ status: "ordered", vendor_name: bulkVendorName.trim(), order_notes: bulkOrderNotes.trim(), updated_by: userId })
         .in("id", [...selectedIds]);
 
       if (error) {
@@ -158,6 +168,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
             .update({
               status: "ordered",
               vendor_name: (individualVendors.get(id) ?? "").trim(),
+              order_notes: (individualNotes.get(id) ?? "").trim(),
               updated_by: userId,
             })
             .eq("id", id)
@@ -170,6 +181,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
       }
     }
 
+    logClientAction("dispatch", "dispatch_bulk", `${selectedIds.size}건 일괄 발주`);
     setBulkDialogOpen(false);
     setSelectedIds(new Set());
     setIsOrdering(false);
@@ -208,15 +220,20 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
 
   return (
     <div className="space-y-2">
-      {isAdmin && pendingOrders.length > 0 && (
-        <label className="flex items-center gap-2 px-1 py-2 text-sm text-muted-foreground cursor-pointer">
-          <Checkbox
-            checked={allPendingSelected}
-            onCheckedChange={toggleSelectAll}
-          />
-          요청중 항목 전체 선택 ({pendingOrders.length}건)
-        </label>
-      )}
+      <div className="flex items-center justify-between px-1 py-2">
+        {isAdmin && pendingOrders.length > 0 ? (
+          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+            <Checkbox
+              checked={allPendingSelected}
+              onCheckedChange={toggleSelectAll}
+            />
+            전체선택 ({pendingOrders.length}건)
+          </label>
+        ) : (
+          <div />
+        )}
+        <StatusLegend />
+      </div>
 
       {/* PC 테이블 뷰 */}
       <div className="hidden lg:block">
@@ -293,7 +310,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
           return (
             <div
               key={order.id}
-              className="flex items-center gap-3 rounded-lg border p-3 transition-colors"
+              className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-card transition-colors"
             >
               {showCheckbox && (
                 <Checkbox
@@ -378,14 +395,25 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
           </div>
 
           {bulkMode === "all" ? (
-            <div className="space-y-2">
-              <Label htmlFor="bulk-vendor">업체명</Label>
-              <Input
-                id="bulk-vendor"
-                placeholder="업체명 입력"
-                value={bulkVendorName}
-                onChange={(e) => setBulkVendorName(e.target.value)}
-              />
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="bulk-vendor">업체명</Label>
+                <Input
+                  id="bulk-vendor"
+                  placeholder="업체명 입력"
+                  value={bulkVendorName}
+                  onChange={(e) => setBulkVendorName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bulk-order-notes">비고</Label>
+                <Input
+                  id="bulk-order-notes"
+                  placeholder="비고 (선택)"
+                  value={bulkOrderNotes}
+                  onChange={(e) => setBulkOrderNotes(e.target.value)}
+                />
+              </div>
             </div>
           ) : (
             <div className="max-h-60 space-y-3 overflow-y-auto">
@@ -401,6 +429,17 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
                       value={individualVendors.get(id) ?? ""}
                       onChange={(e) =>
                         setIndividualVendors((prev) => {
+                          const next = new Map(prev);
+                          next.set(id, e.target.value);
+                          return next;
+                        })
+                      }
+                    />
+                    <Input
+                      placeholder="비고 (선택)"
+                      value={individualNotes.get(id) ?? ""}
+                      onChange={(e) =>
+                        setIndividualNotes((prev) => {
                           const next = new Map(prev);
                           next.set(id, e.target.value);
                           return next;

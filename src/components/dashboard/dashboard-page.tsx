@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SummaryCards } from "./summary-cards";
 import { OrderTrendChart } from "./order-trend-chart";
 import { TopItemsChart } from "./top-items-chart";
@@ -17,7 +20,12 @@ interface DashboardPageProps {
 export function DashboardPage({ data }: DashboardPageProps) {
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-none">
-      <header className="sticky top-0 z-40 flex items-center border-b bg-background px-4 py-3">
+      <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
+        <Button variant="ghost" size="icon" asChild className="lg:hidden">
+          <Link href="/more">
+            <ChevronLeft />
+          </Link>
+        </Button>
         <h1 className="text-lg font-bold">대시보드</h1>
       </header>
 

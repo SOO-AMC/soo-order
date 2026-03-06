@@ -14,6 +14,7 @@ interface OrderFormData {
   quantity: number;
   unit: string;
   is_urgent: boolean;
+  notes: string;
 }
 
 export interface OrderFormResult extends OrderFormData {
@@ -33,6 +34,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
   );
   const [unit, setUnit] = useState(defaultValues?.unit ?? "");
   const [isUrgent, setIsUrgent] = useState(defaultValues?.is_urgent ?? false);
+  const [notes, setNotes] = useState(defaultValues?.notes ?? "");
   const [photos, setPhotos] = useState<PhotoItem[]>(
     existingPhotoUrls ? photoItemsFromPaths(existingPhotoUrls) : []
   );
@@ -63,6 +65,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
         quantity: qty,
         unit: unit.trim(),
         is_urgent: isUrgent,
+        notes: notes.trim(),
         photos,
       });
     } catch {
@@ -114,6 +117,17 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
             className="w-28"
           />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="notes">비고</Label>
+        <Input
+          id="notes"
+          type="text"
+          placeholder="비고 (선택)"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

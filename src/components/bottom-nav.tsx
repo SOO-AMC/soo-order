@@ -30,7 +30,7 @@ export function BottomNav() {
   if (!show) return null;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background pb-[env(safe-area-inset-bottom)] lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-sm shadow-nav pb-[env(safe-area-inset-bottom)] lg:hidden">
       <div className="mx-auto flex h-14 max-w-md md:max-w-2xl items-center justify-around">
         {tabs.map(({ href, label, icon: Icon, countKey }) => {
           const isActive =

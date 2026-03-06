@@ -16,14 +16,17 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { ShoppingCart } from "lucide-react";
+import { logClientAction } from "@/app/(main)/log-action";
 
 interface OrderAdminActionProps {
   orderId: string;
+  itemName?: string;
 }
 
-export function OrderAdminAction({ orderId }: OrderAdminActionProps) {
+export function OrderAdminAction({ orderId, itemName }: OrderAdminActionProps) {
   const [open, setOpen] = useState(false);
   const [vendorName, setVendorName] = useState("");
+  const [orderNotes, setOrderNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -41,6 +44,7 @@ export function OrderAdminAction({ orderId }: OrderAdminActionProps) {
         status: "ordered",
         updated_by: user?.id,
         vendor_name: vendorName,
+        order_notes: orderNotes.trim(),
       })
       .eq("id", orderId);
 
@@ -49,6 +53,7 @@ export function OrderAdminAction({ orderId }: OrderAdminActionProps) {
       return;
     }
 
+    logClientAction("dispatch", "dispatch_single", `${itemName ?? "품목"} 발주 (업체: ${vendorName || "미입력"})`);
     setOpen(false);
     router.refresh();
   };
@@ -66,15 +71,26 @@ export function OrderAdminAction({ orderId }: OrderAdminActionProps) {
             <DialogTitle>주문하기</DialogTitle>
             <DialogDescription>업체명을 입력하고 주문을 진행합니다.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="vendor-name">업체명</Label>
-            <Input
-              id="vendor-name"
-              placeholder="업체명을 입력하세요"
-              value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
-              autoFocus
-            />
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="vendor-name">업체명</Label>
+              <Input
+                id="vendor-name"
+                placeholder="업체명을 입력하세요"
+                value={vendorName}
+                onChange={(e) => setVendorName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="order-notes">비고</Label>
+              <Input
+                id="order-notes"
+                placeholder="비고 (선택)"
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+              />
+            </div>
           </div>
           <DialogFooter>
             <DialogClose asChild>

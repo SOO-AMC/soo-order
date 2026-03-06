@@ -19,7 +19,7 @@ const STATUS_DOT_COLORS: Record<OrderStatus, string> = {
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[status]}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[status]}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_COLORS[status]}`} />
       {ORDER_STATUS_LABEL[status]}
@@ -29,14 +29,14 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
 
 export function StatusLegend() {
   const items: { status: OrderStatus; label: string }[] = [
-    { status: "pending", label: "요청중" },
+    { status: "pending", label: "주문신청" },
     { status: "ordered", label: "검수대기" },
     { status: "inspecting", label: "검수완료" },
     { status: "return_requested", label: "반품신청" },
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 justify-items-end lg:flex lg:flex-wrap lg:items-center lg:gap-2">
       {items.map(({ status, label }) => (
         <span key={status} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
           <span className={`h-2 w-2 rounded-full ${STATUS_DOT_COLORS[status]}`} />

@@ -54,7 +54,7 @@ export default async function SearchDetailPage({
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-3">
+      <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/search">
             <ChevronLeft />
@@ -63,7 +63,7 @@ export default async function SearchDetailPage({
         <h1 className="text-lg font-bold">조회 상세</h1>
       </header>
 
-      <div className="space-y-6 p-4">
+      <div className="p-4"><div className="space-y-6 rounded-2xl bg-card p-5 shadow-card">
         {/* 상태 뱃지 */}
         <div className="flex items-center gap-2">
           <OrderTypeBadge type={order.type as OrderType} />
@@ -106,6 +106,12 @@ export default async function SearchDetailPage({
                 {formatDateTime(order.created_at)}
               </dd>
             </div>
+            {order.notes && (
+              <div>
+                <dt className="text-sm text-muted-foreground">비고</dt>
+                <dd className="mt-0.5 font-medium">{order.notes}</dd>
+              </div>
+            )}
             {wasUpdated && (
               <>
                 {order.updater && (
@@ -146,6 +152,12 @@ export default async function SearchDetailPage({
                     {order.vendor_name || "-"}
                   </dd>
                 </div>
+                {order.order_notes && (
+                  <div>
+                    <dt className="text-sm text-muted-foreground">비고</dt>
+                    <dd className="mt-0.5 font-medium">{order.order_notes}</dd>
+                  </div>
+                )}
               </dl>
             </div>
           </>
@@ -188,6 +200,12 @@ export default async function SearchDetailPage({
                     <dd className="mt-0.5 font-medium">
                       {formatDateTime(order.inspected_at)}
                     </dd>
+                  </div>
+                )}
+                {order.inspection_notes && (
+                  <div>
+                    <dt className="text-sm text-muted-foreground">비고</dt>
+                    <dd className="mt-0.5 font-medium">{order.inspection_notes}</dd>
                   </div>
                 )}
               </dl>
@@ -238,7 +256,7 @@ export default async function SearchDetailPage({
         {canCancelInspection && (
           <>
             <Separator />
-            <CancelInspectionButton orderId={order.id} />
+            <CancelInspectionButton orderId={order.id} itemName={order.item_name} />
           </>
         )}
 
@@ -248,12 +266,13 @@ export default async function SearchDetailPage({
             <Separator />
             <ReturnRequestButton
               orderId={order.id}
+              itemName={order.item_name}
               defaultQuantity={order.confirmed_quantity ?? order.quantity}
               unit={order.unit}
             />
           </>
         )}
-      </div>
+      </div></div>
     </div>
   );
 }

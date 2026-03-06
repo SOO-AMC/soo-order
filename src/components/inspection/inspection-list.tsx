@@ -24,8 +24,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils/format";
-import { OrderStatusBadge } from "@/components/orders/order-status-badge";
+import { OrderStatusBadge, StatusLegend } from "@/components/orders/order-status-badge";
 import { Spinner } from "@/components/ui/spinner";
+import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 
 interface InspectionListProps {
@@ -37,6 +38,7 @@ interface InspectionListProps {
 interface InspectionData {
   confirmed_quantity: number;
   invoice_received: boolean | null;
+  inspection_notes: string;
 }
 
 export function InspectionList({ isAdmin, currentUserId, initialData }: InspectionListProps) {
@@ -111,6 +113,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
       inspectionData[order.id] ?? {
         confirmed_quantity: order.quantity,
         invoice_received: null,
+        inspection_notes: "",
       }
     );
   };
@@ -118,13 +121,14 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
   const updateInspectionData = (
     id: string,
     field: keyof InspectionData,
-    value: number | boolean | null
+    value: number | boolean | null | string
   ) => {
     setInspectionData((prev) => {
       const existing = prev[id] ?? {
         confirmed_quantity:
           orders.find((o) => o.id === id)?.quantity ?? 0,
         invoice_received: null,
+        inspection_notes: "",
       };
       return { ...prev, [id]: { ...existing, [field]: value } };
     });
@@ -179,6 +183,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
           status: "inspecting",
           confirmed_quantity: data.confirmed_quantity,
           invoice_received: data.invoice_received,
+          inspection_notes: data.inspection_notes.trim(),
           inspected_by: currentUserId,
           inspected_at: now,
         })
@@ -193,6 +198,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
       return;
     }
 
+    logClientAction("inspection", "inspect_bulk", `${selectedIds.size}건 일괄 검수`);
     setSelectedIds(new Set());
     setInspectionData({});
     setIsProcessing(false);
@@ -226,13 +232,16 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 px-1 py-2 text-sm text-muted-foreground cursor-pointer">
-        <Checkbox
-          checked={allSelected}
-          onCheckedChange={toggleSelectAll}
-        />
-        전체 선택 ({sortedOrders.length}건)
-      </label>
+      <div className="flex items-center justify-between px-1 py-2">
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox
+            checked={allSelected}
+            onCheckedChange={toggleSelectAll}
+          />
+          전체 선택 ({sortedOrders.length}건)
+        </label>
+        <StatusLegend />
+      </div>
 
       {/* PC 테이블 뷰 */}
       <div className="hidden lg:block">
@@ -339,6 +348,23 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
                               </SelectContent>
                             </Select>
                           </div>
+                          <div>
+                            <label className="block text-xs text-muted-foreground">비고</label>
+                            <Input
+                              type="text"
+                              placeholder="비고"
+                              value={data.inspection_notes}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) =>
+                                updateInspectionData(
+                                  order.id,
+                                  "inspection_notes",
+                                  e.target.value
+                                )
+                              }
+                              className="mt-1 h-8 w-40"
+                            />
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -359,7 +385,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
           return (
             <div
               key={order.id}
-              className="rounded-lg border p-3 transition-colors"
+              className="rounded-xl bg-card p-4 shadow-card transition-colors"
             >
               <div className="flex items-center gap-3">
                 <Checkbox
@@ -372,11 +398,11 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
+                      <OrderStatusBadge status={order.status} />
                       {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
                       <span className="truncate font-medium">
                         {order.item_name}
                       </span>
-                      <OrderStatusBadge status={order.status} />
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
                       <span>
@@ -402,53 +428,71 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
               </div>
 
               {isSelected && (
-                <div className="mt-3 flex items-center gap-2 pl-8">
-                  <div className="flex-1">
-                    <label className="text-xs text-muted-foreground">
-                      확인 수량
-                    </label>
+                <div className="mt-3 space-y-2 pl-8">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <label className="text-xs text-muted-foreground">
+                        확인 수량
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={data.confirmed_quantity}
+                        onChange={(e) =>
+                          updateInspectionData(
+                            order.id,
+                            "confirmed_quantity",
+                            Number(e.target.value)
+                          )
+                        }
+                        className="mt-0.5 h-8"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-muted-foreground">
+                        거래명세서
+                      </label>
+                      <Select
+                        value={
+                          data.invoice_received === null
+                            ? ""
+                            : data.invoice_received
+                              ? "received"
+                              : "not_received"
+                        }
+                        onValueChange={(v) =>
+                          updateInspectionData(
+                            order.id,
+                            "invoice_received",
+                            v === "received"
+                          )
+                        }
+                      >
+                        <SelectTrigger className="mt-0.5 h-8">
+                          <SelectValue placeholder="선택" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="received">수령</SelectItem>
+                          <SelectItem value="not_received">미수령</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">비고</label>
                     <Input
-                      type="number"
-                      min={1}
-                      value={data.confirmed_quantity}
+                      type="text"
+                      placeholder="비고 (선택)"
+                      value={data.inspection_notes}
                       onChange={(e) =>
                         updateInspectionData(
                           order.id,
-                          "confirmed_quantity",
-                          Number(e.target.value)
+                          "inspection_notes",
+                          e.target.value
                         )
                       }
                       className="mt-0.5 h-8"
                     />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs text-muted-foreground">
-                      거래명세서
-                    </label>
-                    <Select
-                      value={
-                        data.invoice_received === null
-                          ? ""
-                          : data.invoice_received
-                            ? "received"
-                            : "not_received"
-                      }
-                      onValueChange={(v) =>
-                        updateInspectionData(
-                          order.id,
-                          "invoice_received",
-                          v === "received"
-                        )
-                      }
-                    >
-                      <SelectTrigger className="mt-0.5 h-8">
-                        <SelectValue placeholder="선택" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="received">수령</SelectItem>
-                        <SelectItem value="not_received">미수령</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
               )}

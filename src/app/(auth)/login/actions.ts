@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { padPassword } from "@/lib/utils/auth";
+import { logActivity } from "@/lib/utils/activity-log";
 
 export type LoginState = {
   error?: string;
@@ -42,6 +43,14 @@ export async function login(
   if (error) {
     return { error: "비밀번호가 올바르지 않습니다." };
   }
+
+  await logActivity({
+    userId: profile.id,
+    userName: name,
+    category: "auth",
+    action: "login",
+    description: "로그인",
+  });
 
   redirect("/orders");
 }

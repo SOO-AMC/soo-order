@@ -25,15 +25,18 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { ClipboardCheck, X } from "lucide-react";
+import { logClientAction } from "@/app/(main)/log-action";
 
 interface InspectionActionsProps {
   orderId: string;
+  itemName?: string;
   defaultQuantity: number;
   canCancel: boolean;
 }
 
 export function InspectionActions({
   orderId,
+  itemName,
   defaultQuantity,
   canCancel,
 }: InspectionActionsProps) {
@@ -41,6 +44,7 @@ export function InspectionActions({
   const [confirmedQuantity, setConfirmedQuantity] =
     useState(defaultQuantity);
   const [invoiceReceived, setInvoiceReceived] = useState<string>("");
+  const [inspectionNotes, setInspectionNotes] = useState("");
   const [isInspecting, setIsInspecting] = useState(false);
   const [inspectError, setInspectError] = useState("");
 
@@ -69,6 +73,7 @@ export function InspectionActions({
         status: "inspecting",
         confirmed_quantity: confirmedQuantity,
         invoice_received: invoiceReceived === "received",
+        inspection_notes: inspectionNotes.trim(),
         inspected_by: user?.id,
         inspected_at: new Date().toISOString(),
       })
@@ -79,6 +84,7 @@ export function InspectionActions({
       return;
     }
 
+    logClientAction("inspection", "inspect", `${itemName ?? "품목"} 검수 완료`);
     setInspectOpen(false);
     router.push("/inspection");
   };
@@ -97,6 +103,7 @@ export function InspectionActions({
         setCancelOpen(false);
         return;
       }
+      logClientAction("order", "delete_order", `${itemName ?? "품목"} 주문 삭제`);
     } else {
       const { error } = await supabase
         .from("orders")
@@ -108,6 +115,7 @@ export function InspectionActions({
         setCancelOpen(false);
         return;
       }
+      logClientAction("dispatch", "cancel_dispatch", `${itemName ?? "품목"} 발주 취소 (주문신청으로 되돌리기)`);
     }
 
     router.push("/inspection");
@@ -151,6 +159,15 @@ export function InspectionActions({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="inspection-notes">비고</Label>
+              <Input
+                id="inspection-notes"
+                placeholder="비고 (선택)"
+                value={inspectionNotes}
+                onChange={(e) => setInspectionNotes(e.target.value)}
+              />
+            </div>
             {inspectError && (
               <p className="text-sm text-destructive">{inspectError}</p>
             )}
@@ -192,7 +209,7 @@ export function InspectionActions({
                   onClick={() => handleCancel("revert")}
                   disabled={isCanceling}
                 >
-                  요청중으로 되돌리기
+                  주문신청으로 되돌리기
                 </Button>
                 <Button
                   variant="destructive"

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { logClientAction } from "@/app/(main)/log-action";
 
 interface MorePageProps {
   profile: {
@@ -28,13 +29,14 @@ export function MorePage({ profile, isAdmin }: MorePageProps) {
   const supabase = createClient();
 
   const handleLogout = async () => {
+    logClientAction("auth", "logout", "로그아웃");
     await supabase.auth.signOut();
     router.replace("/login");
   };
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3">
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
         <h1 className="text-lg font-bold">더보기</h1>
       </header>
 
@@ -103,7 +105,7 @@ export function MorePage({ profile, isAdmin }: MorePageProps) {
                     <ChevronRight className="h-5 w-5 text-muted-foreground" />
                   </Link>
                   <Link
-                    href="/account/members"
+                    href="/members"
                     className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
                   >
                     <div className="flex items-center gap-3">

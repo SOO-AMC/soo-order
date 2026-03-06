@@ -67,23 +67,19 @@ async function executeFilteredQuery(
     query = query.eq("type", filters.type);
   }
 
-  // 상태
-  if (filters.status !== "all") {
-    query = query.eq("status", filters.status);
+  // 상태 (다중 선택)
+  if (filters.status.length > 0 && filters.status.length < 5) {
+    query = query.in("status", filters.status);
   }
 
-  // 긴급
-  if (filters.urgent === "urgent") {
-    query = query.eq("is_urgent", true);
-  } else if (filters.urgent === "normal") {
-    query = query.eq("is_urgent", false);
+  // 긴급 (다중 선택)
+  if (filters.urgent.length === 1) {
+    query = query.eq("is_urgent", filters.urgent[0] === "urgent");
   }
 
-  // 거래명세서
-  if (filters.invoice === "received") {
-    query = query.eq("invoice_received", true);
-  } else if (filters.invoice === "not_received") {
-    query = query.eq("invoice_received", false);
+  // 거래명세서 (다중 선택)
+  if (filters.invoice.length === 1) {
+    query = query.eq("invoice_received", filters.invoice[0] === "received");
   }
 
   // 사람 필터

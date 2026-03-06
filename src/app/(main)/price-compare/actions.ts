@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { VendorProductRow } from "@/lib/types/price-compare";
+import { logActivity } from "@/lib/utils/activity-log";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -13,12 +14,12 @@ async function requireAdmin() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, full_name")
     .eq("id", session.user.id)
     .single();
 
   if (profile?.role !== "admin") throw new Error("Forbidden");
-  return supabase;
+  return { supabase, userId: session.user.id, userName: profile.full_name ?? "알 수 없음" };
 }
 
 export type ActionState = {
@@ -29,7 +30,7 @@ export type ActionState = {
 // --- Vendors ---
 
 export async function createVendor(name: string): Promise<ActionState> {
-  const supabase = await requireAdmin();
+  const { supabase, userId, userName } = await requireAdmin();
 
   const trimmed = name.trim();
   if (!trimmed) return { error: "업체명을 입력해주세요." };
@@ -41,12 +42,13 @@ export async function createVendor(name: string): Promise<ActionState> {
     return { error: `업체 생성 실패: ${error.message}` };
   }
 
+  await logActivity({ userId, userName, category: "price", action: "create_vendor", description: `${trimmed} 업체 등록` });
   revalidatePath("/price-compare");
   return { success: true };
 }
 
-export async function deleteVendor(vendorId: string): Promise<ActionState> {
-  const supabase = await requireAdmin();
+export async function deleteVendor(vendorId: string, vendorName?: string): Promise<ActionState> {
+  const { supabase, userId, userName } = await requireAdmin();
 
   const { error } = await supabase
     .from("vendors")
@@ -55,6 +57,7 @@ export async function deleteVendor(vendorId: string): Promise<ActionState> {
 
   if (error) return { error: `업체 삭제 실패: ${error.message}` };
 
+  await logActivity({ userId, userName, category: "price", action: "delete_vendor", description: `${vendorName ?? vendorId} 업체 삭제` });
   revalidatePath("/price-compare");
   return { success: true };
 }
@@ -63,9 +66,10 @@ export async function deleteVendor(vendorId: string): Promise<ActionState> {
 
 export async function uploadVendorProducts(
   vendorId: string,
-  products: VendorProductRow[]
+  products: VendorProductRow[],
+  vendorName?: string
 ): Promise<ActionState> {
-  const supabase = await requireAdmin();
+  const { supabase, userId, userName } = await requireAdmin();
 
   if (products.length === 0) return { error: "업로드할 제품이 없습니다." };
 
@@ -117,6 +121,7 @@ export async function uploadVendorProducts(
   const insertError = results.find((r) => r.error)?.error;
   if (insertError) return { error: `제품 저장 실패: ${insertError.message}` };
 
+  await logActivity({ userId, userName, category: "price", action: "upload_vendor_products", description: `${vendorName ?? vendorId} 업체 제품 업로드 (${products.length}건)` });
   revalidatePath("/price-compare");
   return { success: true };
 }
@@ -127,9 +132,10 @@ export async function createUnifiedProduct(
   name: string,
   mg: string,
   tab: string,
+  quantity: string = "",
   notes: string = ""
 ): Promise<ActionState> {
-  const supabase = await requireAdmin();
+  const { supabase, userId, userName } = await requireAdmin();
 
   const trimmed = name.trim();
   if (!trimmed) return { error: "제품명을 입력해주세요." };
@@ -148,12 +154,14 @@ export async function createUnifiedProduct(
     name: trimmed,
     mg: mg.trim(),
     tab: tab.trim(),
+    quantity: quantity.trim(),
     notes: notes.trim(),
     sort_order: nextOrder,
   });
 
   if (error) return { error: `통합 제품 생성 실패: ${error.message}` };
 
+  await logActivity({ userId, userName, category: "price", action: "create_unified_product", description: `${trimmed} 통합제품 등록` });
   revalidatePath("/price-compare");
   return { success: true };
 }
@@ -163,23 +171,25 @@ export async function updateUnifiedProduct(
   name: string,
   mg: string,
   tab: string,
+  quantity: string = "",
   notes: string = ""
 ): Promise<ActionState> {
-  const supabase = await requireAdmin();
+  const { supabase, userId, userName } = await requireAdmin();
 
   const { error } = await supabase
     .from("unified_products")
-    .update({ name: name.trim(), mg: mg.trim(), tab: tab.trim(), notes: notes.trim() })
+    .update({ name: name.trim(), mg: mg.trim(), tab: tab.trim(), quantity: quantity.trim(), notes: notes.trim() })
     .eq("id", id);
 
   if (error) return { error: `수정 실패: ${error.message}` };
 
+  await logActivity({ userId, userName, category: "price", action: "update_unified_product", description: `${name.trim()} 통합제품 수정` });
   revalidatePath("/price-compare");
   return { success: true };
 }
 
-export async function deleteUnifiedProduct(id: string): Promise<ActionState> {
-  const supabase = await requireAdmin();
+export async function deleteUnifiedProduct(id: string, productName?: string): Promise<ActionState> {
+  const { supabase, userId, userName } = await requireAdmin();
 
   const { error } = await supabase
     .from("unified_products")
@@ -188,6 +198,7 @@ export async function deleteUnifiedProduct(id: string): Promise<ActionState> {
 
   if (error) return { error: `삭제 실패: ${error.message}` };
 
+  await logActivity({ userId, userName, category: "price", action: "delete_unified_product", description: `${productName ?? id} 통합제품 삭제` });
   revalidatePath("/price-compare");
   return { success: true };
 }
@@ -198,7 +209,7 @@ export async function mapProduct(
   vendorProductId: string,
   unifiedProductId: string
 ): Promise<ActionState> {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const { error } = await supabase
     .from("vendor_products")
@@ -214,7 +225,7 @@ export async function mapProduct(
 export async function unmapProduct(
   vendorProductId: string
 ): Promise<ActionState> {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const { error } = await supabase
     .from("vendor_products")

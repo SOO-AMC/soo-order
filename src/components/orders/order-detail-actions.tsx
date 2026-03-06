@@ -16,12 +16,14 @@ import {
 } from "@/components/ui/dialog";
 import { Pencil, Trash2 } from "lucide-react";
 import { deletePhotos } from "@/lib/utils/photo";
+import { logClientAction } from "@/app/(main)/log-action";
 
 interface OrderDetailActionsProps {
   orderId: string;
+  itemName?: string;
 }
 
-export function OrderDetailActions({ orderId }: OrderDetailActionsProps) {
+export function OrderDetailActions({ orderId, itemName }: OrderDetailActionsProps) {
   const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
@@ -53,6 +55,7 @@ export function OrderDetailActions({ orderId }: OrderDetailActionsProps) {
       await deletePhotos(supabase, order!.photo_urls).catch(() => {});
     }
 
+    logClientAction("order", "delete_order", `${itemName ?? "품목"} 주문 삭제`);
     router.push("/orders");
   };
 

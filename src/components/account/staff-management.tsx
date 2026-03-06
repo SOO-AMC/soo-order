@@ -30,7 +30,7 @@ import {
   resetStaffPassword,
   deleteStaff,
   type StaffActionState,
-} from "@/app/(main)/account/members/actions";
+} from "@/app/(main)/members/actions";
 
 interface Member {
   id: string;

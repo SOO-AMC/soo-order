@@ -47,7 +47,7 @@ export default async function InspectionDetailPage({
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-3">
+      <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/inspection">
             <ChevronLeft />
@@ -56,7 +56,7 @@ export default async function InspectionDetailPage({
         <h1 className="text-lg font-bold">검수 상세</h1>
       </header>
 
-      <div className="space-y-6 p-4">
+      <div className="p-4"><div className="space-y-6 rounded-2xl bg-card p-5 shadow-card">
         {order.is_urgent && (
           <div className="flex items-center gap-2">
             <Badge variant="destructive">긴급</Badge>
@@ -96,6 +96,18 @@ export default async function InspectionDetailPage({
               {formatDateTime(order.created_at)}
             </dd>
           </div>
+          {order.notes && (
+            <div>
+              <dt className="text-sm text-muted-foreground">요청 비고</dt>
+              <dd className="mt-0.5 font-medium">{order.notes}</dd>
+            </div>
+          )}
+          {order.order_notes && (
+            <div>
+              <dt className="text-sm text-muted-foreground">발주 비고</dt>
+              <dd className="mt-0.5 font-medium">{order.order_notes}</dd>
+            </div>
+          )}
         </dl>
 
         {order.photo_urls?.length > 0 && (
@@ -112,10 +124,11 @@ export default async function InspectionDetailPage({
 
         <InspectionActions
           orderId={order.id}
+          itemName={order.item_name}
           defaultQuantity={order.quantity}
           canCancel={canCancel}
         />
-      </div>
+      </div></div>
     </div>
   );
 }

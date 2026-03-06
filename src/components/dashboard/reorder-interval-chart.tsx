@@ -16,7 +16,7 @@ import type { ReorderIntervalData } from "@/lib/types/dashboard";
 const chartConfig = {
   avgDays: {
     label: "평균 주기(일)",
-    color: "#15BDF0",
+    color: "#7B3FC5",
   },
 } satisfies ChartConfig;
 
@@ -55,18 +55,19 @@ export function ReorderIntervalChart({ data }: Props) {
             id="reorder-interval"
             config={chartConfig}
             className="aspect-auto w-full"
-            style={{ height: `${chartData.length * 40 + 30}px` }}
+            style={{ height: `${Math.max(120, chartData.length * 28)}px` }}
           >
             <BarChart
               data={chartData}
               layout="vertical"
-              margin={{ top: 5, right: 20, bottom: 0, left: 0 }}
+              margin={{ top: 0, right: 20, bottom: 0, left: 0 }}
             >
               <XAxis
                 type="number"
                 tickLine={false}
                 axisLine={false}
-                fontSize={11}
+                fontSize={10}
+                allowDecimals={false}
                 unit="일"
               />
               <YAxis
@@ -74,10 +75,10 @@ export function ReorderIntervalChart({ data }: Props) {
                 dataKey="name"
                 tickLine={false}
                 axisLine={false}
-                width={160}
-                fontSize={11}
+                width={80}
+                fontSize={10}
                 tickFormatter={(v: string) =>
-                  v.length > 14 ? v.slice(0, 14) + "…" : v
+                  v.length > 6 ? v.slice(0, 6) + "…" : v
                 }
               />
               <ChartTooltip
@@ -91,7 +92,7 @@ export function ReorderIntervalChart({ data }: Props) {
                   />
                 }
               />
-              <Bar dataKey="avgDays" fill="#15BDF0" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="avgDays" fill="#7B3FC5" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ChartContainer>
         )}

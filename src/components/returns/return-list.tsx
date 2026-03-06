@@ -16,8 +16,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils/format";
-import { OrderStatusBadge } from "@/components/orders/order-status-badge";
+import { OrderStatusBadge, StatusLegend } from "@/components/orders/order-status-badge";
 import { Spinner } from "@/components/ui/spinner";
+import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 
 interface ReturnListProps {
@@ -125,6 +126,7 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
       return;
     }
 
+    logClientAction("return", "complete_return_bulk", `${selectedIds.size}건 일괄 반품 완료`);
     setSelectedIds(new Set());
     setIsProcessing(false);
     await fetchOrders();
@@ -157,13 +159,16 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 px-1 py-2 text-sm text-muted-foreground cursor-pointer">
-        <Checkbox
-          checked={allSelected}
-          onCheckedChange={toggleSelectAll}
-        />
-        전체 선택 ({sortedOrders.length}건)
-      </label>
+      <div className="flex items-center justify-between px-1 py-2">
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox
+            checked={allSelected}
+            onCheckedChange={toggleSelectAll}
+          />
+          전체 선택 ({sortedOrders.length}건)
+        </label>
+        <StatusLegend />
+      </div>
 
       {/* PC 테이블 뷰 */}
       <div className="hidden lg:block">
@@ -222,7 +227,7 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
         {sortedOrders.map((order) => (
           <div
             key={order.id}
-            className="flex items-center gap-3 rounded-lg border p-3 transition-colors"
+            className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-card transition-colors"
           >
             <Checkbox
               checked={selectedIds.has(order.id)}
@@ -234,9 +239,9 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
+                  <OrderStatusBadge status={order.status} />
                   {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
                   <span className="truncate font-medium">{order.item_name}</span>
-                  <OrderStatusBadge status={order.status} />
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
                   <span>

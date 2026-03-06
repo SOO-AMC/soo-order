@@ -49,20 +49,18 @@ export function SummaryCards({ data }: SummaryCardsProps) {
     <div className="grid grid-cols-3 gap-3">
       {cards.map((card) => (
         <Card key={card.label}>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">{card.label}</p>
-              {card.urgent > 0 && (
-                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                  긴급 {card.urgent}
-                </Badge>
-              )}
-            </div>
-            <div className="mt-1 flex items-baseline gap-2">
-              <span className={cn("text-2xl font-bold", card.color)}>{card.value}</span>
-              <span className="text-sm text-muted-foreground">건</span>
+          <CardContent className="py-3 px-3 sm:px-6 sm:py-4 text-center lg:text-left">
+            <p className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">{card.label}</p>
+            <div className="mt-1 flex items-baseline justify-center lg:justify-start gap-1 sm:gap-2">
+              <span className={cn("text-xl sm:text-2xl font-bold", card.color)}>{card.value}</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">건</span>
               <DiffBadge current={card.value} previous={card.yesterday} />
             </div>
+            {card.urgent > 0 && (
+              <Badge variant="destructive" className="mt-1.5 text-[10px] px-1.5 py-0">
+                긴급 {card.urgent}
+              </Badge>
+            )}
           </CardContent>
         </Card>
       ))}

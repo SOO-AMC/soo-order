@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Search, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -37,6 +38,7 @@ export function ComparisonTable({
   unifiedProducts,
 }: ComparisonTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // Build index: unified_product_id → VendorProduct[]
   const productsByUnified = useMemo(() => {
@@ -72,15 +74,30 @@ export function ComparisonTable({
     });
   }, [unifiedProducts, productsByUnified]);
 
+  const categoryCounts = useMemo(() => {
+    let 약품 = 0, 약국 = 0;
+    for (const r of rows) {
+      if (r.unified.notes === "약품") 약품++;
+      else if (r.unified.notes === "약국") 약국++;
+    }
+    return { 약품, 약국 };
+  }, [rows]);
+
   const filtered = useMemo(() => {
-    if (!searchQuery) return rows;
-    const q = searchQuery.toLowerCase();
-    return rows.filter(
-      (r) =>
-        r.unified.name.toLowerCase().includes(q) ||
-        r.unified.mg.toLowerCase().includes(q)
-    );
-  }, [rows, searchQuery]);
+    let result = rows;
+    if (categoryFilter !== "all") {
+      result = result.filter((r) => r.unified.notes === categoryFilter);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (r) =>
+          r.unified.name.toLowerCase().includes(q) ||
+          r.unified.mg.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [rows, searchQuery, categoryFilter]);
 
   const handleExcelDownload = async () => {
     const ExcelJS = await import("exceljs");
@@ -88,7 +105,7 @@ export function ComparisonTable({
     const sheet = workbook.addWorksheet("가격비교");
 
     // 헤더
-    const headers = ["제품명", "mg", "T", ...vendors.map((v) => v.name), "비고"];
+    const headers = ["구분", "제품명", "수량", ...vendors.map((v) => v.name)];
     const headerRow = sheet.addRow(headers);
     headerRow.eachCell((cell) => {
       cell.font = { bold: true };
@@ -105,15 +122,14 @@ export function ComparisonTable({
     // 데이터
     for (const row of rows) {
       const values: (string | number | null)[] = [
+        row.unified.notes || "",
         row.unified.name,
-        row.unified.mg,
-        row.unified.tab,
+        row.unified.quantity || null,
       ];
       for (const vendor of vendors) {
         const entry = row.prices.get(vendor.id);
         values.push(entry?.price ?? null);
       }
-      values.push(row.unified.notes || null);
       const dataRow = sheet.addRow(values);
 
       // 최저가 하이라이트
@@ -132,9 +148,16 @@ export function ComparisonTable({
       }
     }
 
-    // 컬럼 너비
-    sheet.columns.forEach((col, i) => {
-      col.width = i === 0 ? 25 : i <= 2 ? 12 : 15;
+    // 컬럼 너비 자동 조정
+    sheet.columns.forEach((col) => {
+      let maxLen = 0;
+      col.eachCell?.({ includeEmpty: true }, (cell) => {
+        const val = cell.value != null ? String(cell.value) : "";
+        let len = 0;
+        for (const ch of val) len += ch.charCodeAt(0) > 127 ? 2 : 1;
+        if (len > maxLen) maxLen = len;
+      });
+      col.width = Math.max(8, maxLen + 3);
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -159,14 +182,28 @@ export function ComparisonTable({
             placeholder="제품명 검색..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 bg-card"
           />
         </div>
-        <Button variant="outline" size="sm" onClick={handleExcelDownload}>
+        <Button variant="outline" size="sm" className="bg-card" onClick={handleExcelDownload}>
           <Download className="h-4 w-4 mr-1" />
           엑셀
         </Button>
       </div>
+
+      <Tabs value={categoryFilter} onValueChange={setCategoryFilter}>
+        <TabsList>
+          <TabsTrigger value="all">
+            전체 ({rows.length})
+          </TabsTrigger>
+          <TabsTrigger value="약품">
+            약품 ({categoryCounts.약품})
+          </TabsTrigger>
+          <TabsTrigger value="약국">
+            약국 ({categoryCounts.약국})
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {vendors.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">
@@ -183,14 +220,20 @@ export function ComparisonTable({
           {/* 모바일 카드 뷰 */}
           <div className="space-y-3 lg:hidden">
             {filtered.map((row) => (
-              <div key={row.unified.id} className="rounded-lg border p-3 space-y-2">
-                <div className="font-medium">
-                  {row.unified.name}
-                  {row.unified.mg && (
-                    <span className="text-muted-foreground text-sm ml-1">{row.unified.mg}</span>
+              <div key={row.unified.id} className="rounded-xl bg-card p-4 shadow-card space-y-2">
+                <div className="flex items-center gap-2">
+                  {categoryFilter === "all" && row.unified.notes && (
+                    <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                      row.unified.notes === "약품"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-emerald-100 text-emerald-700"
+                    }`}>
+                      {row.unified.notes}
+                    </span>
                   )}
-                  {row.unified.tab && (
-                    <span className="text-muted-foreground text-sm ml-1">{row.unified.tab}</span>
+                  <span className="font-medium">{row.unified.name}</span>
+                  {row.unified.quantity && (
+                    <span className="text-xs text-muted-foreground">{row.unified.quantity}</span>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-1">
@@ -217,11 +260,6 @@ export function ComparisonTable({
                     );
                   })}
                 </div>
-                {row.unified.notes && (
-                  <p className="text-xs text-muted-foreground">
-                    비고: {row.unified.notes}
-                  </p>
-                )}
               </div>
             ))}
           </div>
@@ -231,28 +269,39 @@ export function ComparisonTable({
             <Table>
               <TableHeader>
                 <TableRow>
+                  {categoryFilter === "all" && (
+                    <TableHead className="w-[60px]">구분</TableHead>
+                  )}
                   <TableHead className="w-[200px]">제품명</TableHead>
-                  <TableHead className="w-[80px]">mg</TableHead>
-                  <TableHead className="w-[80px]">T</TableHead>
+                  <TableHead className="w-[80px]">수량</TableHead>
                   {vendors.map((vendor) => (
                     <TableHead key={vendor.id} className="w-[120px] text-right">
                       {vendor.name}
                     </TableHead>
                   ))}
-                  <TableHead className="w-[150px]">비고</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((row) => (
                   <TableRow key={row.unified.id}>
+                    {categoryFilter === "all" && (
+                      <TableCell>
+                        {row.unified.notes && (
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                            row.unified.notes === "약품"
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-emerald-100 text-emerald-700"
+                          }`}>
+                            {row.unified.notes}
+                          </span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">
                       {row.unified.name}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {row.unified.mg}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {row.unified.tab}
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.unified.quantity || ""}
                     </TableCell>
                     {vendors.map((vendor) => {
                       const entry = row.prices.get(vendor.id);
@@ -274,9 +323,6 @@ export function ComparisonTable({
                         </TableCell>
                       );
                     })}
-                    <TableCell className="text-sm text-muted-foreground">
-                      {row.unified.notes || ""}
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

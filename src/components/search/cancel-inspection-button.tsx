@@ -14,12 +14,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { X } from "lucide-react";
+import { logClientAction } from "@/app/(main)/log-action";
 
 interface CancelInspectionButtonProps {
   orderId: string;
+  itemName?: string;
 }
 
-export function CancelInspectionButton({ orderId }: CancelInspectionButtonProps) {
+export function CancelInspectionButton({ orderId, itemName }: CancelInspectionButtonProps) {
   const [open, setOpen] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const router = useRouter();
@@ -45,6 +47,7 @@ export function CancelInspectionButton({ orderId }: CancelInspectionButtonProps)
       return;
     }
 
+    logClientAction("inspection", "cancel_inspection", `${itemName ?? "품목"} 검수 취소`);
     router.refresh();
     setOpen(false);
     setIsCanceling(false);
@@ -62,7 +65,7 @@ export function CancelInspectionButton({ orderId }: CancelInspectionButtonProps)
         <DialogHeader>
           <DialogTitle>검수 취소</DialogTitle>
           <DialogDescription>
-            검수를 취소하고 발주완료 상태로 되돌리시겠습니까?
+            검수를 취소하고 검수대기 상태로 되돌리시겠습니까?
             검수 정보(확인수량, 거래명세서, 검수자)가 초기화됩니다.
           </DialogDescription>
         </DialogHeader>

@@ -17,14 +17,18 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+import { logClientAction } from "@/app/(main)/log-action";
+
 interface ReturnRequestButtonProps {
   orderId: string;
+  itemName?: string;
   defaultQuantity: number;
   unit: string;
 }
 
 export function ReturnRequestButton({
   orderId,
+  itemName,
   defaultQuantity,
   unit,
 }: ReturnRequestButtonProps) {
@@ -56,6 +60,7 @@ export function ReturnRequestButton({
       return;
     }
 
+    logClientAction("return", "request_return", `${itemName ?? "품목"} 반품 신청`);
     setOpen(false);
     router.refresh();
   };
@@ -63,7 +68,7 @@ export function ReturnRequestButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="w-full">
+        <Button variant="outline" className="w-full border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800">
           <Undo2 className="h-4 w-4" />
           반품 신청
         </Button>
@@ -107,7 +112,7 @@ export function ReturnRequestButton({
             취소
           </Button>
           <Button
-            variant="destructive"
+            className="bg-orange-500 text-white hover:bg-orange-600"
             onClick={handleSubmit}
             disabled={isSubmitting || quantity < 1}
           >

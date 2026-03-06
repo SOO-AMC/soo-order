@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { InspectionList } from "@/components/inspection/inspection-list";
-import { StatusLegend } from "@/components/orders/order-status-badge";
 import type { OrderWithRequester } from "@/lib/types/order";
 
 export const metadata: Metadata = {
@@ -39,13 +38,8 @@ export default async function InspectionPage() {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 border-b bg-background px-4 py-3">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-bold">검수</h1>
-        </div>
-        <div className="mt-2 flex justify-end">
-          <StatusLegend />
-        </div>
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
+        <h1 className="text-lg font-bold">검수</h1>
       </header>
       <div className="p-4">
         <InspectionList

@@ -1,7 +1,15 @@
+export type StatusValue = "pending" | "ordered" | "inspecting" | "return_requested" | "return_completed";
+export type UrgentValue = "urgent" | "normal";
+export type InvoiceValue = "received" | "not_received";
+
+const ALL_STATUSES: StatusValue[] = ["pending", "ordered", "inspecting", "return_requested", "return_completed"];
+const ALL_URGENTS: UrgentValue[] = ["urgent", "normal"];
+const ALL_INVOICES: InvoiceValue[] = ["received", "not_received"];
+
 export interface SearchFilters {
   q: string;
   type: "all" | "order" | "return";
-  status: "all" | "pending" | "ordered" | "inspecting" | "return_requested" | "return_completed";
+  status: StatusValue[];
   requester: string;
   updater: string;
   inspector: string;
@@ -14,15 +22,15 @@ export interface SearchFilters {
   retRequester: string;
   retDateFrom: string;
   retDateTo: string;
-  invoice: "all" | "received" | "not_received";
-  urgent: "all" | "urgent" | "normal";
+  invoice: InvoiceValue[];
+  urgent: UrgentValue[];
   page: number;
 }
 
 export const defaultFilters: SearchFilters = {
   q: "",
   type: "all",
-  status: "all",
+  status: [...ALL_STATUSES],
   requester: "",
   updater: "",
   inspector: "",
@@ -35,8 +43,8 @@ export const defaultFilters: SearchFilters = {
   retRequester: "",
   retDateFrom: "",
   retDateTo: "",
-  invoice: "all",
-  urgent: "all",
+  invoice: [...ALL_INVOICES],
+  urgent: [...ALL_URGENTS],
   page: 1,
 };
 
@@ -49,10 +57,17 @@ export function parseSearchParams(
     return typeof v === "string" ? v : "";
   };
 
+  const parseArray = <T extends string>(key: string, allValues: T[]): T[] => {
+    const v = s(key);
+    if (!v) return [...allValues]; // empty = all selected
+    const values = v.split(",").filter((x) => allValues.includes(x as T)) as T[];
+    return values.length > 0 ? values : [...allValues];
+  };
+
   return {
     q: s("q"),
     type: (s("type") || "all") as SearchFilters["type"],
-    status: (s("status") || "all") as SearchFilters["status"],
+    status: parseArray("status", ALL_STATUSES),
     requester: s("requester"),
     updater: s("updater"),
     inspector: s("inspector"),
@@ -65,18 +80,21 @@ export function parseSearchParams(
     retRequester: s("retRequester"),
     retDateFrom: s("retDateFrom"),
     retDateTo: s("retDateTo"),
-    invoice: (s("invoice") || "all") as SearchFilters["invoice"],
-    urgent: (s("urgent") || "all") as SearchFilters["urgent"],
+    invoice: parseArray("invoice", ALL_INVOICES),
+    urgent: parseArray("urgent", ALL_URGENTS),
     page: Math.max(1, parseInt(s("page") || "1", 10) || 1),
   };
 }
+
+const arraysEqual = <T>(a: T[], b: T[]) =>
+  a.length === b.length && a.every((v) => b.includes(v));
 
 /** SearchFilters → URL search string (default 값은 생략) */
 export function filtersToSearchString(filters: SearchFilters): string {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
   if (filters.type !== "all") params.set("type", filters.type);
-  if (filters.status !== "all") params.set("status", filters.status);
+  if (!arraysEqual(filters.status, ALL_STATUSES)) params.set("status", filters.status.join(","));
   if (filters.requester) params.set("requester", filters.requester);
   if (filters.updater) params.set("updater", filters.updater);
   if (filters.inspector) params.set("inspector", filters.inspector);
@@ -89,8 +107,8 @@ export function filtersToSearchString(filters: SearchFilters): string {
   if (filters.retRequester) params.set("retRequester", filters.retRequester);
   if (filters.retDateFrom) params.set("retDateFrom", filters.retDateFrom);
   if (filters.retDateTo) params.set("retDateTo", filters.retDateTo);
-  if (filters.invoice !== "all") params.set("invoice", filters.invoice);
-  if (filters.urgent !== "all") params.set("urgent", filters.urgent);
+  if (!arraysEqual(filters.invoice, ALL_INVOICES)) params.set("invoice", filters.invoice.join(","));
+  if (!arraysEqual(filters.urgent, ALL_URGENTS)) params.set("urgent", filters.urgent.join(","));
   if (filters.page > 1) params.set("page", String(filters.page));
   const str = params.toString();
   return str ? `?${str}` : "";
@@ -112,7 +130,7 @@ export function kstDateToUtcRange(dateStr: string): { gte: string; lt: string } 
 export function countActiveFilters(filters: SearchFilters): number {
   let count = 0;
   if (filters.type !== "all") count++;
-  if (filters.status !== "all") count++;
+  if (!arraysEqual(filters.status, ALL_STATUSES)) count++;
   if (filters.requester) count++;
   if (filters.updater) count++;
   if (filters.inspector) count++;
@@ -121,7 +139,7 @@ export function countActiveFilters(filters: SearchFilters): number {
   if (filters.inspDateFrom || filters.inspDateTo) count++;
   if (filters.retRequester) count++;
   if (filters.retDateFrom || filters.retDateTo) count++;
-  if (filters.invoice !== "all") count++;
-  if (filters.urgent !== "all") count++;
+  if (!arraysEqual(filters.invoice, ALL_INVOICES)) count++;
+  if (!arraysEqual(filters.urgent, ALL_URGENTS)) count++;
   return count;
 }

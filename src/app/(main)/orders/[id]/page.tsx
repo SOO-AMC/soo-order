@@ -49,7 +49,7 @@ export default async function OrderDetailPage({
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-3">
+      <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/orders">
             <ChevronLeft />
@@ -58,7 +58,7 @@ export default async function OrderDetailPage({
         <h1 className="text-lg font-bold">주문 상세</h1>
       </header>
 
-      <div className="space-y-6 p-4">
+      <div className="p-4"><div className="space-y-6 rounded-2xl bg-card p-5 shadow-card">
         <div className="flex items-center gap-2">
           <OrderStatusBadge status={order.status as OrderStatus} />
           {order.is_urgent && <Badge variant="destructive">긴급</Badge>}
@@ -103,6 +103,12 @@ export default async function OrderDetailPage({
               {formatDateTime(order.created_at)}
             </dd>
           </div>
+          {order.notes && (
+            <div>
+              <dt className="text-sm text-muted-foreground">비고</dt>
+              <dd className="mt-0.5 font-medium">{order.notes}</dd>
+            </div>
+          )}
           {wasUpdated && (
             <>
               {order.updater && (
@@ -136,17 +142,17 @@ export default async function OrderDetailPage({
         {isAdmin && order.status === "pending" && (
           <>
             <Separator />
-            <OrderAdminAction orderId={order.id} />
+            <OrderAdminAction orderId={order.id} itemName={order.item_name} />
           </>
         )}
 
         {canEdit && (
           <>
             <Separator />
-            <OrderDetailActions orderId={order.id} />
+            <OrderDetailActions orderId={order.id} itemName={order.item_name} />
           </>
         )}
-      </div>
+      </div></div>
     </div>
   );
 }

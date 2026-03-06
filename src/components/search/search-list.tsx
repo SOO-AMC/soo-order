@@ -139,6 +139,9 @@ export function SearchList({
         { header: "거래명세서", key: "invoice", width: 12 },
         { header: "검수자", key: "inspector", width: 10 },
         { header: "검수일", key: "inspected_at", width: 12 },
+        { header: "비고(요청)", key: "notes", width: 16 },
+        { header: "비고(발주)", key: "order_notes", width: 16 },
+        { header: "비고(검수)", key: "inspection_notes", width: 16 },
         { header: "반품수량", key: "return_quantity", width: 10 },
         { header: "반품사유", key: "return_reason", width: 18 },
       ];
@@ -200,6 +203,9 @@ export function SearchList({
           inspected_at: order.inspected_at
             ? toKSTDateString(order.inspected_at)
             : "",
+          notes: order.notes ?? "",
+          order_notes: order.order_notes ?? "",
+          inspection_notes: order.inspection_notes ?? "",
           return_quantity: order.return_quantity ?? "",
           return_reason: order.return_reason ?? "",
         });
@@ -227,14 +233,14 @@ export function SearchList({
   }, [filters]);
 
   const header = (
-    <header className="sticky top-0 z-40 border-b bg-background px-4 py-3">
-      <div className="flex items-center justify-between">
+    <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm shadow-header">
+      <div className="flex items-center justify-between px-4 py-3">
         <h1 className="text-lg font-bold">조회</h1>
         {isAdmin && (
           <Button
             variant="outline"
             size="icon"
-            className="hidden md:flex"
+            className="hidden md:flex bg-card"
             onClick={handleExcelDownload}
             disabled={isExporting}
           >
@@ -246,8 +252,44 @@ export function SearchList({
           </Button>
         )}
       </div>
-      <div className="mt-2 flex justify-end">
-        <StatusLegend />
+      <div className="flex items-center gap-2 px-4 pb-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="품목명 / 업체명 검색"
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9 bg-card"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          className="relative shrink-0 bg-card"
+          onClick={() => setSheetOpen(true)}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          {activeFilterCount > 0 && (
+            <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 text-[10px] flex items-center justify-center">
+              {activeFilterCount}
+            </Badge>
+          )}
+        </Button>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="shrink-0 md:hidden bg-card"
+            onClick={handleExcelDownload}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+          </Button>
+        )}
       </div>
     </header>
   );
@@ -264,41 +306,19 @@ export function SearchList({
         />
       )}
       <div className="space-y-4 p-4">
-        {/* 검색창 + 필터 버튼 */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="품목명 / 업체명 검색"
-              value={searchInput}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Button
-            variant="outline"
-            size="icon"
-            className="relative shrink-0"
-            onClick={() => setSheetOpen(true)}
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            {activeFilterCount > 0 && (
-              <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 text-[10px] flex items-center justify-center">
-                {activeFilterCount}
-              </Badge>
-            )}
-          </Button>
-        </div>
 
-        {/* 결과 건수 */}
-        <p className="text-sm text-muted-foreground">
-          {totalCount}건
-          {totalPages > 1 && (
-            <span className="ml-1">
-              (페이지 {filters.page}/{totalPages})
-            </span>
-          )}
-        </p>
+        {/* 결과 건수 + 상태 범례 */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {totalCount}건
+            {totalPages > 1 && (
+              <span className="ml-1">
+                (페이지 {filters.page}/{totalPages})
+              </span>
+            )}
+          </p>
+          <StatusLegend />
+        </div>
 
         {/* 리스트 */}
         {initialData.length === 0 ? (
@@ -314,7 +334,6 @@ export function SearchList({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>유형</TableHead>
                     <TableHead>상태</TableHead>
                     <TableHead>품목명</TableHead>
                     <TableHead>수량</TableHead>
@@ -332,9 +351,6 @@ export function SearchList({
                       className="cursor-pointer"
                       onClick={() => router.push(`/search/${order.id}`)}
                     >
-                      <TableCell>
-                        <OrderTypeBadge type={order.type} />
-                      </TableCell>
                       <TableCell>
                         <OrderStatusBadge status={order.status} />
                       </TableCell>
@@ -383,11 +399,10 @@ export function SearchList({
                 <Link
                   key={order.id}
                   href={`/search/${order.id}`}
-                  className="flex items-center gap-3 rounded-lg border p-3 transition-colors active:opacity-70"
+                  className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-card transition-colors active:opacity-70"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <OrderTypeBadge type={order.type} />
                       <OrderStatusBadge status={order.status} />
                       {order.is_urgent && (
                         <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />
@@ -426,6 +441,7 @@ export function SearchList({
                 <Button
                   variant="outline"
                   size="sm"
+                  className="bg-white"
                   disabled={filters.page <= 1}
                   onClick={() => handlePageChange(filters.page - 1)}
                 >
@@ -438,6 +454,7 @@ export function SearchList({
                 <Button
                   variant="outline"
                   size="sm"
+                  className="bg-white"
                   disabled={filters.page >= totalPages}
                   onClick={() => handlePageChange(filters.page + 1)}
                 >
