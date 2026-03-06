@@ -95,8 +95,21 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
 ## 아키텍처 패턴
 
 ### Server vs Client 컴포넌트
-- **Server**: 데이터 fetch (리스트/상세), `supabase/server.ts`, `getSession()` + Promise.all
-- **Client**: 폼/인터랙션, `supabase/client.ts`, `initialData` props로 즉시 렌더
+- **Server 페이지**: 인증/권한 체크만 수행, 데이터 fetch 없음 (탭 전환 즉시 반응)
+- **Client 컴포넌트**: 마운트 시 Server Action으로 데이터 fetch → 스피너 → 렌더
+- **상세 페이지**: 여전히 Server에서 데이터 fetch (SSR)
+
+### Server Actions (`src/lib/actions/`)
+- `search-action.ts`: 조회 필터 검색 (클라이언트 상태 기반, `history.replaceState` URL 동기화)
+- `dashboard-action.ts`: 대시보드 RPC + Firebase 분석
+- `price-compare-action.ts`: 업체/제품/통합제품 조회
+- `members-action.ts`: 직원 목록 조회
+
+### 데이터 페칭 패턴
+- **리스트 페이지** (주문/반품/검수): 클라이언트 `fetchOrders()` + Supabase Realtime 구독
+- **조회 페이지**: Server Action `searchOrders()` + 클라이언트 상태 관리
+- **대시보드/가격비교/직원관리**: Server Action으로 마운트 시 fetch
+- **상세 페이지**: Server Component에서 SSR
 
 ### Supabase 클라이언트
 - `server.ts`: Server Component/Action용 (async, cookies)
@@ -179,11 +192,14 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 ### 유틸
 - `src/lib/types/order.ts`: Order, OrderWithRequester, ORDER_STATUS_LABEL, ORDER_TYPE_LABEL
 - `src/lib/types/price-compare.ts`: Vendor, VendorProduct, UnifiedProduct
-- `src/lib/utils/search-params.ts`: SearchFilters (다중선택 배열), URL 직렬화
+- `src/lib/types/dashboard.ts`: DashboardData, FirebaseItem 등
+- `src/lib/utils/search-params.ts`: SearchFilters (다중선택 배열), URL 직렬화, parseSearchParams
 - `src/lib/utils/format.ts`: formatDate, formatDateTime, toKSTDateString
 - `src/lib/utils/auth.ts`: nameToEmail(), validatePassword()
 - `src/lib/utils/activity-log.ts`: logActivity() (서버 전용, admin client)
+- `src/lib/utils/dashboard.ts`: transformRpcResponse()
 - `src/lib/utils.ts`: cn() (clsx + tailwind-merge)
+- `src/lib/queries/search-orders.ts`: fetchSearchOrders(), fetchAllSearchOrders()
 
 ### UI 컴포넌트 (shadcn/ui)
 badge, button, card, checkbox, chart, command, dialog, input, label, popover, select, separator, sheet, table, tabs
