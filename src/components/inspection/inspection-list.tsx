@@ -32,7 +32,6 @@ import type { OrderWithRequester } from "@/lib/types/order";
 interface InspectionListProps {
   isAdmin: boolean;
   currentUserId: string;
-  initialData?: OrderWithRequester[];
 }
 
 interface InspectionData {
@@ -41,9 +40,9 @@ interface InspectionData {
   inspection_notes: string;
 }
 
-export function InspectionList({ isAdmin, currentUserId, initialData }: InspectionListProps) {
-  const [orders, setOrders] = useState<OrderWithRequester[]>(initialData ?? []);
-  const [isLoading, setIsLoading] = useState(!initialData || initialData.length === 0);
+export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) {
+  const [orders, setOrders] = useState<OrderWithRequester[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [inspectionData, setInspectionData] = useState<

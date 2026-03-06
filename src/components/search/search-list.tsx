@@ -44,13 +44,11 @@ import type ExcelJS from "exceljs";
 
 interface SearchListProps {
   isAdmin?: boolean;
-  currentUserId: string;
   personNames: string[];
 }
 
 export function SearchList({
   isAdmin = false,
-  currentUserId,
   personNames,
 }: SearchListProps) {
   const router = useRouter();
@@ -59,18 +57,13 @@ export function SearchList({
   const [showExportOverlay, setShowExportOverlay] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // URL에서 초기 필터 파싱
-  const [filters, setFilters] = useState<SearchFilters>(() => {
-    if (typeof window === "undefined") return defaultFilters;
-    const params = new URLSearchParams(window.location.search);
-    const obj: Record<string, string> = {};
-    params.forEach((v, k) => { obj[k] = v; });
-    return parseSearchParams(obj);
-  });
-  const [searchInput, setSearchInput] = useState(filters.q);
+  const [filters, setFilters] = useState<SearchFilters>(defaultFilters);
+  const [searchInput, setSearchInput] = useState("");
   const [orders, setOrders] = useState<OrderWithRequester[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
   // 데이터 fetch
   const fetchData = useCallback(async (f: SearchFilters) => {
@@ -95,9 +88,15 @@ export function SearchList({
     [fetchData]
   );
 
-  // 초기 로드
+  // 초기 로드 — URL에서 필터 파싱 후 fetch
   useEffect(() => {
-    fetchData(filters);
+    const params = new URLSearchParams(window.location.search);
+    const obj: Record<string, string> = {};
+    params.forEach((v, k) => { obj[k] = v; });
+    const initialFilters = parseSearchParams(obj);
+    setFilters(initialFilters);
+    setSearchInput(initialFilters.q);
+    fetchData(initialFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -107,10 +106,10 @@ export function SearchList({
       setSearchInput(value);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        applyFilters({ ...filters, q: value, page: 1 });
+        applyFilters({ ...filtersRef.current, q: value, page: 1 });
       }, 400);
     },
-    [filters, applyFilters]
+    [applyFilters]
   );
 
   // 필터 적용

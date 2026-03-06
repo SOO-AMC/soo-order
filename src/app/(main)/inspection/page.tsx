@@ -20,7 +20,6 @@ export default async function InspectionPage() {
         <InspectionList
           isAdmin={isAdmin}
           currentUserId={userId}
-          initialData={[]}
         />
       </div>
     </div>

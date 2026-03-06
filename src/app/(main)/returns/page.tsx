@@ -20,7 +20,6 @@ export default async function ReturnsPage() {
         <ReturnList
           isAdmin={isAdmin}
           currentUserId={userId}
-          initialData={[]}
         />
       </div>
     </div>

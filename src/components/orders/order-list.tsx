@@ -35,12 +35,11 @@ import type { OrderWithRequester } from "@/lib/types/order";
 interface OrderListProps {
   isAdmin?: boolean;
   currentUserId?: string;
-  initialData?: OrderWithRequester[];
 }
 
-export function OrderList({ isAdmin = false, currentUserId, initialData }: OrderListProps) {
-  const [orders, setOrders] = useState<OrderWithRequester[]>(initialData ?? []);
-  const [isLoading, setIsLoading] = useState(!initialData || initialData.length === 0);
+export function OrderList({ isAdmin = false, currentUserId }: OrderListProps) {
+  const [orders, setOrders] = useState<OrderWithRequester[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isOrdering, setIsOrdering] = useState(false);

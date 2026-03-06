@@ -28,7 +28,6 @@ export default async function OrdersPage() {
         <OrderList
           isAdmin={isAdmin}
           currentUserId={userId}
-          initialData={[]}
         />
       </div>
     </div>

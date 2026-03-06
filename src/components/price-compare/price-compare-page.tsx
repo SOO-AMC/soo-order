@@ -24,9 +24,12 @@ interface PriceCompareData {
 
 export function PriceComparePage() {
   const [data, setData] = useState<PriceCompareData | null>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchPriceCompareData().then(setData);
+    fetchPriceCompareData()
+      .then(setData)
+      .catch((e) => setError(e.message));
   }, []);
 
   return (
@@ -40,7 +43,12 @@ export function PriceComparePage() {
         <h1 className="text-lg font-bold">가격 비교</h1>
       </header>
 
-      {!data ? (
+      {error ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <p className="text-destructive">데이터를 불러올 수 없습니다.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+        </div>
+      ) : !data ? (
         <div className="flex items-center justify-center py-16">
           <Spinner text="불러오는 중..." />
         </div>

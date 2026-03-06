@@ -24,12 +24,11 @@ import type { OrderWithRequester } from "@/lib/types/order";
 interface ReturnListProps {
   isAdmin?: boolean;
   currentUserId: string;
-  initialData?: OrderWithRequester[];
 }
 
-export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
-  const [orders, setOrders] = useState<OrderWithRequester[]>(initialData ?? []);
-  const [isLoading, setIsLoading] = useState(!initialData || initialData.length === 0);
+export function ReturnList({ currentUserId }: ReturnListProps) {
+  const [orders, setOrders] = useState<OrderWithRequester[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);

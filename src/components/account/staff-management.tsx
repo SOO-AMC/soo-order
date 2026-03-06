@@ -34,20 +34,13 @@ import {
 } from "@/app/(main)/members/actions";
 import { fetchMembers, type MemberData } from "@/lib/actions/members-action";
 
-interface Member {
-  id: string;
-  full_name: string;
-  role: string;
-  created_at: string;
-}
-
 const ROLE_LABEL: Record<string, string> = {
   admin: "관리자",
   user: "일반",
 };
 
 export function StaffManagement() {
-  const [members, setMembers] = useState<Member[]>([]);
+  const [members, setMembers] = useState<MemberData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -55,12 +48,12 @@ export function StaffManagement() {
       .then((data) => setMembers(data))
       .finally(() => setIsLoading(false));
   }, []);
-  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [selectedMember, setSelectedMember] = useState<MemberData | null>(null);
   const [dialogType, setDialogType] = useState<
     "create" | "edit" | "resetPassword" | "delete" | "actions" | null
   >(null);
 
-  const openDialog = (type: typeof dialogType, member?: Member) => {
+  const openDialog = (type: typeof dialogType, member?: MemberData) => {
     if (member) setSelectedMember(member);
     setDialogType(type);
   };
@@ -286,7 +279,7 @@ function EditStaffDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  member: Member;
+  member: MemberData;
 }) {
   const [state, formAction, isPending] = useActionState<
     StaffActionState,
@@ -355,7 +348,7 @@ function ResetPasswordDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  member: Member;
+  member: MemberData;
 }) {
   const [state, formAction, isPending] = useActionState<
     StaffActionState,
@@ -413,7 +406,7 @@ function DeleteStaffDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  member: Member;
+  member: MemberData;
 }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
