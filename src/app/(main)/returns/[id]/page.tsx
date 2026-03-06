@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getSessionProfile } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -19,14 +19,10 @@ export default async function ReturnDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const { userId } = await getSessionProfile();
+  if (!userId) redirect("/login");
+
   const supabase = await createClient();
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) redirect("/login");
-
   const { data: order } = await supabase
     .from("orders")
     .select(

@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getSessionProfile } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -21,28 +21,17 @@ export default async function OrderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const { userId, isAdmin } = await getSessionProfile();
+
   const supabase = await createClient();
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  const userId = session?.user.id;
-
-  const [{ data: order }, { data: profile }] = await Promise.all([
-    supabase
-      .from("orders")
-      .select("*, requester:profiles!requester_id(full_name), updater:profiles!updated_by(full_name)")
-      .eq("id", id)
-      .single(),
-    userId
-      ? supabase.from("profiles").select("role").eq("id", userId).single()
-      : Promise.resolve({ data: null }),
-  ]);
+  const { data: order } = await supabase
+    .from("orders")
+    .select("*, requester:profiles!requester_id(full_name), updater:profiles!updated_by(full_name)")
+    .eq("id", id)
+    .single();
 
   if (!order) notFound();
 
-  const isAdmin = profile?.role === "admin";
   const canEdit = isAdmin || order.requester_id === userId;
 
   const wasUpdated = order.updated_at !== order.created_at;

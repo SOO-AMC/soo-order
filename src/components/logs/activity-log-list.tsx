@@ -20,12 +20,10 @@ import { formatDateTime } from "@/lib/utils/format";
 
 interface ActivityLog {
   id: string;
-  user_id: string | null;
   user_name: string;
   category: string;
   action: string;
   description: string;
-  metadata: Record<string, unknown>;
   created_at: string;
 }
 

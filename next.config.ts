@@ -7,6 +7,11 @@ const withSerwist = withSerwistInit({
 });
 
 const nextConfig = {
+  experimental: {
+    staleTimes: {
+      dynamic: 60, // 동적 페이지 60초간 캐시 유지
+    },
+  },
   async headers() {
     return [
       {

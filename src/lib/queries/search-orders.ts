@@ -42,14 +42,17 @@ async function executeFilteredQuery(
   filters: SearchFilters,
   range?: { from: number; to: number }
 ): Promise<{ data: OrderWithRequester[]; count: number | null; error: unknown }> {
-  // 사람 이름 → ID 변환
+  // 사람 이름 → ID 변환 (이름 필터가 있을 때만 쿼리 실행)
   const nameQueries = [
     { name: filters.requester, key: "requester_id" },
     { name: filters.updater, key: "updated_by" },
     { name: filters.inspector, key: "inspected_by" },
     { name: filters.retRequester, key: "return_requested_by" },
   ];
-  const idMap = await resolveNameToIds(supabase, nameQueries);
+  const hasNameFilter = nameQueries.some((n) => n.name);
+  const idMap = hasNameFilter
+    ? await resolveNameToIds(supabase, nameQueries)
+    : {};
 
   let query = supabase
     .from("orders")

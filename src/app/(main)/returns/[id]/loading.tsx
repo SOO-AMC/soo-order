@@ -2,16 +2,16 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function InspectionDetailLoading() {
+export default function ReturnDetailLoading() {
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/inspection">
+          <Link href="/returns">
             <ChevronLeft />
           </Link>
         </Button>
-        <h1 className="text-lg font-bold">검수 상세</h1>
+        <h1 className="text-lg font-bold">반품 상세</h1>
       </header>
       <div className="p-4">
         <div className="space-y-6 rounded-2xl bg-card p-5 shadow-card animate-pulse">

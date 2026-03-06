@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -25,3 +26,26 @@ export async function createClient() {
     }
   );
 }
+
+/** 한 요청 내에서 세션+프로필을 캐시하여 중복 쿼리 방지 */
+export const getSessionProfile = cache(async () => {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) return { session: null, userId: null, isAdmin: false, userName: null };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, full_name")
+    .eq("id", session.user.id)
+    .single();
+
+  return {
+    session,
+    userId: session.user.id,
+    isAdmin: profile?.role === "admin",
+    userName: profile?.full_name ?? null,
+  };
+});

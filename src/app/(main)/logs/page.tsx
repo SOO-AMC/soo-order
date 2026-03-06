@@ -1,28 +1,17 @@
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getSessionProfile } from "@/lib/supabase/server";
 import { ActivityLogList } from "@/components/logs/activity-log-list";
 
 export default async function LogsPage() {
+  const { isAdmin } = await getSessionProfile();
+  if (!isAdmin) redirect("/orders");
+
   const supabase = await createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", session.user.id)
-    .single();
-
-  if (profile?.role !== "admin") redirect("/orders");
-
   const { data: logs } = await supabase
     .from("activity_logs")
-    .select("*")
+    .select("id, user_name, category, action, description, created_at")
     .order("created_at", { ascending: false })
     .limit(50);
 
