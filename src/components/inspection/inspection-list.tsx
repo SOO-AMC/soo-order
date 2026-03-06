@@ -43,7 +43,7 @@ interface InspectionData {
 
 export function InspectionList({ isAdmin, currentUserId, initialData }: InspectionListProps) {
   const [orders, setOrders] = useState<OrderWithRequester[]>(initialData ?? []);
-  const [isLoading, setIsLoading] = useState(!initialData);
+  const [isLoading, setIsLoading] = useState(!initialData || initialData.length === 0);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [inspectionData, setInspectionData] = useState<
@@ -74,9 +74,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
   const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!initialData) {
-      fetchOrders();
-    }
+    fetchOrders();
 
     const channel = supabase
       .channel("inspection-list")
@@ -95,7 +93,7 @@ export function InspectionList({ isAdmin, currentUserId, initialData }: Inspecti
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchOrders, initialData]);
+  }, [fetchOrders]);
 
   const sortedOrders = useMemo(
     () => [...orders].sort((a, b) => {

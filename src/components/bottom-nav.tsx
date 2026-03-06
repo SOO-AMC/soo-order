@@ -15,7 +15,7 @@ const tabs = [
 ];
 
 // 탭바를 표시할 루트 경로들
-const TAB_ROUTES = ["/orders", "/returns", "/inspection", "/search", "/more", "/account", "/price-compare", "/dashboard"];
+const TAB_ROUTES = ["/orders", "/returns", "/inspection", "/search", "/more", "/account", "/price-compare", "/dashboard", "/members", "/logs"];
 
 export function useShowBottomNav() {
   const pathname = usePathname();

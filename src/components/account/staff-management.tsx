@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState } from "react";
+import { useState, useEffect, useActionState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Plus, ChevronRight, KeyRound, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,7 @@ import {
   deleteStaff,
   type StaffActionState,
 } from "@/app/(main)/members/actions";
+import { fetchMembers, type MemberData } from "@/lib/actions/members-action";
 
 interface Member {
   id: string;
@@ -39,16 +41,20 @@ interface Member {
   created_at: string;
 }
 
-interface StaffManagementProps {
-  members: Member[];
-}
-
 const ROLE_LABEL: Record<string, string> = {
   admin: "관리자",
   user: "일반",
 };
 
-export function StaffManagement({ members }: StaffManagementProps) {
+export function StaffManagement() {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchMembers()
+      .then((data) => setMembers(data))
+      .finally(() => setIsLoading(false));
+  }, []);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [dialogType, setDialogType] = useState<
     "create" | "edit" | "resetPassword" | "delete" | "actions" | null
@@ -82,7 +88,11 @@ export function StaffManagement({ members }: StaffManagementProps) {
 
       <div className="p-4 space-y-4">
 
-      {members.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Spinner text="불러오는 중..." />
+        </div>
+      ) : members.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">
           등록된 직원이 없습니다.
         </p>

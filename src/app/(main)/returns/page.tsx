@@ -1,42 +1,15 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionProfile } from "@/lib/supabase/server";
 import { ReturnList } from "@/components/returns/return-list";
-import type { OrderWithRequester } from "@/lib/types/order";
 
 export const metadata: Metadata = {
   title: "반품",
 };
 
 export default async function ReturnsPage() {
-  const supabase = await createClient();
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    redirect("/login");
-  }
-
-  const userId = session.user.id;
-
-  const [{ data: profile }, { data: orders }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single(),
-    supabase
-      .from("orders")
-      .select(
-        "*, requester:profiles!requester_id(full_name), return_requester:profiles!return_requested_by(full_name)"
-      )
-      .eq("status", "return_requested")
-      .order("return_requested_at", { ascending: false }),
-  ]);
-
-  const isAdmin = profile?.role === "admin";
+  const { userId, isAdmin } = await getSessionProfile();
+  if (!userId) redirect("/login");
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
@@ -47,7 +20,7 @@ export default async function ReturnsPage() {
         <ReturnList
           isAdmin={isAdmin}
           currentUserId={userId}
-          initialData={(orders as OrderWithRequester[]) ?? []}
+          initialData={[]}
         />
       </div>
     </div>

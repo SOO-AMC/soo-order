@@ -40,7 +40,7 @@ interface OrderListProps {
 
 export function OrderList({ isAdmin = false, currentUserId, initialData }: OrderListProps) {
   const [orders, setOrders] = useState<OrderWithRequester[]>(initialData ?? []);
-  const [isLoading, setIsLoading] = useState(!initialData);
+  const [isLoading, setIsLoading] = useState(!initialData || initialData.length === 0);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isOrdering, setIsOrdering] = useState(false);
@@ -75,9 +75,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
   const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!initialData) {
-      fetchOrders();
-    }
+    fetchOrders();
 
     const channel = supabase
       .channel("order-list")
@@ -96,7 +94,7 @@ export function OrderList({ isAdmin = false, currentUserId, initialData }: Order
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchOrders, initialData]);
+  }, [fetchOrders]);
 
   const sortedOrders = useMemo(
     () => [...orders].sort((a, b) => {

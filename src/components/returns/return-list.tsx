@@ -29,7 +29,7 @@ interface ReturnListProps {
 
 export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
   const [orders, setOrders] = useState<OrderWithRequester[]>(initialData ?? []);
-  const [isLoading, setIsLoading] = useState(!initialData);
+  const [isLoading, setIsLoading] = useState(!initialData || initialData.length === 0);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -59,9 +59,7 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
   const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!initialData) {
-      fetchOrders();
-    }
+    fetchOrders();
 
     const channel = supabase
       .channel("return-list")
@@ -80,7 +78,7 @@ export function ReturnList({ currentUserId, initialData }: ReturnListProps) {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchOrders, initialData]);
+  }, [fetchOrders]);
 
   const sortedOrders = [...orders].sort((a, b) => {
     if (a.is_urgent !== b.is_urgent) return a.is_urgent ? -1 : 1;

@@ -24,10 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge, StatusLegend } from "@/components/orders/order-status-badge";
 import { formatDate, toKSTDateString } from "@/lib/utils/format";
 import { SearchFilterSheet } from "@/components/search/search-filter-sheet";
+import { Spinner } from "@/components/ui/spinner";
 import type { OrderWithRequester } from "@/lib/types/order";
 import { ORDER_TYPE_LABEL, ORDER_STATUS_LABEL } from "@/lib/types/order";
 import {
@@ -35,47 +35,71 @@ import {
   defaultFilters,
   filtersToSearchString,
   countActiveFilters,
+  parseSearchParams,
 } from "@/lib/utils/search-params";
 import { PAGE_SIZE } from "@/lib/queries/search-orders";
+import { searchOrders } from "@/lib/actions/search-action";
 import { exportFilteredOrders } from "@/lib/actions/export-orders";
 import type ExcelJS from "exceljs";
 
 interface SearchListProps {
   isAdmin?: boolean;
   currentUserId: string;
-  initialData: OrderWithRequester[];
-  totalCount: number;
-  filters: SearchFilters;
   personNames: string[];
 }
 
 export function SearchList({
   isAdmin = false,
   currentUserId,
-  initialData,
-  totalCount,
-  filters,
   personNames,
 }: SearchListProps) {
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [searchInput, setSearchInput] = useState(filters.q);
   const [isExporting, setIsExporting] = useState(false);
   const [showExportOverlay, setShowExportOverlay] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // 검색어 변경 시 searchInput을 필터와 동기화
-  useEffect(() => {
-    setSearchInput(filters.q);
-  }, [filters.q]);
+  // URL에서 초기 필터 파싱
+  const [filters, setFilters] = useState<SearchFilters>(() => {
+    if (typeof window === "undefined") return defaultFilters;
+    const params = new URLSearchParams(window.location.search);
+    const obj: Record<string, string> = {};
+    params.forEach((v, k) => { obj[k] = v; });
+    return parseSearchParams(obj);
+  });
+  const [searchInput, setSearchInput] = useState(filters.q);
+  const [orders, setOrders] = useState<OrderWithRequester[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const navigate = useCallback(
+  // 데이터 fetch
+  const fetchData = useCallback(async (f: SearchFilters) => {
+    setIsLoading(true);
+    try {
+      const result = await searchOrders(f);
+      setOrders(result.orders);
+      setTotalCount(result.totalCount);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // 필터 변경 → fetch + URL 동기화
+  const applyFilters = useCallback(
     (newFilters: SearchFilters) => {
+      setFilters(newFilters);
       const url = `/search${filtersToSearchString(newFilters)}`;
-      router.push(url);
+      window.history.replaceState(null, "", url);
+      fetchData(newFilters);
     },
-    [router]
+    [fetchData]
   );
+
+  // 초기 로드
+  useEffect(() => {
+    fetchData(filters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 검색어 디바운스
   const handleSearchChange = useCallback(
@@ -83,26 +107,27 @@ export function SearchList({
       setSearchInput(value);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        navigate({ ...filters, q: value, page: 1 });
+        applyFilters({ ...filters, q: value, page: 1 });
       }, 400);
     },
-    [filters, navigate]
+    [filters, applyFilters]
   );
 
   // 필터 적용
   const handleFilterApply = useCallback(
     (newFilters: SearchFilters) => {
-      navigate({ ...newFilters, page: 1 });
+      setSearchInput(newFilters.q);
+      applyFilters({ ...newFilters, page: 1 });
     },
-    [navigate]
+    [applyFilters]
   );
 
   // 페이지 변경
   const handlePageChange = useCallback(
     (page: number) => {
-      navigate({ ...filters, page });
+      applyFilters({ ...filters, page });
     },
-    [filters, navigate]
+    [filters, applyFilters]
   );
 
   const activeFilterCount = countActiveFilters(filters);
@@ -320,8 +345,12 @@ export function SearchList({
           <StatusLegend />
         </div>
 
-        {/* 리스트 */}
-        {initialData.length === 0 ? (
+        {/* 로딩 */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Spinner text="불러오는 중..." />
+          </div>
+        ) : orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-muted-foreground">
               조건에 맞는 항목이 없습니다.
@@ -345,7 +374,7 @@ export function SearchList({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {initialData.map((order) => (
+                  {orders.map((order) => (
                     <TableRow
                       key={order.id}
                       className="cursor-pointer"
@@ -395,7 +424,7 @@ export function SearchList({
 
             {/* 모바일/태블릿 카드 뷰 */}
             <div className="lg:hidden space-y-2">
-              {initialData.map((order) => (
+              {orders.map((order) => (
                 <Link
                   key={order.id}
                   href={`/search/${order.id}`}
