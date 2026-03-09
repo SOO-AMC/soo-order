@@ -29,10 +29,6 @@ export function getUploadJobs(): UploadJob[] {
   return snapshot;
 }
 
-export function getActiveUploadCount(): number {
-  return jobs.size;
-}
-
 /**
  * Enqueue background photo uploads for a new order.
  * Resolves immediately — uploads run in background.

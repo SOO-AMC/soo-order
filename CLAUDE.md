@@ -76,14 +76,15 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
 
 ## 라우트 구조
 ```
-/ → /orders 리다이렉트
+/ → /dashboard 리다이렉트
 (auth)/login          # 로그인 (모바일: 풀스크린 파랑+흰시트, PC: 좌측 YouTube영상+우측 폼)
 (main)/               # AuthGuard + BottomNav + AppSidebar
   orders/             # 주문 리스트 (type=order)
     new/ | [id]/ | [id]/edit/
   returns/            # 반품 리스트 + [id]/ 상세
-  inspection/         # 검수 대기 + [id]/ 상세
+  inspection/         # 검수 대기 + [id]/ 상세 + [id]/edit/
   search/             # 조회 (검색/필터/엑셀) + [id]/ 상세
+  out-of-stock/       # 품절 관리 (admin, 품절 처리/복구) + [id]/ 상세
   dashboard/          # 대시보드 (admin, 차트)
   price-compare/      # 가격 비교 (admin, 3탭: 비교표/업체관리/제품매핑)
   members/            # 직원 관리 (admin)
@@ -107,6 +108,7 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
 - `dashboard-action.ts`: 대시보드 RPC + Firebase 분석
 - `price-compare-action.ts`: 업체/제품/통합제품 조회
 - `members-action.ts`: 직원 목록 조회
+- `my-orders-action.ts`: 내 주문 현황 조회
 
 ### 데이터 페칭 패턴
 - **리스트 페이지** (주문/반품/검수): 클라이언트 `fetchOrders()` + Supabase Realtime 구독
@@ -179,11 +181,21 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 
 ### 검수/반품
 - `inspection-list.tsx`: 체크박스 일괄 검수
-- `inspection-actions.tsx`: 개별 검수 완료 + 주문 취소
+- `inspection-actions.tsx`: 개별 검수 완료 + 주문 취소 + 검수 수정
 - `return-list.tsx`: 체크박스 일괄 반품완료
 - `return-complete-button.tsx`: 개별 반품 완료
 - `return-request-button.tsx`: 반품 신청 Dialog
 - `cancel-inspection-button.tsx`: 검수 취소
+
+### 품절 관리
+- `out-of-stock-list.tsx`: 품절 목록 (모바일 카드/PC 테이블, Realtime 구독)
+- `out-of-stock-actions.tsx`: 품절 처리/복구 액션
+
+### 내 주문
+- `my-orders-page.tsx`: 내 주문 현황 페이지
+- `active-order-list.tsx`: 진행 중인 주문 리스트
+- `recent-completed.tsx`: 최근 완료된 주문
+- `status-summary.tsx`: 상태별 요약
 
 ### 혈액 대장
 - `blood-list-page.tsx`: 수령/출고 2탭 (forceMount)
@@ -205,6 +217,9 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 ### 활동 로그
 - `activity-log-list.tsx`: 카테고리 탭 + 검색 + 날짜 필터 + 더보기 (cursor 기반)
 
+### 공용
+- `back-button.tsx`: 뒤로가기 버튼 (router.back)
+
 ### 유틸
 - `src/hooks/use-auth.ts`: AuthProvider, useAuth(), useIsAdmin() — Layout에서 제공하는 auth context
 - `src/lib/types/order.ts`: Order, OrderWithRequester, ORDER_STATUS_LABEL, ORDER_TYPE_LABEL
@@ -220,7 +235,7 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 - `src/lib/queries/search-orders.ts`: fetchSearchOrders(), fetchAllSearchOrders()
 
 ### UI 컴포넌트 (shadcn/ui)
-badge, button, card, checkbox, chart, command, dialog, input, label, popover, select, separator, sheet, table, tabs
+badge, button, card, checkbox, chart, dialog, input, label, select, separator, sheet, spinner, table, tabs
 
 ### tabs 컴포넌트 특이사항
 - 커스텀 슬라이딩 인디케이터 (MutationObserver + rAF throttled resize)
@@ -230,6 +245,9 @@ badge, button, card, checkbox, chart, command, dialog, input, label, popover, se
 - `scripts/import-price-excel.ts`: 단가비교 엑셀 → Supabase 마이그레이션 (`pnpm tsx scripts/import-price-excel.ts`)
 - `scripts/migrate-activity-logs.sql`: activity_logs 테이블 생성 SQL
 - `scripts/migrate-price-compare.sql`: 가격비교 테이블 생성 SQL
+- `scripts/migrate-blood-records.sql`: blood_records 테이블 생성 SQL
+- `scripts/activity-logs-auto-cleanup.sql`: activity_logs 자동 정리 SQL
+- `scripts/update-remarks.ts`: 비고 데이터 업데이트 스크립트
 
 ## Firestore → Supabase 동기화
 - Cloud Functions 2nd Gen (`functions/src/index.ts`)

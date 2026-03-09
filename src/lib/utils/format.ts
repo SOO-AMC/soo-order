@@ -39,14 +39,6 @@ export function formatHours(hours: number): string {
   return `${days}일 ${remaining.toFixed(0)}시간`;
 }
 
-/** ISO 문자열 → KST 기준 "YYYY-MM" (월별 집계용) */
-export function toKSTYearMonth(isoString: string): string {
-  const d = new Date(isoString);
-  const year = d.toLocaleDateString("en-CA", { timeZone: TZ, year: "numeric" });
-  const month = d.toLocaleDateString("en-CA", { timeZone: TZ, month: "2-digit" });
-  return `${year}-${month}`;
-}
-
 /** ISO 문자열 → KST 기준 "YYYY-MM-DD" (필터 비교용) */
 export function toKSTDateString(isoString: string): string {
   const d = new Date(isoString);

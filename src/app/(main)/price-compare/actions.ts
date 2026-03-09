@@ -22,7 +22,7 @@ async function requireAdmin() {
   return { supabase, userId: session.user.id, userName: profile.full_name ?? "알 수 없음" };
 }
 
-export type ActionState = {
+type ActionState = {
   error?: string;
   success?: boolean;
 };

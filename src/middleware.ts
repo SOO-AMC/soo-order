@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
 
   if (session && isPublicPath) {
     const url = request.nextUrl.clone();
-    url.pathname = "/orders";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 

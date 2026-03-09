@@ -2,10 +2,10 @@ import imageCompression from "browser-image-compression";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const MAX_PHOTOS = 5;
-export const BUCKET_NAME = "order-photos";
+const BUCKET_NAME = "order-photos";
 export const ACCEPTED_IMAGE_TYPES = "image/jpeg,image/png,image/webp,image/heic,image/heif";
 
-export async function compressImage(file: File): Promise<File> {
+async function compressImage(file: File): Promise<File> {
   const compressed = await imageCompression(file, {
     maxSizeMB: 1,
     maxWidthOrHeight: 1920,
