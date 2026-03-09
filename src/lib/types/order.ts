@@ -1,5 +1,5 @@
 export type OrderType = "order" | "return";
-export type OrderStatus = "pending" | "ordered" | "inspecting" | "return_requested" | "return_completed";
+export type OrderStatus = "pending" | "ordered" | "inspecting" | "return_requested" | "return_completed" | "out_of_stock";
 
 export interface Order {
   id: string;
@@ -54,4 +54,5 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   inspecting: "검수완료",
   return_requested: "반품신청",
   return_completed: "반품완료",
+  out_of_stock: "품절",
 };

@@ -36,6 +36,7 @@ const CATEGORIES = [
   { value: "return", label: "반품" },
   { value: "account", label: "계정" },
   { value: "price", label: "가격비교" },
+  { value: "blood", label: "혈액" },
 ] as const;
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -46,6 +47,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   return: "bg-orange-100 text-orange-700",
   account: "bg-slate-100 text-slate-700",
   price: "bg-pink-100 text-pink-700",
+  blood: "bg-red-100 text-red-700",
 };
 
 const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
@@ -118,7 +120,7 @@ export function ActivityLogList({ initialData }: ActivityLogListProps) {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
+      <header className="sticky top-0 z-40 flex items-center gap-2 bg-card px-4 py-3 shadow-header">
         <h1 className="text-lg font-bold">활동 로그</h1>
       </header>
 

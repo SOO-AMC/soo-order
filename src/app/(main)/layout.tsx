@@ -10,10 +10,10 @@ export default async function MainLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAdmin } = await getSessionProfile();
+  const { userId, userName, isAdmin } = await getSessionProfile();
 
   return (
-    <LayoutProviders isAdmin={isAdmin}>
+    <LayoutProviders userId={userId ?? ""} userName={userName ?? ""} isAdmin={isAdmin}>
       <div className="flex min-h-dvh flex-col">
         <AppSidebar />
         <UploadIndicator />

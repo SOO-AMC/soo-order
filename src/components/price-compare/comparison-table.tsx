@@ -105,7 +105,7 @@ export function ComparisonTable({
     const sheet = workbook.addWorksheet("가격비교");
 
     // 헤더
-    const headers = ["구분", "제품명", "수량", ...vendors.map((v) => v.name)];
+    const headers = ["구분", "제품명", "수량", ...vendors.map((v) => v.name), "비고"];
     const headerRow = sheet.addRow(headers);
     headerRow.eachCell((cell) => {
       cell.font = { bold: true };
@@ -130,6 +130,7 @@ export function ComparisonTable({
         const entry = row.prices.get(vendor.id);
         values.push(entry?.price ?? null);
       }
+      values.push(row.unified.remarks || "");
       const dataRow = sheet.addRow(values);
 
       // 최저가 하이라이트
@@ -235,6 +236,9 @@ export function ComparisonTable({
                   {row.unified.quantity && (
                     <span className="text-xs text-muted-foreground">{row.unified.quantity}</span>
                   )}
+                  {row.unified.remarks && (
+                    <span className="text-xs text-muted-foreground">({row.unified.remarks})</span>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-1">
                   {vendors.map((vendor) => {
@@ -279,6 +283,7 @@ export function ComparisonTable({
                       {vendor.name}
                     </TableHead>
                   ))}
+                  <TableHead className="w-[120px]">비고</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -323,6 +328,9 @@ export function ComparisonTable({
                         </TableCell>
                       );
                     })}
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.unified.remarks || ""}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -27,14 +27,16 @@ export function DashboardPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-none">
-      <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
-        <Button variant="ghost" size="icon" asChild className="lg:hidden">
-          <Link href="/more">
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <h1 className="text-lg font-bold">대시보드</h1>
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" asChild className="lg:hidden">
+            <Link href="/more">
+              <ChevronLeft />
+            </Link>
+          </Button>
+          <h1 className="text-lg font-bold">대시보드</h1>
+        </div>
       </header>
 
       {error ? (

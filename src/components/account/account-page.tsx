@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,21 +15,14 @@ import {
   type ChangePasswordState,
 } from "@/app/(main)/account/actions";
 
-interface AccountPageProps {
-  profile: {
-    id: string;
-    full_name: string;
-    role: string;
-  };
-  isAdmin: boolean;
-}
-
 const ROLE_LABEL: Record<string, string> = {
   admin: "관리자",
   user: "일반 사용자",
 };
 
-export function AccountPage({ profile, isAdmin }: AccountPageProps) {
+export function AccountPage() {
+  const { userId, userName, isAdmin } = useAuth();
+  const profile = { id: userId, full_name: userName, role: isAdmin ? "admin" : "user" };
   const [state, formAction, isPending] = useActionState<
     ChangePasswordState,
     FormData
@@ -36,13 +30,15 @@ export function AccountPage({ profile, isAdmin }: AccountPageProps) {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-4 py-3">
-        <Button variant="ghost" size="icon" asChild className="lg:hidden">
-          <Link href="/more">
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <h1 className="text-lg font-bold">계정관리</h1>
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" asChild className="lg:hidden">
+            <Link href="/more">
+              <ChevronLeft />
+            </Link>
+          </Button>
+          <h1 className="text-lg font-bold">계정관리</h1>
+        </div>
       </header>
 
       <div className="p-4 space-y-4">

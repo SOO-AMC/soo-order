@@ -91,8 +91,8 @@ export default function EditOrderPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md md:max-w-xl lg:max-w-3xl">
-      <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
+      <header className="sticky top-0 z-40 flex items-center gap-2 bg-card px-4 py-3 shadow-header">
         <Button variant="ghost" size="icon" asChild>
           <Link href={`/orders/${id}`}>
             <ChevronLeft />

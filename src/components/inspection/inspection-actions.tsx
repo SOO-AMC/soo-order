@@ -24,7 +24,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { ClipboardCheck, X } from "lucide-react";
+import Link from "next/link";
+import { ClipboardCheck, PackageX, Pencil, X } from "lucide-react";
 import { logClientAction } from "@/app/(main)/log-action";
 
 interface InspectionActionsProps {
@@ -32,6 +33,7 @@ interface InspectionActionsProps {
   itemName?: string;
   defaultQuantity: number;
   canCancel: boolean;
+  isAdmin?: boolean;
 }
 
 export function InspectionActions({
@@ -39,6 +41,7 @@ export function InspectionActions({
   itemName,
   defaultQuantity,
   canCancel,
+  isAdmin,
 }: InspectionActionsProps) {
   const [inspectOpen, setInspectOpen] = useState(false);
   const [confirmedQuantity, setConfirmedQuantity] =
@@ -47,6 +50,10 @@ export function InspectionActions({
   const [inspectionNotes, setInspectionNotes] = useState("");
   const [isInspecting, setIsInspecting] = useState(false);
   const [inspectError, setInspectError] = useState("");
+
+  const [outOfStockOpen, setOutOfStockOpen] = useState(false);
+  const [outOfStockReason, setOutOfStockReason] = useState("");
+  const [isOutOfStocking, setIsOutOfStocking] = useState(false);
 
   const [cancelOpen, setCancelOpen] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -86,6 +93,27 @@ export function InspectionActions({
 
     logClientAction("inspection", "inspect", `${itemName ?? "품목"} 검수 완료`);
     setInspectOpen(false);
+    router.push("/inspection");
+  };
+
+  const handleOutOfStock = async () => {
+    setIsOutOfStocking(true);
+
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        status: "out_of_stock",
+        order_notes: outOfStockReason.trim() || null,
+      })
+      .eq("id", orderId);
+
+    if (error) {
+      setIsOutOfStocking(false);
+      return;
+    }
+
+    logClientAction("inspection", "out_of_stock", `${itemName ?? "품목"} 품절 처리${outOfStockReason.trim() ? ` (사유: ${outOfStockReason.trim()})` : ""}`);
+    setOutOfStockOpen(false);
     router.push("/inspection");
   };
 
@@ -185,16 +213,62 @@ export function InspectionActions({
         </DialogContent>
       </Dialog>
 
-      {canCancel && (
+      <Dialog open={outOfStockOpen} onOpenChange={setOutOfStockOpen}>
+        <DialogTrigger asChild>
+          <Button variant="outline" className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
+            <PackageX className="h-4 w-4" />
+            품절
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>품절 처리</DialogTitle>
+            <DialogDescription>
+              이 품목을 품절로 처리하시겠습니까?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="out-of-stock-reason">품절 사유</Label>
+            <Input
+              id="out-of-stock-reason"
+              placeholder="품절 사유 (선택)"
+              value={outOfStockReason}
+              onChange={(e) => setOutOfStockReason(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                취소
+              </Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={handleOutOfStock} disabled={isOutOfStocking}>
+              {isOutOfStocking ? "처리 중..." : "품절 처리"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {(isAdmin || canCancel) && (
         <>
           <Separator />
-          <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-            <DialogTrigger asChild>
-              <Button variant="destructive" className="w-full">
-                <X className="h-4 w-4" />
-                주문 취소
+          <div className="flex gap-2">
+            {isAdmin && (
+              <Button variant="outline" className="flex-1" asChild>
+                <Link href={`/inspection/${orderId}/edit`}>
+                  <Pencil className="h-4 w-4" />
+                  수정
+                </Link>
               </Button>
-            </DialogTrigger>
+            )}
+            {canCancel && (
+              <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="flex-1">
+                    <X className="h-4 w-4" />
+                    주문 취소
+                  </Button>
+                </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>주문 취소</DialogTitle>
@@ -229,7 +303,9 @@ export function InspectionActions({
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+              </Dialog>
+            )}
+          </div>
         </>
       )}
     </div>

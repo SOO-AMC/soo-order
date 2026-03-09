@@ -16,7 +16,7 @@ import type { ReorderIntervalData } from "@/lib/types/dashboard";
 const chartConfig = {
   avgDays: {
     label: "평균 주기(일)",
-    color: "#7B3FC5",
+    color: "#2563EB",
   },
 } satisfies ChartConfig;
 
@@ -92,7 +92,7 @@ export function ReorderIntervalChart({ data }: Props) {
                   />
                 }
               />
-              <Bar dataKey="avgDays" fill="#7B3FC5" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="avgDays" fill="#2563EB" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ChartContainer>
         )}

@@ -5,23 +5,43 @@ import type { Vendor, VendorProduct, UnifiedProduct } from "@/lib/types/price-co
 
 const VENDOR_ORDER = ["우리엔팜", "VS팜", "화영", "라라엠케어"];
 
+async function fetchAll<T>(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  table: string,
+  order: string,
+): Promise<T[]> {
+  const PAGE_SIZE = 1000;
+  const all: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .order(order)
+      .range(from, from + PAGE_SIZE - 1);
+    if (error || !data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
+}
+
 export async function fetchPriceCompareData() {
   const supabase = await createClient();
 
-  const [vendorsResult, vendorProductsResult, unifiedProductsResult] =
-    await Promise.all([
-      supabase.from("vendors").select("*").order("name"),
-      supabase.from("vendor_products").select("*").order("product_name"),
-      supabase.from("unified_products").select("*").order("sort_order"),
-    ]);
+  const [vendors, vendorProductData, unifiedProducts] = await Promise.all([
+    fetchAll<Vendor>(supabase, "vendors", "name"),
+    fetchAll<VendorProduct>(supabase, "vendor_products", "product_name"),
+    fetchAll<UnifiedProduct>(supabase, "unified_products", "sort_order"),
+  ]);
 
-  const vendorProductData = (vendorProductsResult.data ?? []) as VendorProduct[];
   const countByVendor = new Map<string, number>();
   for (const p of vendorProductData) {
     countByVendor.set(p.vendor_id, (countByVendor.get(p.vendor_id) ?? 0) + 1);
   }
 
-  const vendors = ((vendorsResult.data ?? []) as Vendor[])
+  const sortedVendors = vendors
     .map((v) => ({
       ...v,
       product_count: countByVendor.get(v.id) ?? 0,
@@ -33,8 +53,8 @@ export async function fetchPriceCompareData() {
     });
 
   return {
-    vendors,
+    vendors: sortedVendors,
     vendorProducts: vendorProductData,
-    unifiedProducts: (unifiedProductsResult.data ?? []) as UnifiedProduct[],
+    unifiedProducts,
   };
 }

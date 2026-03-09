@@ -1,9 +1,10 @@
 "use client";
 
 import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, ChevronRight, CircleAlert, ClipboardCheck } from "lucide-react";
+import { ArrowUpDown, Camera, ChevronRight, CircleAlert, ClipboardCheck, PackageX } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -29,18 +30,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 
-interface InspectionListProps {
-  isAdmin: boolean;
-  currentUserId: string;
-}
-
 interface InspectionData {
   confirmed_quantity: number;
   invoice_received: boolean | null;
   inspection_notes: string;
 }
 
-export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) {
+export function InspectionList() {
+  const { isAdmin, userId: currentUserId } = useAuth();
   const [orders, setOrders] = useState<OrderWithRequester[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -49,6 +46,7 @@ export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) 
     Record<string, InspectionData>
   >({});
   const [isProcessing, setIsProcessing] = useState(false);
+  const [sortByVendor, setSortByVendor] = useState(false);
   const supabase = createClient();
   const router = useRouter();
 
@@ -97,9 +95,14 @@ export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) 
   const sortedOrders = useMemo(
     () => [...orders].sort((a, b) => {
       if (a.is_urgent !== b.is_urgent) return a.is_urgent ? -1 : 1;
+      if (sortByVendor) {
+        const va = (a.vendor_name ?? "").toLowerCase();
+        const vb = (b.vendor_name ?? "").toLowerCase();
+        if (va !== vb) return va.localeCompare(vb);
+      }
       return 0;
     }),
-    [orders]
+    [orders, sortByVendor]
   );
 
   const allSelected =
@@ -202,6 +205,34 @@ export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) 
     await fetchOrders();
   };
 
+  const handleBulkOutOfStock = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`${selectedIds.size}건을 품절 처리하시겠습니까?`)) return;
+
+    setIsProcessing(true);
+
+    const updates = [...selectedIds].map((id) =>
+      supabase
+        .from("orders")
+        .update({ status: "out_of_stock" })
+        .eq("id", id)
+    );
+
+    const results = await Promise.all(updates);
+    const failed = results.find((r) => r.error);
+
+    if (failed) {
+      setIsProcessing(false);
+      return;
+    }
+
+    logClientAction("inspection", "out_of_stock_bulk", `${selectedIds.size}건 일괄 품절`);
+    setSelectedIds(new Set());
+    setInspectionData({});
+    setIsProcessing(false);
+    await fetchOrders();
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -249,6 +280,15 @@ export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) 
               <TableHead>상태</TableHead>
               <TableHead>품목명</TableHead>
               <TableHead>수량</TableHead>
+              <TableHead>
+                <button
+                  className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                  onClick={() => setSortByVendor((v) => !v)}
+                >
+                  업체
+                  <ArrowUpDown className={`h-3.5 w-3.5 ${sortByVendor ? "text-primary" : "text-muted-foreground/50"}`} />
+                </button>
+              </TableHead>
               <TableHead>요청자</TableHead>
               <TableHead>요청일</TableHead>
               <TableHead className="w-12">사진</TableHead>
@@ -258,7 +298,7 @@ export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) 
             {sortedOrders.map((order) => {
               const isSelected = selectedIds.has(order.id);
               const data = getInspectionData(order);
-              const colCount = 7;
+              const colCount = 8;
 
               return (
                 <Fragment key={order.id}>
@@ -286,6 +326,7 @@ export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) 
                         ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
                         : <span className="text-muted-foreground">(사진 참고)</span>}
                     </TableCell>
+                    <TableCell>{order.vendor_name || <span className="text-muted-foreground">-</span>}</TableCell>
                     <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
                     <TableCell>{formatDate(order.created_at)}</TableCell>
                     <TableCell>
@@ -407,6 +448,12 @@ export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) 
                           ? `수량: ${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
                           : "(사진 참고)"}
                       </span>
+                      {order.vendor_name && (
+                        <>
+                          <span>·</span>
+                          <span>{order.vendor_name}</span>
+                        </>
+                      )}
                       <span>·</span>
                       <span>{formatDate(order.created_at)}</span>
                       {order.photo_urls?.length > 0 && (
@@ -500,16 +547,27 @@ export function InspectionList({ isAdmin, currentUserId }: InspectionListProps) 
 
       {selectedIds.size > 0 && (
         <div className="fixed bottom-20 left-0 right-0 z-50 flex justify-center px-4 lg:left-60 lg:bottom-4">
-          <Button
-            className="w-full max-w-md md:max-w-2xl lg:max-w-full shadow-lg"
-            onClick={handleBulkInspect}
-            disabled={isProcessing}
-          >
-            <ClipboardCheck className="h-4 w-4" />
-            {isProcessing
-              ? "검수 처리 중..."
-              : `일괄 검수 완료 (${selectedIds.size}건)`}
-          </Button>
+          <div className="flex w-full max-w-md md:max-w-2xl lg:max-w-full gap-2">
+            <Button
+              className="flex-1 shadow-lg"
+              onClick={handleBulkInspect}
+              disabled={isProcessing}
+            >
+              <ClipboardCheck className="h-4 w-4" />
+              {isProcessing
+                ? "처리 중..."
+                : `일괄 검수 (${selectedIds.size}건)`}
+            </Button>
+            <Button
+              variant="outline"
+              className="shadow-lg bg-card text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+              onClick={handleBulkOutOfStock}
+              disabled={isProcessing}
+            >
+              <PackageX className="h-4 w-4" />
+              품절
+            </Button>
+          </div>
         </div>
       )}
     </div>

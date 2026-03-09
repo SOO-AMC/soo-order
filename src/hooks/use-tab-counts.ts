@@ -10,12 +10,14 @@ interface TabInfo {
 
 interface TabCounts {
   orders: TabInfo;
+  outOfStock: TabInfo;
   returns: TabInfo;
   inspection: TabInfo;
+  blood: TabInfo;
 }
 
 const empty: TabInfo = { count: 0, hasUrgent: false };
-const defaultCounts: TabCounts = { orders: empty, returns: empty, inspection: empty };
+const defaultCounts: TabCounts = { orders: empty, outOfStock: empty, returns: empty, inspection: empty, blood: empty };
 
 // Context로 공유하여 BottomNav + AppSidebar 중복 호출 방지
 const TabCountsContext = createContext<TabCounts>(defaultCounts);
@@ -34,7 +36,7 @@ export function useTabCountsProvider() {
     const supabase = createClient();
 
     // 2개 쿼리로 통합: 상태별 전체 카운트 + 긴급 카운트
-    const [pending, returnReq, ordered, pendingUrgent, returnReqUrgent, orderedUrgent] =
+    const [pending, returnReq, ordered, outOfStock, pendingUrgent, returnReqUrgent, orderedUrgent, outOfStockUrgent, bloodPending] =
       await Promise.all([
         supabase
           .from("orders")
@@ -52,6 +54,10 @@ export function useTabCountsProvider() {
         supabase
           .from("orders")
           .select("*", { count: "exact", head: true })
+          .eq("status", "out_of_stock"),
+        supabase
+          .from("orders")
+          .select("*", { count: "exact", head: true })
           .eq("type", "order")
           .eq("status", "pending")
           .eq("is_urgent", true),
@@ -65,12 +71,23 @@ export function useTabCountsProvider() {
           .select("*", { count: "exact", head: true })
           .eq("status", "ordered")
           .eq("is_urgent", true),
+        supabase
+          .from("orders")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "out_of_stock")
+          .eq("is_urgent", true),
+        supabase
+          .from("blood_records")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "pending"),
       ]);
 
     setCounts({
       orders: { count: pending.count ?? 0, hasUrgent: (pendingUrgent.count ?? 0) > 0 },
+      outOfStock: { count: outOfStock.count ?? 0, hasUrgent: (outOfStockUrgent.count ?? 0) > 0 },
       returns: { count: returnReq.count ?? 0, hasUrgent: (returnReqUrgent.count ?? 0) > 0 },
       inspection: { count: ordered.count ?? 0, hasUrgent: (orderedUrgent.count ?? 0) > 0 },
+      blood: { count: bloodPending.count ?? 0, hasUrgent: false },
     });
   }, []);
 
@@ -96,6 +113,11 @@ export function useTabCountsProvider() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "orders" },
+        debouncedFetch
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "blood_records" },
         debouncedFetch
       )
       .subscribe();

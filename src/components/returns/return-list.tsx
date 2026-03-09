@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState, useCallback, useRef } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, CircleAlert, Undo2 } from "lucide-react";
@@ -21,12 +22,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 
-interface ReturnListProps {
-  isAdmin?: boolean;
-  currentUserId: string;
-}
-
-export function ReturnList({ currentUserId }: ReturnListProps) {
+export function ReturnList() {
+  const { userId: currentUserId } = useAuth();
   const [orders, setOrders] = useState<OrderWithRequester[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");

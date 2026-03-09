@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/utils/activity-log";
 
 export async function logClientAction(
-  category: "auth" | "order" | "dispatch" | "inspection" | "return" | "account" | "price",
+  category: "auth" | "order" | "dispatch" | "inspection" | "return" | "account" | "price" | "blood",
   action: string,
   description: string,
   metadata?: Record<string, unknown>

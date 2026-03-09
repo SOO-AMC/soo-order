@@ -13,7 +13,7 @@ import type { TopItemData } from "@/lib/types/dashboard";
 const chartConfig = {
   count: {
     label: "주문 수",
-    color: "#7B3FC5",
+    color: "#2563EB",
   },
 } satisfies ChartConfig;
 
@@ -54,7 +54,7 @@ export function TopItemsChart({ data }: TopItemsChartProps) {
               tickFormatter={(v: string) => (v.length > 8 ? v.slice(0, 8) + "…" : v)}
             />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar dataKey="count" fill="#7B3FC5" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="count" fill="#2563EB" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ChartContainer>
       </CardContent>

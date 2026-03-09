@@ -1,10 +1,5 @@
-import { redirect } from "next/navigation";
-import { getSessionProfile } from "@/lib/supabase/server";
-import { DashboardPage } from "@/components/dashboard/dashboard-page";
+import { MyOrdersPage } from "@/components/my-orders/my-orders-page";
 
-export default async function DashboardRoute() {
-  const { isAdmin } = await getSessionProfile();
-  if (!isAdmin) redirect("/orders");
-
-  return <DashboardPage />;
+export default function DashboardRoute() {
+  return <MyOrdersPage />;
 }

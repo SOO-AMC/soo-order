@@ -1,11 +1,9 @@
 export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { createClient, getSessionProfile } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { OrderDetailActions } from "@/components/orders/order-detail-actions";
@@ -38,12 +36,8 @@ export default async function OrderDetailPage({
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/orders">
-            <ChevronLeft />
-          </Link>
-        </Button>
+      <header className="sticky top-0 z-40 flex items-center gap-2 bg-card px-4 py-3 shadow-header">
+        <BackButton fallbackHref="/orders" />
         <h1 className="text-lg font-bold">주문 상세</h1>
       </header>
 
@@ -131,7 +125,7 @@ export default async function OrderDetailPage({
         {isAdmin && order.status === "pending" && (
           <>
             <Separator />
-            <OrderAdminAction orderId={order.id} itemName={order.item_name} />
+            <OrderAdminAction orderId={order.id} itemName={order.item_name} quantity={order.quantity} unit={order.unit} />
           </>
         )}
 

@@ -71,7 +71,7 @@ async function executeFilteredQuery(
   }
 
   // 상태 (다중 선택)
-  if (filters.status.length > 0 && filters.status.length < 5) {
+  if (filters.status.length > 0 && filters.status.length < 6) {
     query = query.in("status", filters.status);
   }
 

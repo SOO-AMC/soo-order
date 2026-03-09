@@ -2,29 +2,23 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BarChart3, ChevronRight, LogOut, Scale, UserCog, Users } from "lucide-react";
+import { BarChart3, ChevronRight, Droplets, LogOut, Scale, Search, Undo2, UserCog, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { logClientAction } from "@/app/(main)/log-action";
 
-interface MorePageProps {
-  profile: {
-    id: string;
-    full_name: string;
-    role: string;
-  };
-  isAdmin: boolean;
-}
-
 const ROLE_LABEL: Record<string, string> = {
   admin: "관리자",
   user: "일반 사용자",
 };
 
-export function MorePage({ profile, isAdmin }: MorePageProps) {
+export function MorePage() {
+  const { userId, userName, isAdmin } = useAuth();
+  const profile = { id: userId, full_name: userName, role: isAdmin ? "admin" : "user" };
   const router = useRouter();
   const supabase = createClient();
 
@@ -36,7 +30,7 @@ export function MorePage({ profile, isAdmin }: MorePageProps) {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center justify-between bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
         <h1 className="text-lg font-bold">더보기</h1>
       </header>
 
@@ -66,12 +60,39 @@ export function MorePage({ profile, isAdmin }: MorePageProps) {
           <Card className="py-0 gap-0">
             <CardContent className="divide-y p-0">
               <Link
-                href="/account"
+                href="/returns"
                 className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
               >
                 <div className="flex items-center gap-3">
-                  <UserCog className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">내 계정관리</span>
+                  <Undo2 className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">반품</span>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Link>
+              <Link
+                href="/search"
+                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
+              >
+                <div className="flex items-center gap-3">
+                  <Search className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">조회</span>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* 혈액 대장 */}
+          <p className="px-1 text-xs font-semibold text-muted-foreground/70">혈액 관리</p>
+          <Card className="py-0 gap-0">
+            <CardContent className="divide-y p-0">
+              <Link
+                href="/blood"
+                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
+              >
+                <div className="flex items-center gap-3">
+                  <Droplets className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">혈액 대장</span>
                 </div>
                 <ChevronRight className="h-5 w-5 text-muted-foreground" />
               </Link>
@@ -85,7 +106,7 @@ export function MorePage({ profile, isAdmin }: MorePageProps) {
               <Card className="py-0 gap-0">
                 <CardContent className="divide-y p-0">
                   <Link
-                    href="/dashboard"
+                    href="/dashboard/admin"
                     className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
                   >
                     <div className="flex items-center gap-3">
@@ -118,6 +139,23 @@ export function MorePage({ profile, isAdmin }: MorePageProps) {
               </Card>
             </>
           )}
+
+          {/* 설정 */}
+          <p className="px-1 text-xs font-semibold text-muted-foreground/70">설정</p>
+          <Card className="py-0 gap-0">
+            <CardContent className="divide-y p-0">
+              <Link
+                href="/account"
+                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
+              >
+                <div className="flex items-center gap-3">
+                  <UserCog className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">내 계정관리</span>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Link>
+            </CardContent>
+          </Card>
         </div>
 
         {/* 로그아웃 - 하단 고정 */}

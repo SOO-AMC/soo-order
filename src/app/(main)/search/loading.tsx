@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 export default function SearchLoading() {
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-header">
+      <header className="sticky top-0 z-40 flex items-center gap-2 bg-card px-4 py-3 shadow-header">
         <h1 className="text-lg font-bold">조회</h1>
       </header>
       <div className="p-4 space-y-4">

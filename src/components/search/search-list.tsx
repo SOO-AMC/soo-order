@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BackButton } from "@/components/back-button";
 import {
   Table,
   TableBody,
@@ -38,19 +40,13 @@ import {
   parseSearchParams,
 } from "@/lib/utils/search-params";
 import { PAGE_SIZE } from "@/lib/queries/search-orders";
-import { searchOrders } from "@/lib/actions/search-action";
+import { searchOrders, fetchPersonNames } from "@/lib/actions/search-action";
 import { exportFilteredOrders } from "@/lib/actions/export-orders";
 import type ExcelJS from "exceljs";
 
-interface SearchListProps {
-  isAdmin?: boolean;
-  personNames: string[];
-}
-
-export function SearchList({
-  isAdmin = false,
-  personNames,
-}: SearchListProps) {
+export function SearchList() {
+  const { isAdmin } = useAuth();
+  const [personNames, setPersonNames] = useState<string[]>([]);
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -88,7 +84,7 @@ export function SearchList({
     [fetchData]
   );
 
-  // 초기 로드 — URL에서 필터 파싱 후 fetch
+  // 초기 로드 — URL에서 필터 파싱 후 fetch + personNames
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const obj: Record<string, string> = {};
@@ -97,6 +93,7 @@ export function SearchList({
     setFilters(initialFilters);
     setSearchInput(initialFilters.q);
     fetchData(initialFilters);
+    fetchPersonNames().then(setPersonNames);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -256,10 +253,15 @@ export function SearchList({
     }
   }, [filters]);
 
-  const header = (
-    <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm shadow-header">
-      <div className="flex items-center justify-between px-4 py-3">
-        <h1 className="text-lg font-bold">조회</h1>
+  return (
+    <>
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
+        <div className="flex items-center gap-2">
+          <div className="lg:hidden">
+            <BackButton fallbackHref="/more" />
+          </div>
+          <h1 className="text-lg font-bold">조회</h1>
+        </div>
         {isAdmin && (
           <Button
             variant="outline"
@@ -275,52 +277,7 @@ export function SearchList({
             )}
           </Button>
         )}
-      </div>
-      <div className="flex items-center gap-2 px-4 pb-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="품목명 / 업체명 검색"
-            value={searchInput}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-9 bg-card"
-          />
-        </div>
-        <Button
-          variant="outline"
-          size="icon"
-          className="relative shrink-0 bg-card"
-          onClick={() => setSheetOpen(true)}
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-          {activeFilterCount > 0 && (
-            <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 text-[10px] flex items-center justify-center">
-              {activeFilterCount}
-            </Badge>
-          )}
-        </Button>
-        {isAdmin && (
-          <Button
-            variant="outline"
-            size="icon"
-            className="shrink-0 md:hidden bg-card"
-            onClick={handleExcelDownload}
-            disabled={isExporting}
-          >
-            {isExporting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-          </Button>
-        )}
-      </div>
-    </header>
-  );
-
-  return (
-    <>
-      {header}
+      </header>
       {/* 엑셀 다운로드 로딩 오버레이 */}
       {showExportOverlay && (
         <ExportOverlay
@@ -330,6 +287,46 @@ export function SearchList({
         />
       )}
       <div className="space-y-4 p-4">
+        {/* 검색 + 필터 */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="품목명 / 업체명 검색"
+              value={searchInput}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-9 bg-card"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            className="relative shrink-0 bg-card"
+            onClick={() => setSheetOpen(true)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {activeFilterCount > 0 && (
+              <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 text-[10px] flex items-center justify-center">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="shrink-0 md:hidden bg-card"
+              onClick={handleExcelDownload}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+        </div>
 
         {/* 결과 건수 + 상태 범례 */}
         <div className="flex items-center justify-between">

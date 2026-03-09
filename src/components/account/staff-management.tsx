@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useActionState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, ChevronRight, KeyRound, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, Plus, ChevronRight, KeyRound, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,13 +65,13 @@ export function StaffManagement() {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3">
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
         <div className="flex items-center gap-2">
-          <Link href="/more" className="lg:hidden">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+          <Button variant="ghost" size="icon" asChild className="lg:hidden">
+            <Link href="/more">
+              <ChevronLeft />
+            </Link>
+          </Button>
           <h1 className="text-lg font-bold">직원 관리</h1>
         </div>
         <Button size="icon" onClick={() => openDialog("create")}>

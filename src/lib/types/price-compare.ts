@@ -25,6 +25,7 @@ export interface UnifiedProduct {
   tab: string;
   quantity: string;
   notes: string;
+  remarks: string;
   sort_order: number;
   created_at: string;
   updated_at: string;

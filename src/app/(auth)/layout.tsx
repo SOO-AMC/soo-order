@@ -8,7 +8,7 @@ export default function AuthLayout({
   return (
     <>
       {/* 모바일: 풀스크린 */}
-      <div className="flex min-h-svh flex-col bg-gradient-to-b from-[#7B3FC5] to-[#5A2D91] lg:hidden">
+      <div className="flex min-h-svh flex-col bg-gradient-to-b from-[#2563EB] to-[#1D4ED8] lg:hidden">
         {children}
       </div>
 

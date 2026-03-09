@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Package,
+  PackageX,
   Undo2,
   ClipboardCheck,
   Search,
+  Droplets,
   LogOut,
   Scale,
   Users,
@@ -17,18 +19,22 @@ import {
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useTabCounts } from "@/hooks/use-tab-counts";
-import { useIsAdmin } from "@/hooks/use-admin";
+import { useIsAdmin } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 const mainTabs = [
   { href: "/orders", label: "주문", icon: Package, countKey: "orders" as const },
+  { href: "/out-of-stock", label: "품절", icon: PackageX, countKey: "outOfStock" as const },
   { href: "/returns", label: "반품", icon: Undo2, countKey: "returns" as const },
   { href: "/inspection", label: "검수", icon: ClipboardCheck, countKey: "inspection" as const },
   { href: "/search", label: "조회", icon: Search, countKey: null },
 ];
 
-const dashboardTab = { href: "/dashboard", label: "대시보드", icon: BarChart3, countKey: null };
+const bloodTab = { href: "/blood", label: "혈액 대장", icon: Droplets, countKey: "blood" as const };
+
+const myOrdersTab = { href: "/dashboard", label: "내 주문 현황", icon: BarChart3, countKey: null };
+const adminDashboardTab = { href: "/dashboard/admin", label: "대시보드", icon: BarChart3, countKey: null };
 
 const adminTabs = [
   { href: "/price-compare", label: "가격 비교", icon: Scale },
@@ -39,10 +45,12 @@ const accountTab = { href: "/account", label: "내 계정관리", icon: UserCog 
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const supabase = createClient();
   const isAdmin = useIsAdmin();
   const counts = useTabCounts();
+  const fromDashboard = searchParams.get("from") === "dashboard";
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -58,12 +66,16 @@ export function AppSidebar() {
     href: string;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
-    countKey?: "orders" | "returns" | "inspection" | null;
+    countKey?: "orders" | "outOfStock" | "returns" | "inspection" | "blood" | null;
   }) => {
     const isActive =
       href === "/account"
         ? pathname === "/account"
-        : pathname.startsWith(href);
+        : href === "/dashboard"
+          ? pathname === "/dashboard" || pathname === "/dashboard/admin" || fromDashboard
+          : fromDashboard && pathname.startsWith("/orders")
+            ? false
+            : pathname.startsWith(href);
     const info = countKey ? counts[countKey] : null;
     const count = info?.count ?? 0;
     const hasUrgent = info?.hasUrgent ?? false;
@@ -105,13 +117,17 @@ export function AppSidebar() {
         <span className="text-lg font-bold text-foreground">수오더</span>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        {renderLink(myOrdersTab)}
         {mainTabs.map(renderLink)}
+
+        <Separator className="my-3 bg-border/40" />
+        {renderLink(bloodTab)}
 
         {isAdmin && (
           <>
             <Separator className="my-3 bg-border/40" />
             <p className="px-3 pb-1 pt-2 text-xs font-semibold text-muted-foreground">관리자 전용</p>
-            {renderLink(dashboardTab)}
+            {renderLink(adminDashboardTab)}
             {adminTabs.map(renderLink)}
           </>
         )}

@@ -70,6 +70,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
       });
     } catch {
       setError("요청 처리 중 오류가 발생했습니다.");
+    } finally {
       setIsLoading(false);
     }
   };

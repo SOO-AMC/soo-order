@@ -14,11 +14,11 @@ import type { VendorDeliverySpeed } from "@/lib/types/dashboard";
 const chartConfig = {
   medianHours: {
     label: "중앙값",
-    color: "#7B3FC5",
+    color: "#2563EB",
   },
   avgHours: {
     label: "평균",
-    color: "#5A2D91",
+    color: "#1D4ED8",
   },
 } satisfies ChartConfig;
 
@@ -86,7 +86,7 @@ export function VendorDeliveryChart({ data }: Props) {
                 />
               }
             />
-            <Bar dataKey="medianHours" fill="#7B3FC5" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="medianHours" fill="#2563EB" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ChartContainer>
 

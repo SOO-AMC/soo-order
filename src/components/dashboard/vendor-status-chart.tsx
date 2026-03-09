@@ -15,11 +15,11 @@ import type { VendorData } from "@/lib/types/dashboard";
 const chartConfig = {
   total: {
     label: "발주 건수",
-    color: "#7B3FC5",
+    color: "#2563EB",
   },
   invoiceReceived: {
     label: "명세서 수령",
-    color: "#5A2D91",
+    color: "#1D4ED8",
   },
 } satisfies ChartConfig;
 

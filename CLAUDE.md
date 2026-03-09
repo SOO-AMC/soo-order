@@ -5,11 +5,11 @@
 
 ## 브랜드
 - **앱 이름**: 수오더
-- **Primary 컬러**: `#7B3FC5` (보라색, oklch(0.50 0.17 300))
-- **Sub 컬러**: `#5A2D91` (다크 보라)
-- **그라데이션**: `#7B3FC5` → `#5A2D91`
+- **Primary 컬러**: `#2563EB` (파란색, oklch(0.55 0.25 264))
+- **Sub 컬러**: `#1D4ED8` (다크 블루)
+- **그라데이션**: `#2563EB` → `#1D4ED8`
 - **배경**: `oklch(0.965 0.003 260)` (연한 블루그레이)
-- **theme_color**: `#7B3FC5`
+- **theme_color**: `#2563EB`
 - **아이콘**: SOO Animal Medical Center 로고 (`src/app/icon.png`, `public/icons/`)
 
 ## Tech Stack
@@ -77,7 +77,7 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
 ## 라우트 구조
 ```
 / → /orders 리다이렉트
-(auth)/login          # 로그인 (모바일: 풀스크린 보라+흰시트, PC: 좌측 YouTube영상+우측 폼)
+(auth)/login          # 로그인 (모바일: 풀스크린 파랑+흰시트, PC: 좌측 YouTube영상+우측 폼)
 (main)/               # AuthGuard + BottomNav + AppSidebar
   orders/             # 주문 리스트 (type=order)
     new/ | [id]/ | [id]/edit/
@@ -87,6 +87,8 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
   dashboard/          # 대시보드 (admin, 차트)
   price-compare/      # 가격 비교 (admin, 3탭: 비교표/업체관리/제품매핑)
   members/            # 직원 관리 (admin)
+  blood/              # 혈액 대장 (수령/출고 2탭) + [id]/ 상세
+    new/
   logs/               # 활동 로그 (admin, 네비 미노출, URL 직접 접속)
   more/               # 더보기 메뉴
   account/            # 계정관리
@@ -95,9 +97,10 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
 ## 아키텍처 패턴
 
 ### Server vs Client 컴포넌트
-- **Server 페이지**: 인증/권한 체크만 수행, 데이터 fetch 없음 (탭 전환 즉시 반응)
-- **Client 컴포넌트**: 마운트 시 Server Action으로 데이터 fetch → 스피너 → 렌더
-- **상세 페이지**: 여전히 Server에서 데이터 fetch (SSR)
+- **Server 페이지**: 순수 레이아웃만 렌더 (async 없음, `getSessionProfile()` 호출 금지)
+- **인증/권한**: Layout에서 `getSessionProfile()` → `AuthProvider` Context로 `userId`, `userName`, `isAdmin` 제공
+- **Client 컴포넌트**: `useAuth()` 훅으로 auth 정보 접근, 마운트 시 데이터 fetch → 스피너 → 렌더
+- **상세 페이지**: 여전히 Server에서 데이터 fetch (SSR, `force-dynamic`)
 
 ### Server Actions (`src/lib/actions/`)
 - `search-action.ts`: 조회 필터 검색 (클라이언트 상태 기반, `history.replaceState` URL 동기화)
@@ -125,13 +128,13 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
 ### 권한
 - Role: `admin` / `user` (profiles.role)
 - RLS + `is_admin()` SQL 헬퍼
-- Server에서 role 조회 → Client에 `isAdmin` prop 전달
+- Layout에서 `AuthProvider`로 `isAdmin` 제공 → `useAuth()` 훅으로 접근
 
 ### 활동 로그 (Activity Logs)
 - `activity_logs` 테이블: user_id, user_name, category, action, description, metadata
 - `logActivity()` (`src/lib/utils/activity-log.ts`): admin client로 INSERT (fire-and-forget)
 - `logClientAction()` (`src/app/(main)/log-action.ts`): Client Component용 Server Action
-- 카테고리: auth, order, dispatch, inspection, return, account, price
+- 카테고리: auth, order, dispatch, inspection, return, account, price, blood
 - RLS: admin만 읽기, service_role로 쓰기
 
 ## DB 스키마
@@ -152,6 +155,11 @@ id, vendor_id(FK→vendors), product_name, manufacturer, spec, unit_price, ingre
 
 ### unified_products
 id, name, mg, tab, quantity, notes, sort_order, created_at, updated_at
+
+### blood_records
+id, type(received/sent), record_date, hospital_name, animal_type(dog/cat), blood_type, volume_ml, collection_date, receiver, shipper, status(pending/confirmed), settlement_type(invoice/transfer), confirmed_by(FK→profiles), confirmed_at, created_by(FK→profiles), created_at, updated_at, notes
+
+**상태 흐름**: pending (미확인) → confirmed (확인완료, 관리자가 결제 방식 선택)
 
 ### activity_logs
 id, user_id(FK→profiles), user_name, category, action, description, metadata(JSONB), created_at
@@ -177,6 +185,14 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 - `return-request-button.tsx`: 반품 신청 Dialog
 - `cancel-inspection-button.tsx`: 검수 취소
 
+### 혈액 대장
+- `blood-list-page.tsx`: 수령/출고 2탭 (forceMount)
+- `blood-list.tsx`: 탭별 리스트 (fetch + Realtime, 모바일 카드/PC 테이블)
+- `blood-form.tsx`: 등록/수정 공용 폼
+- `blood-confirm-button.tsx`: 관리자 확인 Dialog (결제 방식 Select)
+- `blood-status-badge.tsx`: 미확인(노란색)/확인완료(초록색) 배지
+- `blood-delete-button.tsx`: 삭제 Dialog
+
 ### 조회
 - `search-list.tsx`: 검색 + 필터 + 엑셀
 - `search-filter-sheet.tsx`: 다중선택 필터 (상태/긴급/거래명세서 배열)
@@ -190,7 +206,9 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 - `activity-log-list.tsx`: 카테고리 탭 + 검색 + 날짜 필터 + 더보기 (cursor 기반)
 
 ### 유틸
+- `src/hooks/use-auth.ts`: AuthProvider, useAuth(), useIsAdmin() — Layout에서 제공하는 auth context
 - `src/lib/types/order.ts`: Order, OrderWithRequester, ORDER_STATUS_LABEL, ORDER_TYPE_LABEL
+- `src/lib/types/blood.ts`: BloodRecord, BloodRecordWithCreator, BLOOD_TYPE_LABEL, BLOOD_STATUS_LABEL
 - `src/lib/types/price-compare.ts`: Vendor, VendorProduct, UnifiedProduct
 - `src/lib/types/dashboard.ts`: DashboardData, FirebaseItem 등
 - `src/lib/utils/search-params.ts`: SearchFilters (다중선택 배열), URL 직렬화, parseSearchParams

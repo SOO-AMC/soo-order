@@ -15,19 +15,22 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { ShoppingCart } from "lucide-react";
+import { Check, ClipboardCopy, ShoppingCart } from "lucide-react";
 import { logClientAction } from "@/app/(main)/log-action";
 
 interface OrderAdminActionProps {
   orderId: string;
   itemName?: string;
+  quantity?: number;
+  unit?: string;
 }
 
-export function OrderAdminAction({ orderId, itemName }: OrderAdminActionProps) {
+export function OrderAdminAction({ orderId, itemName, quantity, unit }: OrderAdminActionProps) {
   const [open, setOpen] = useState(false);
   const [vendorName, setVendorName] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -56,6 +59,16 @@ export function OrderAdminAction({ orderId, itemName }: OrderAdminActionProps) {
     logClientAction("dispatch", "dispatch_single", `${itemName ?? "품목"} 발주 (업체: ${vendorName || "미입력"})`);
     setOpen(false);
     router.refresh();
+  };
+
+  const handleCopyMessage = async () => {
+    const name = itemName ?? "품목";
+    const qty = quantity && quantity > 0 ? `${quantity}${unit ?? ""}` : "";
+    const line = `${name}  ${qty}`.trimEnd();
+    const message = `안녕하세요\n\n${line}\n\n주문하겠습니다.`;
+    await navigator.clipboard.writeText(message);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -92,6 +105,15 @@ export function OrderAdminAction({ orderId, itemName }: OrderAdminActionProps) {
               />
             </div>
           </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={handleCopyMessage}
+          >
+            {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+            {copied ? "복사됨" : "주문 요청 문구 복사"}
+          </Button>
+
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">

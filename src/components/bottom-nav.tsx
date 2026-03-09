@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Package, Undo2, ClipboardCheck, Search, Menu } from "lucide-react";
+import { Package, BarChart3, ClipboardCheck, PackageX, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabCounts } from "@/hooks/use-tab-counts";
 
 const tabs = [
+  { href: "/dashboard", label: "내 현황", icon: BarChart3, countKey: null },
   { href: "/orders", label: "주문", icon: Package, countKey: "orders" as const },
-  { href: "/returns", label: "반품", icon: Undo2, countKey: "returns" as const },
+  { href: "/out-of-stock", label: "품절", icon: PackageX, countKey: "outOfStock" as const },
   { href: "/inspection", label: "검수", icon: ClipboardCheck, countKey: "inspection" as const },
-  { href: "/search", label: "조회", icon: Search, countKey: null },
   { href: "/more", label: "더보기", icon: Menu, countKey: null },
 ];
 
 // 탭바를 표시할 루트 경로들
-const TAB_ROUTES = ["/orders", "/returns", "/inspection", "/search", "/more", "/account", "/price-compare", "/dashboard", "/members", "/logs"];
+const TAB_ROUTES = ["/orders", "/out-of-stock", "/returns", "/inspection", "/search", "/blood", "/more", "/account", "/price-compare", "/dashboard", "/members", "/logs"];
 
 export function useShowBottomNav() {
   const pathname = usePathname();
@@ -35,8 +35,8 @@ export function BottomNav() {
         {tabs.map(({ href, label, icon: Icon, countKey }) => {
           const isActive =
             href === "/more"
-              ? pathname.startsWith("/more") || pathname.startsWith("/account")
-              : pathname.startsWith(href);
+              ? pathname.startsWith("/more") || pathname.startsWith("/account") || pathname.startsWith("/search") || pathname.startsWith("/returns") || pathname.startsWith("/blood")
+              : pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
           const info = countKey ? counts[countKey] : null;
           const count = info?.count ?? 0;
           const hasUrgent = info?.hasUrgent ?? false;
