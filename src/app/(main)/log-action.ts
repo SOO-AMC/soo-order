@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/utils/activity-log";
 
 export async function logClientAction(
@@ -9,18 +9,16 @@ export async function logClientAction(
   description: string,
   metadata?: Record<string, unknown>
 ) {
-  const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return;
+  const { supabase, userId } = await requireUser();
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name")
-    .eq("id", session.user.id)
+    .eq("id", userId)
     .single();
 
   await logActivity({
-    userId: session.user.id,
+    userId,
     userName: profile?.full_name ?? "알 수 없음",
     category,
     action,

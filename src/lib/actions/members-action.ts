@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient, getSessionProfile } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/server";
 
 export interface MemberData {
   id: string;
@@ -10,10 +10,7 @@ export interface MemberData {
 }
 
 export async function fetchMembers(): Promise<MemberData[]> {
-  const { userId } = await getSessionProfile();
-  if (!userId) return [];
-
-  const supabase = await createClient();
+  const { supabase, userId } = await requireAdmin();
   const { data: members } = await supabase
     .from("profiles")
     .select("id, full_name, role, created_at")

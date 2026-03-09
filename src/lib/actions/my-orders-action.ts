@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import type { Order, OrderStatus } from "@/lib/types/order";
 
 export interface MyOrdersData {
@@ -10,14 +10,7 @@ export interface MyOrdersData {
 }
 
 export async function fetchMyOrdersStatus(): Promise<MyOrdersData> {
-  const supabase = await createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) throw new Error("Not authenticated");
-
-  const userId = session.user.id;
+  const { supabase, userId } = await requireUser();
   const myStatuses: OrderStatus[] = ["pending", "ordered", "out_of_stock"];
 
   const [myResult, returnResult, completedResult] = await Promise.all([

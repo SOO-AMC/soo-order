@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/server";
 import { transformRpcResponse } from "@/lib/utils/dashboard";
 import { computeFirebaseAnalytics } from "@/lib/utils/firebase-analytics";
 import type { DashboardData, FirebaseItem, FirebaseAnalyticsData } from "@/lib/types/dashboard";
@@ -20,7 +20,7 @@ function getFirebaseAnalytics(): FirebaseAnalyticsData | null {
 }
 
 export async function fetchDashboardData(): Promise<DashboardData> {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const { data: rpcData, error: rpcError } = await supabase.rpc("get_dashboard_stats");
 
   if (rpcError || !rpcData) {

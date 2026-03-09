@@ -1,26 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/server";
 import type { VendorProductRow } from "@/lib/types/price-compare";
 import { logActivity } from "@/lib/utils/activity-log";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) throw new Error("Unauthorized");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, full_name")
-    .eq("id", session.user.id)
-    .single();
-
-  if (profile?.role !== "admin") throw new Error("Forbidden");
-  return { supabase, userId: session.user.id, userName: profile.full_name ?? "알 수 없음" };
-}
 
 type ActionState = {
   error?: string;
