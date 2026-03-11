@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Check, ClipboardCopy, ShoppingCart } from "lucide-react";
 import { logClientAction } from "@/app/(main)/log-action";
+import { dispatchOrder } from "@/lib/actions/order-mutations";
 
 interface OrderAdminActionProps {
   orderId: string;
@@ -32,33 +32,18 @@ export function OrderAdminAction({ orderId, itemName, quantity, unit }: OrderAdm
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
   const handleOrder = async () => {
     setIsLoading(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        status: "ordered",
-        updated_by: user?.id,
-        vendor_name: vendorName,
-        order_notes: orderNotes.trim(),
-      })
-      .eq("id", orderId);
-
-    if (error) {
+    try {
+      await dispatchOrder(orderId, vendorName, orderNotes);
+      logClientAction("dispatch", "dispatch_single", `${itemName ?? "품목"} 발주 (업체: ${vendorName || "미입력"})`);
+      setOpen(false);
+      router.refresh();
+    } catch {
       setIsLoading(false);
-      return;
     }
-
-    logClientAction("dispatch", "dispatch_single", `${itemName ?? "품목"} 발주 (업체: ${vendorName || "미입력"})`);
-    setOpen(false);
-    router.refresh();
   };
 
   const handleCopyMessage = async () => {

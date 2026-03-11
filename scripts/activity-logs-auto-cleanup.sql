@@ -10,3 +10,4 @@ SELECT cron.schedule(
   '0 3 * * *',
   $$DELETE FROM public.activity_logs WHERE created_at < now() - interval '30 days'$$
 );
+    

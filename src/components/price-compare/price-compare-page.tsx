@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Spinner } from "@/components/ui/spinner";
-import { VendorManagement } from "./vendor-management";
-import { ProductMapping } from "./product-mapping";
 import { ComparisonTable } from "./comparison-table";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 import type {
@@ -26,11 +23,15 @@ export function PriceComparePage() {
   const [data, setData] = useState<PriceCompareData | null>(null);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     fetchPriceCompareData()
       .then(setData)
       .catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
@@ -56,33 +57,12 @@ export function PriceComparePage() {
         </div>
       ) : (
         <div className="p-4">
-          <Tabs defaultValue="comparison" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3 bg-card shadow-card">
-              <TabsTrigger value="comparison">비교표</TabsTrigger>
-              <TabsTrigger value="vendors">업체 관리</TabsTrigger>
-              <TabsTrigger value="mapping">제품 매핑</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="comparison" forceMount className="data-[state=inactive]:hidden">
-              <ComparisonTable
-                vendors={data.vendors}
-                vendorProducts={data.vendorProducts}
-                unifiedProducts={data.unifiedProducts}
-              />
-            </TabsContent>
-
-            <TabsContent value="vendors" forceMount className="data-[state=inactive]:hidden">
-              <VendorManagement vendors={data.vendors} />
-            </TabsContent>
-
-            <TabsContent value="mapping" forceMount className="data-[state=inactive]:hidden">
-              <ProductMapping
-                vendors={data.vendors}
-                vendorProducts={data.vendorProducts}
-                unifiedProducts={data.unifiedProducts}
-              />
-            </TabsContent>
-          </Tabs>
+          <ComparisonTable
+            vendors={data.vendors}
+            vendorProducts={data.vendorProducts}
+            unifiedProducts={data.unifiedProducts}
+            onDataChange={loadData}
+          />
         </div>
       )}
     </div>

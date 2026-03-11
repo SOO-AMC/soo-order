@@ -1,7 +1,7 @@
 export type BloodType = "received" | "sent";
 export type BloodStatus = "pending" | "confirmed";
 export type AnimalType = "dog" | "cat";
-export type SettlementType = "invoice" | "transfer";
+export type SettlementType = "invoice" | "transfer" | "confirm_only";
 
 export interface BloodRecord {
   id: string;
@@ -46,7 +46,10 @@ export const BLOOD_STATUS_LABEL: Record<BloodStatus, string> = {
 export const SETTLEMENT_TYPE_LABEL: Record<SettlementType, string> = {
   invoice: "거래명세서 돌림",
   transfer: "병원으로 입금",
+  confirm_only: "확인",
 };
+
+export const SETTLEMENT_TYPE_RECEIVED_ONLY: SettlementType[] = ["confirm_only"];
 
 export const ANIMAL_TYPE_LABEL: Record<AnimalType, string> = {
   dog: "개",

@@ -33,6 +33,7 @@ import {
   type StaffActionState,
 } from "@/app/(main)/members/actions";
 import { fetchMembers, type MemberData } from "@/lib/actions/members-action";
+import { POSITION_LABEL, type Position } from "@/lib/types/member";
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "관리자",
@@ -58,9 +59,14 @@ export function StaffManagement() {
     setDialogType(type);
   };
 
+  const refreshMembers = () => {
+    fetchMembers().then((data) => setMembers(data));
+  };
+
   const closeDialog = () => {
     setDialogType(null);
     setSelectedMember(null);
+    refreshMembers();
   };
 
   return (
@@ -116,6 +122,11 @@ export function StaffManagement() {
                         <Badge variant={member.role === "admin" ? "default" : "secondary"}>
                           {ROLE_LABEL[member.role] ?? member.role}
                         </Badge>
+                        {member.position && (
+                          <Badge variant="outline">
+                            {POSITION_LABEL[member.position]}
+                          </Badge>
+                        )}
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </CardContent>
@@ -253,6 +264,19 @@ function CreateStaffDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2">
+            <Label>직책</Label>
+            <Select name="position" defaultValue="">
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="직책 선택 (선택사항)" />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.entries(POSITION_LABEL) as [Position, string][]).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           {state.error && (
             <p className="text-sm text-destructive">{state.error}</p>
           )}
@@ -319,6 +343,19 @@ function EditStaffDialog({
               <SelectContent>
                 <SelectItem value="user">일반</SelectItem>
                 <SelectItem value="admin">관리자</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>직책</Label>
+            <Select name="position" defaultValue={member.position ?? ""}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="직책 선택 (선택사항)" />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.entries(POSITION_LABEL) as [Position, string][]).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

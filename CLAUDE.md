@@ -86,7 +86,7 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
   search/             # 조회 (검색/필터/엑셀) + [id]/ 상세
   out-of-stock/       # 품절 관리 (admin, 품절 처리/복구) + [id]/ 상세
   dashboard/          # 대시보드 (admin, 차트)
-  price-compare/      # 가격 비교 (admin, 3탭: 비교표/업체관리/제품매핑)
+  price-compare/      # 가격 비교 (admin, 비교표 + 엑셀 업로드/내보내기)
   members/            # 직원 관리 (admin)
   blood/              # 혈액 대장 (수령/출고 2탭) + [id]/ 상세
     new/
@@ -104,11 +104,13 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
 - **상세 페이지**: 여전히 Server에서 데이터 fetch (SSR, `force-dynamic`)
 
 ### Server Actions (`src/lib/actions/`)
+- `order-mutations.ts`: 주문 발주/검수/품절/취소/반품완료/혈액확인 (모든 admin mutation, `requireAdmin()`)
 - `search-action.ts`: 조회 필터 검색 (클라이언트 상태 기반, `history.replaceState` URL 동기화)
 - `dashboard-action.ts`: 대시보드 RPC + Firebase 분석
 - `price-compare-action.ts`: 업체/제품/통합제품 조회
 - `members-action.ts`: 직원 목록 조회
 - `my-orders-action.ts`: 내 주문 현황 조회
+- `export-orders.ts`: 엑셀 내보내기용 전체 주문 조회
 
 ### 데이터 페칭 패턴
 - **리스트 페이지** (주문/반품/검수): 클라이언트 `fetchOrders()` + Supabase Realtime 구독
@@ -117,9 +119,9 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
 - **상세 페이지**: Server Component에서 SSR
 
 ### Supabase 클라이언트
-- `server.ts`: Server Component/Action용 (async, cookies)
-- `client.ts`: Client Component용 (브라우저, 싱글톤)
-- `admin.ts`: service_role key (RLS 우회, Server Action 전용)
+- `server.ts`: Server Component/Action용 (async, cookies) + `requireUser()` / `requireAdmin()` 헬퍼
+- `client.ts`: Client Component용 (브라우저, 싱글톤) — 읽기 전용, mutation은 Server Action 사용
+- `admin.ts`: service_role key (RLS 우회, 로그 기록 전용)
 
 ### 인증
 - 이름 + 비밀번호 (profiles.full_name → email 조회 → signInWithPassword)
@@ -142,7 +144,7 @@ vercel --prod         # 프로덕션 배포 (Vercel CLI)
 ## DB 스키마
 
 ### profiles
-id, email, full_name, role(admin/user), pharmacy_name, is_active, created_at, updated_at
+id, email, full_name, role(admin/user), pharmacy_name, position(manager/technician/veterinarian/admin_staff), is_active, created_at, updated_at
 
 ### orders
 id, type(order/return), item_name, quantity, unit, status, requester_id, updated_by, vendor_name, confirmed_quantity, invoice_received, inspected_by, inspected_at, photo_urls(text[]), is_urgent, return_quantity, return_reason, return_requested_by, return_requested_at, firebase_id(UNIQUE), created_at, updated_at
@@ -156,10 +158,10 @@ id, name(UNIQUE), created_at, updated_at
 id, vendor_id(FK→vendors), product_name, manufacturer, spec, unit_price, ingredient, category, unified_product_id(FK→unified_products), created_at
 
 ### unified_products
-id, name, mg, tab, quantity, notes, sort_order, created_at, updated_at
+id, name, mg, tab, quantity, notes, remarks, sort_order, created_at, updated_at
 
 ### blood_records
-id, type(received/sent), record_date, hospital_name, animal_type(dog/cat), blood_type, volume_ml, collection_date, receiver, shipper, status(pending/confirmed), settlement_type(invoice/transfer), confirmed_by(FK→profiles), confirmed_at, created_by(FK→profiles), created_at, updated_at, notes
+id, type(received/sent), record_date, hospital_name, animal_type(dog/cat), blood_type, volume_ml, collection_date, receiver, shipper, status(pending/confirmed), settlement_type(invoice/transfer/confirm_only), confirmed_by(FK→profiles), confirmed_at, created_by(FK→profiles), created_at, updated_at, notes
 
 **상태 흐름**: pending (미확인) → confirmed (확인완료, 관리자가 결제 방식 선택)
 
@@ -176,6 +178,8 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 - `order-form.tsx`: 생성/수정 공용
 - `order-status-badge.tsx`: 상태 뱃지 + `StatusLegend` (2열 모바일 / flex PC)
 - `order-admin-action.tsx`: 관리자 개별 발주
+- `vendor-price-popover.tsx`: 업체 드롭다운 + 가격비교 Popover (admin, 모듈레벨 캐시)
+- `item-name-autocomplete.tsx`: 품목명 자동완성 (orders + unified_products 검색)
 - `order-detail-actions.tsx`: 수정/삭제 버튼
 - `photo-picker.tsx` / `photo-gallery.tsx`: 사진 첨부/갤러리
 
@@ -201,7 +205,7 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 - `blood-list-page.tsx`: 수령/출고 2탭 (forceMount)
 - `blood-list.tsx`: 탭별 리스트 (fetch + Realtime, 모바일 카드/PC 테이블)
 - `blood-form.tsx`: 등록/수정 공용 폼
-- `blood-confirm-button.tsx`: 관리자 확인 Dialog (결제 방식 Select)
+- `blood-confirm-button.tsx`: 관리자 확인 Dialog (결제 방식 Select, 수령 탭에만 "확인" 옵션)
 - `blood-status-badge.tsx`: 미확인(노란색)/확인완료(초록색) 배지
 - `blood-delete-button.tsx`: 삭제 Dialog
 
@@ -210,9 +214,8 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 - `search-filter-sheet.tsx`: 다중선택 필터 (상태/긴급/거래명세서 배열)
 
 ### 가격비교
-- `comparison-table.tsx`: 비교표 + 약품/약국 탭 필터 + 최저가 하이라이트 + 엑셀 (auto-width)
-- `product-mapping.tsx`: 통합 제품 CRUD + 매핑
-- `vendor-management.tsx`: 업체 CRUD + 엑셀 업로드
+- `comparison-table.tsx`: 비교표 + 약품/약국 탭 필터 + 최저가 하이라이트 + ㄱㄴㄷ 정렬 + 엑셀 내보내기 (최저가 초록 하이라이트, 브랜드 컬러 헤더)
+- `excel-upload-dialog.tsx`: 드래그앤드롭 업로드 + 양식 다운로드 + 기존 데이터 비교 + 덮어쓰기/병합 선택
 
 ### 활동 로그
 - `activity-log-list.tsx`: 카테고리 탭 + 검색 + 날짜 필터 + 더보기 (cursor 기반)
@@ -223,8 +226,10 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 ### 유틸
 - `src/hooks/use-auth.ts`: AuthProvider, useAuth(), useIsAdmin() — Layout에서 제공하는 auth context
 - `src/lib/types/order.ts`: Order, OrderWithRequester, ORDER_STATUS_LABEL, ORDER_TYPE_LABEL
-- `src/lib/types/blood.ts`: BloodRecord, BloodRecordWithCreator, BLOOD_TYPE_LABEL, BLOOD_STATUS_LABEL
+- `src/lib/types/blood.ts`: BloodRecord, BloodRecordWithCreator, BLOOD_TYPE_LABEL, BLOOD_STATUS_LABEL, SETTLEMENT_TYPE_LABEL
+- `src/lib/types/member.ts`: Position, POSITION_LABEL
 - `src/lib/types/price-compare.ts`: Vendor, VendorProduct, UnifiedProduct
+- `src/lib/utils/parse-price-excel.ts`: parsePriceExcel() — 통합 엑셀 파서 (헤더 자동 감지)
 - `src/lib/types/dashboard.ts`: DashboardData, FirebaseItem 등
 - `src/lib/utils/search-params.ts`: SearchFilters (다중선택 배열), URL 직렬화, parseSearchParams
 - `src/lib/utils/format.ts`: formatDate, formatDateTime, toKSTDateString
@@ -235,7 +240,7 @@ id, user_id(FK→profiles), user_name, category, action, description, metadata(J
 - `src/lib/queries/search-orders.ts`: fetchSearchOrders(), fetchAllSearchOrders()
 
 ### UI 컴포넌트 (shadcn/ui)
-badge, button, card, checkbox, chart, dialog, input, label, select, separator, sheet, spinner, table, tabs
+badge, button, card, checkbox, chart, dialog, input, label, popover, select, separator, sheet, spinner, table, tabs
 
 ### tabs 컴포넌트 특이사항
 - 커스텀 슬라이딩 인디케이터 (MutationObserver + rAF throttled resize)
@@ -248,6 +253,7 @@ badge, button, card, checkbox, chart, dialog, input, label, select, separator, s
 - `scripts/migrate-blood-records.sql`: blood_records 테이블 생성 SQL
 - `scripts/activity-logs-auto-cleanup.sql`: activity_logs 자동 정리 SQL
 - `scripts/update-remarks.ts`: 비고 데이터 업데이트 스크립트
+- `scripts/migrate-position.sql`: profiles.position 컬럼 추가 SQL
 
 ## Firestore → Supabase 동기화
 - Cloud Functions 2nd Gen (`functions/src/index.ts`)

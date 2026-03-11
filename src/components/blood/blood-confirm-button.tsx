@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,20 +22,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { logClientAction } from "@/app/(main)/log-action";
-import { SETTLEMENT_TYPE_LABEL, type SettlementType } from "@/lib/types/blood";
+import { SETTLEMENT_TYPE_LABEL, SETTLEMENT_TYPE_RECEIVED_ONLY, type BloodType, type SettlementType } from "@/lib/types/blood";
+import { confirmBloodRecord } from "@/lib/actions/order-mutations";
 
 interface BloodConfirmButtonProps {
   recordId: string;
   hospitalName: string;
+  recordType: BloodType;
 }
 
-export function BloodConfirmButton({ recordId, hospitalName }: BloodConfirmButtonProps) {
+export function BloodConfirmButton({ recordId, hospitalName, recordType }: BloodConfirmButtonProps) {
   const [open, setOpen] = useState(false);
   const [settlementType, setSettlementType] = useState<SettlementType | "">("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
-  const supabase = createClient();
 
   const handleConfirm = async () => {
     if (!settlementType) {
@@ -47,29 +47,15 @@ export function BloodConfirmButton({ recordId, hospitalName }: BloodConfirmButto
     setError("");
     setIsProcessing(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { error: updateError } = await supabase
-      .from("blood_records")
-      .update({
-        status: "confirmed",
-        settlement_type: settlementType,
-        confirmed_by: user?.id,
-        confirmed_at: new Date().toISOString(),
-      })
-      .eq("id", recordId);
-
-    if (updateError) {
+    try {
+      await confirmBloodRecord(recordId, settlementType);
+      logClientAction("blood", "confirm_blood", `${hospitalName} 혈액 기록 확인 (${SETTLEMENT_TYPE_LABEL[settlementType as SettlementType]})`);
+      setOpen(false);
+      router.push("/blood");
+    } catch {
       setError("처리에 실패했습니다.");
       setIsProcessing(false);
-      return;
     }
-
-    logClientAction("blood", "confirm_blood", `${hospitalName} 혈액 기록 확인 (${SETTLEMENT_TYPE_LABEL[settlementType as SettlementType]})`);
-    setOpen(false);
-    router.push("/blood");
   };
 
   return (
@@ -95,7 +81,9 @@ export function BloodConfirmButton({ recordId, hospitalName }: BloodConfirmButto
                   <SelectValue placeholder="결제 방식 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(SETTLEMENT_TYPE_LABEL).map(([value, label]) => (
+                  {Object.entries(SETTLEMENT_TYPE_LABEL)
+                    .filter(([value]) => recordType === "received" || !SETTLEMENT_TYPE_RECEIVED_ONLY.includes(value as SettlementType))
+                    .map(([value, label]) => (
                     <SelectItem key={value} value={value}>{label}</SelectItem>
                   ))}
                 </SelectContent>

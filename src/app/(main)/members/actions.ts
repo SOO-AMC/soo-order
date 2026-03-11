@@ -20,6 +20,7 @@ export async function createStaff(
   const name = (formData.get("name") as string)?.trim();
   const password = formData.get("password") as string;
   const role = (formData.get("role") as string) || "user";
+  const position = (formData.get("position") as string) || null;
 
   if (!name || !password) {
     return { error: "이름과 비밀번호를 입력해주세요." };
@@ -54,11 +55,14 @@ export async function createStaff(
     return { error: `계정 생성 실패: ${error.message}` };
   }
 
-  // role 업데이트 (기본값 user, admin이면 변경)
-  if (role === "admin" && data.user) {
+  // profile 업데이트 (role, position)
+  if (data.user && (role === "admin" || position)) {
     await adminClient
       .from("profiles")
-      .update({ role: "admin" })
+      .update({
+        ...(role === "admin" ? { role: "admin" } : {}),
+        ...(position ? { position } : {}),
+      })
       .eq("id", data.user.id);
   }
 
@@ -76,6 +80,7 @@ export async function updateStaff(
   const userId = formData.get("userId") as string;
   const newName = (formData.get("name") as string)?.trim();
   const newRole = formData.get("role") as string;
+  const newPosition = (formData.get("position") as string) || null;
 
   if (!userId || !newName) {
     return { error: "필수 항목을 입력해주세요." };
@@ -98,7 +103,7 @@ export async function updateStaff(
   // profiles 업데이트
   const { error: profileError } = await adminClient
     .from("profiles")
-    .update({ full_name: newName, role: newRole })
+    .update({ full_name: newName, role: newRole, position: newPosition })
     .eq("id", userId);
 
   if (profileError) {

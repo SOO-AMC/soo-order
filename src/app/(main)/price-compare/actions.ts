@@ -186,6 +186,193 @@ export async function deleteUnifiedProduct(id: string, productName?: string): Pr
   return { success: true };
 }
 
+// --- 통합 엑셀 업로드 ---
+
+interface PriceUploadProduct {
+  category: string;
+  name: string;
+  quantity: string;
+  remarks: string;
+  vendorPrices: Record<string, number | null>;
+}
+
+export async function uploadPriceExcel(
+  products: PriceUploadProduct[],
+  vendorNames: string[],
+  mode: "overwrite" | "merge"
+): Promise<ActionState> {
+  const { supabase, userId, userName } = await requireAdmin();
+
+  if (products.length === 0) return { error: "업로드할 제품이 없습니다." };
+
+  // 1. vendors: 기존 조회 + 새 업체 생성
+  const { data: existingVendors } = await supabase.from("vendors").select("id, name");
+  const vendorMap = new Map<string, string>();
+  for (const v of existingVendors ?? []) {
+    vendorMap.set(v.name, v.id);
+  }
+
+  for (const name of vendorNames) {
+    if (!vendorMap.has(name)) {
+      const { data: newVendor, error } = await supabase
+        .from("vendors")
+        .insert({ name })
+        .select("id")
+        .single();
+      if (error) return { error: `업체 생성 실패 (${name}): ${error.message}` };
+      vendorMap.set(name, newVendor.id);
+    }
+  }
+
+  // 2. 덮어쓰기 모드: 기존 데이터 삭제
+  if (mode === "overwrite") {
+    await supabase.from("vendor_products").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    await supabase.from("unified_products").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  }
+
+  // 3. 병합 모드: 기존 unified_products name → id 맵
+  const existingUnifiedMap = new Map<string, string>();
+  if (mode === "merge") {
+    const { data: existing } = await supabase.from("unified_products").select("id, name");
+    for (const u of existing ?? []) {
+      existingUnifiedMap.set(u.name, u.id);
+    }
+  }
+
+  // 4. unified_products 생성/업데이트 — 제품명 기준 deduplicate (마지막 항목 우선)
+  const { data: maxRow } = await supabase
+    .from("unified_products")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .single();
+  let nextOrder = (maxRow?.sort_order ?? 0) + 1;
+
+  const deduped = new Map<string, typeof products[number]>();
+  for (const p of products) {
+    deduped.set(p.name, p);
+  }
+
+  const BATCH_SIZE = 500;
+  const unifiedIds = new Map<string, string>();
+
+  // 기존 항목 업데이트
+  const updateRows = [...deduped.values()]
+    .filter((p) => existingUnifiedMap.has(p.name))
+    .map((p) => ({
+      id: existingUnifiedMap.get(p.name)!,
+      name: p.name,
+      mg: "",
+      tab: "",
+      quantity: p.quantity,
+      notes: p.category,
+      remarks: p.remarks,
+      sort_order: nextOrder++,
+    }));
+
+  for (let i = 0; i < updateRows.length; i += BATCH_SIZE) {
+    const batch = updateRows.slice(i, i + BATCH_SIZE);
+    const { data: upserted, error } = await supabase
+      .from("unified_products")
+      .upsert(batch, { onConflict: "id" })
+      .select("id, name");
+    if (error) return { error: `통합제품 업데이트 실패: ${error.message}` };
+    for (const u of upserted ?? []) {
+      unifiedIds.set(u.name, u.id);
+    }
+  }
+
+  // 신규 항목 삽입
+  const insertRows = [...deduped.values()]
+    .filter((p) => !existingUnifiedMap.has(p.name))
+    .map((p) => ({
+      name: p.name,
+      mg: "",
+      tab: "",
+      quantity: p.quantity,
+      notes: p.category,
+      remarks: p.remarks,
+      sort_order: nextOrder++,
+    }));
+
+  for (let i = 0; i < insertRows.length; i += BATCH_SIZE) {
+    const batch = insertRows.slice(i, i + BATCH_SIZE);
+    const { data: inserted, error } = await supabase
+      .from("unified_products")
+      .insert(batch)
+      .select("id, name");
+    if (error) return { error: `통합제품 신규 저장 실패: ${error.message}` };
+    for (const u of inserted ?? []) {
+      unifiedIds.set(u.name, u.id);
+    }
+  }
+
+  // 기존 항목 중 upsert 응답에 누락된 ID 보충
+  for (const [name, id] of existingUnifiedMap) {
+    if (!unifiedIds.has(name)) {
+      unifiedIds.set(name, id);
+    }
+  }
+
+  // 5. vendor_products 생성
+  // 병합 모드: 해당 업체의 기존 제품 중 이번 업로드 unified에 매핑된 것 삭제
+  if (mode === "merge") {
+    const uploadedUnifiedIds = [...unifiedIds.values()];
+    for (const vendorName of vendorNames) {
+      const vendorId = vendorMap.get(vendorName);
+      if (!vendorId) continue;
+      await supabase
+        .from("vendor_products")
+        .delete()
+        .eq("vendor_id", vendorId)
+        .in("unified_product_id", uploadedUnifiedIds);
+    }
+  }
+
+  const vendorProductRows: {
+    vendor_id: string;
+    product_name: string;
+    manufacturer: string;
+    spec: string;
+    unit_price: number | null;
+    ingredient: string;
+    category: string;
+    unified_product_id: string | null;
+  }[] = [];
+
+  for (const p of products) {
+    const unifiedId = unifiedIds.get(p.name) ?? null;
+    for (const vendorName of vendorNames) {
+      const vendorId = vendorMap.get(vendorName);
+      if (!vendorId) continue;
+      const price = p.vendorPrices[vendorName] ?? null;
+      vendorProductRows.push({
+        vendor_id: vendorId,
+        product_name: p.name,
+        manufacturer: "",
+        spec: "",
+        unit_price: price,
+        ingredient: "",
+        category: p.category,
+        unified_product_id: unifiedId,
+      });
+    }
+  }
+
+  for (let i = 0; i < vendorProductRows.length; i += BATCH_SIZE) {
+    const batch = vendorProductRows.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from("vendor_products").insert(batch);
+    if (error) return { error: `업체 제품 저장 실패: ${error.message}` };
+  }
+
+  await logActivity({
+    userId, userName, category: "price", action: "upload_price_excel",
+    description: `통합 엑셀 업로드 (${mode === "overwrite" ? "덮어쓰기" : "병합"}, ${products.length}개 제품, ${vendorNames.length}개 업체)`,
+  });
+  revalidatePath("/price-compare");
+  return { success: true };
+}
+
 // --- Mapping ---
 
 export async function mapProduct(

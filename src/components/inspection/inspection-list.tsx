@@ -29,6 +29,7 @@ import { OrderStatusBadge, StatusLegend } from "@/components/orders/order-status
 import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
+import { bulkInspectOrders, bulkMarkOutOfStock } from "@/lib/actions/order-mutations";
 
 interface InspectionData {
   confirmed_quantity: number;
@@ -171,38 +172,27 @@ export function InspectionList() {
 
     setIsProcessing(true);
 
-    const now = new Date().toISOString();
+    try {
+      const items = [...selectedIds].map((id) => {
+        const order = orders.find((o) => o.id === id)!;
+        const data = getInspectionData(order);
+        return {
+          id,
+          confirmedQuantity: data.confirmed_quantity,
+          invoiceReceived: data.invoice_received!,
+          inspectionNotes: data.inspection_notes,
+        };
+      });
 
-    const updates = [...selectedIds].map((id) => {
-      const order = orders.find((o) => o.id === id)!;
-      const data = getInspectionData(order);
-
-      return supabase
-        .from("orders")
-        .update({
-          status: "inspecting",
-          confirmed_quantity: data.confirmed_quantity,
-          invoice_received: data.invoice_received,
-          inspection_notes: data.inspection_notes.trim(),
-          inspected_by: currentUserId,
-          inspected_at: now,
-        })
-        .eq("id", id);
-    });
-
-    const results = await Promise.all(updates);
-    const failed = results.find((r) => r.error);
-
-    if (failed) {
+      await bulkInspectOrders(items);
+      logClientAction("inspection", "inspect_bulk", `${selectedIds.size}건 일괄 검수`);
+      setSelectedIds(new Set());
+      setInspectionData({});
       setIsProcessing(false);
-      return;
+      await fetchOrders();
+    } catch {
+      setIsProcessing(false);
     }
-
-    logClientAction("inspection", "inspect_bulk", `${selectedIds.size}건 일괄 검수`);
-    setSelectedIds(new Set());
-    setInspectionData({});
-    setIsProcessing(false);
-    await fetchOrders();
   };
 
   const handleBulkOutOfStock = async () => {
@@ -211,26 +201,16 @@ export function InspectionList() {
 
     setIsProcessing(true);
 
-    const updates = [...selectedIds].map((id) =>
-      supabase
-        .from("orders")
-        .update({ status: "out_of_stock" })
-        .eq("id", id)
-    );
-
-    const results = await Promise.all(updates);
-    const failed = results.find((r) => r.error);
-
-    if (failed) {
+    try {
+      await bulkMarkOutOfStock([...selectedIds]);
+      logClientAction("inspection", "out_of_stock_bulk", `${selectedIds.size}건 일괄 품절`);
+      setSelectedIds(new Set());
+      setInspectionData({});
       setIsProcessing(false);
-      return;
+      await fetchOrders();
+    } catch {
+      setIsProcessing(false);
     }
-
-    logClientAction("inspection", "out_of_stock_bulk", `${selectedIds.size}건 일괄 품절`);
-    setSelectedIds(new Set());
-    setInspectionData({});
-    setIsProcessing(false);
-    await fetchOrders();
   };
 
   if (isLoading) {

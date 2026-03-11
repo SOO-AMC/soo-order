@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, Download } from "lucide-react";
+import { Search, Upload, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ExcelUploadDialog } from "./excel-upload-dialog";
 import {
   Table,
   TableBody,
@@ -24,6 +25,7 @@ interface ComparisonTableProps {
   vendors: Vendor[];
   vendorProducts: VendorProduct[];
   unifiedProducts: UnifiedProduct[];
+  onDataChange: () => void;
 }
 
 interface ComparisonRow {
@@ -36,9 +38,11 @@ export function ComparisonTable({
   vendors,
   vendorProducts,
   unifiedProducts,
+  onDataChange,
 }: ComparisonTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   // Build index: unified_product_id → VendorProduct[]
   const productsByUnified = useMemo(() => {
@@ -53,8 +57,11 @@ export function ComparisonTable({
   }, [vendorProducts]);
 
   const rows: ComparisonRow[] = useMemo(() => {
-    // Data arrives pre-sorted by sort_order from server
-    return unifiedProducts.map((unified) => {
+    // 제품명 ㄱㄴㄷ순 정렬
+    const sorted = [...unifiedProducts].sort((a, b) =>
+      a.name.localeCompare(b.name, "ko")
+    );
+    return sorted.map((unified) => {
       const mapped = productsByUnified.get(unified.id) ?? [];
       const prices = new Map<string, { price: number | null; productName: string }>();
 
@@ -99,77 +106,151 @@ export function ComparisonTable({
     return result;
   }, [rows, searchQuery, categoryFilter]);
 
-  const handleExcelDownload = async () => {
+  const handleTemplateDownload = async (includeData: boolean) => {
     const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("가격비교");
 
-    // 헤더
-    const headers = ["구분", "제품명", "수량", ...vendors.map((v) => v.name), "비고"];
+    // --- 색상 팔레트 ---
+    const colors = {
+      headerBg: "FF2563EB",
+      headerFont: "FFFFFFFF",
+      categoryBg: "FFF1F5F9",
+      minPriceBg: "FFDCFCE7",
+      minPriceFont: "FF166534",
+      borderLight: "FFE2E8F0",
+      borderHeader: "FF1D4ED8",
+      altRowBg: "FFF8FAFC",
+    };
+
+    const thinBorder = {
+      top: { style: "thin" as const, color: { argb: colors.borderLight } },
+      bottom: { style: "thin" as const, color: { argb: colors.borderLight } },
+      left: { style: "thin" as const, color: { argb: colors.borderLight } },
+      right: { style: "thin" as const, color: { argb: colors.borderLight } },
+    };
+
+    const vendorHeaders = includeData && vendors.length > 0
+      ? vendors.map((v) => v.name)
+      : ["업체1", "업체2", "업체3"];
+    const headers = ["구분", "제품명", "수량", "비고", ...vendorHeaders];
+
+    // --- 타이틀 행 ---
+    if (includeData) {
+      const yymmdd = toKSTDateString(new Date().toISOString()).slice(2).replace(/-/g, "");
+      const titleRow = sheet.addRow([`단가 비교표 (${yymmdd})`]);
+      sheet.mergeCells(1, 1, 1, headers.length);
+      titleRow.height = 32;
+      const titleCell = titleRow.getCell(1);
+      titleCell.font = { bold: true, size: 14, color: { argb: colors.headerBg } };
+      titleCell.alignment = { vertical: "middle" };
+    }
+
+    // --- 헤더 행 ---
     const headerRow = sheet.addRow(headers);
-    headerRow.eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFE8F4FD" },
-      };
+    headerRow.height = 28;
+    headerRow.eachCell((cell, colNumber) => {
+      cell.font = { bold: true, size: 10, color: { argb: colors.headerFont } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.headerBg } };
+      cell.alignment = { vertical: "middle", horizontal: colNumber >= 5 ? "right" : "center" };
       cell.border = {
-        bottom: { style: "thin" },
+        top: { style: "thin" as const, color: { argb: colors.borderHeader } },
+        bottom: { style: "medium" as const, color: { argb: colors.borderHeader } },
+        left: { style: "thin" as const, color: { argb: colors.borderHeader } },
+        right: { style: "thin" as const, color: { argb: colors.borderHeader } },
       };
     });
 
-    // 데이터
-    for (const row of rows) {
-      const values: (string | number | null)[] = [
-        row.unified.notes || "",
-        row.unified.name,
-        row.unified.quantity || null,
-      ];
-      for (const vendor of vendors) {
-        const entry = row.prices.get(vendor.id);
-        values.push(entry?.price ?? null);
-      }
-      values.push(row.unified.remarks || "");
-      const dataRow = sheet.addRow(values);
+    // --- 데이터 행 ---
+    if (includeData) {
+      const vendorStartCol = 5; // E열부터 업체 가격
 
-      // 최저가 하이라이트
-      if (row.minPrice != null) {
-        for (let i = 0; i < vendors.length; i++) {
-          const entry = row.prices.get(vendors[i].id);
-          if (entry?.price === row.minPrice) {
-            const cell = dataRow.getCell(4 + i);
-            cell.fill = {
-              type: "pattern",
-              pattern: "solid",
-              fgColor: { argb: "FFD4EDDA" },
-            };
+      for (let ri = 0; ri < rows.length; ri++) {
+        const row = rows[ri];
+        const values: (string | number | null)[] = [
+          row.unified.notes || "",
+          row.unified.name,
+          row.unified.quantity || "",
+          row.unified.remarks || "",
+        ];
+        for (const vendor of vendors) {
+          const entry = row.prices.get(vendor.id);
+          values.push(entry?.price ?? null);
+        }
+
+        const dataRow = sheet.addRow(values);
+        dataRow.height = 22;
+        const isAlt = ri % 2 === 1;
+
+        dataRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          cell.border = thinBorder;
+          cell.font = { size: 10 };
+          cell.alignment = { vertical: "middle" };
+
+          // 구분 열 스타일
+          if (colNumber === 1) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.categoryBg } };
+            cell.alignment = { vertical: "middle", horizontal: "center" };
+            cell.font = { size: 9, color: { argb: "FF64748B" } };
+          }
+          // 제품명 열
+          else if (colNumber === 2) {
+            cell.font = { size: 10, bold: true };
+            if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
+          }
+          // 업체 가격 열
+          else if (colNumber >= vendorStartCol) {
+            cell.alignment = { vertical: "middle", horizontal: "right" };
+            if (cell.value != null && typeof cell.value === "number") {
+              cell.numFmt = "#,##0";
+            }
+            if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
+          }
+          // 나머지 열
+          else {
+            cell.alignment = { vertical: "middle", horizontal: "center" };
+            if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
+          }
+        });
+
+        // 최저가 하이라이트
+        if (row.minPrice != null) {
+          for (let vi = 0; vi < vendors.length; vi++) {
+            const entry = row.prices.get(vendors[vi].id);
+            if (entry?.price === row.minPrice) {
+              const cell = dataRow.getCell(vendorStartCol + vi);
+              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.minPriceBg } };
+              cell.font = { size: 10, bold: true, color: { argb: colors.minPriceFont } };
+            }
           }
         }
       }
     }
 
-    // 컬럼 너비 자동 조정
-    sheet.columns.forEach((col) => {
+    // --- 열 너비 자동 조정 ---
+    sheet.columns.forEach((col, idx) => {
       let maxLen = 0;
-      col.eachCell?.({ includeEmpty: true }, (cell) => {
+      col.eachCell?.({ includeEmpty: true }, (cell, rowNumber) => {
+        // 타이틀 행(merged) 제외
+        if (includeData && rowNumber === 1) return;
         const val = cell.value != null ? String(cell.value) : "";
         let len = 0;
-        for (const ch of val) len += ch.charCodeAt(0) > 127 ? 2 : 1;
+        for (const ch of val) len += ch.charCodeAt(0) > 127 ? 2.2 : 1;
         if (len > maxLen) maxLen = len;
       });
-      col.width = Math.max(8, maxLen + 3);
+      col.width = Math.max(idx === 1 ? 16 : 10, maxLen + 4);
     });
 
+    // --- 시트 설정 ---
+    sheet.views = [{ state: "frozen", ySplit: includeData ? 2 : 1, xSplit: 2 }];
+
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     const yymmdd = toKSTDateString(new Date().toISOString()).slice(2).replace(/-/g, "");
-    a.download = `단가비교_${yymmdd}.xlsx`;
+    a.download = includeData ? `단가비교_${yymmdd}.xlsx` : `단가비교_양식.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -186,11 +267,21 @@ export function ComparisonTable({
             className="pl-9 bg-card"
           />
         </div>
-        <Button variant="outline" size="sm" className="bg-card" onClick={handleExcelDownload}>
-          <Download className="h-4 w-4 mr-1" />
-          엑셀
+        <Button variant="outline" size="sm" className="bg-card" onClick={() => setUploadOpen(true)}>
+          <Upload className="h-4 w-4 mr-1" />
+          업로드
+        </Button>
+        <Button variant="outline" size="sm" className="bg-card" onClick={() => handleTemplateDownload(rows.length > 0)}>
+          <FileDown className="h-4 w-4 mr-1" />
+          {rows.length > 0 ? "내보내기" : "양식"}
         </Button>
       </div>
+
+      <ExcelUploadDialog
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onSuccess={onDataChange}
+      />
 
       <Tabs value={categoryFilter} onValueChange={setCategoryFilter}>
         <TabsList>

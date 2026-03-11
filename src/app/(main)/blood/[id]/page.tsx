@@ -169,6 +169,7 @@ export default async function BloodDetailPage({
               <BloodConfirmButton
                 recordId={record.id}
                 hospitalName={record.hospital_name}
+                recordType={record.type}
               />
             </>
           )}

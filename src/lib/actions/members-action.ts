@@ -1,11 +1,13 @@
 "use server";
 
 import { requireAdmin } from "@/lib/supabase/server";
+import type { Position } from "@/lib/types/member";
 
 export interface MemberData {
   id: string;
   full_name: string;
   role: string;
+  position: Position | null;
   created_at: string;
 }
 
@@ -13,7 +15,7 @@ export async function fetchMembers(): Promise<MemberData[]> {
   const { supabase, userId } = await requireAdmin();
   const { data: members } = await supabase
     .from("profiles")
-    .select("id, full_name, role, created_at")
+    .select("id, full_name, role, position, created_at")
     .neq("id", userId)
     .eq("is_active", true)
     .order("role", { ascending: true })

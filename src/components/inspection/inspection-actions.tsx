@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +26,12 @@ import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 import { ClipboardCheck, PackageX, Pencil, X } from "lucide-react";
 import { logClientAction } from "@/app/(main)/log-action";
+import {
+  inspectOrder,
+  markOutOfStock,
+  revertOrderToPending,
+  deleteOrder,
+} from "@/lib/actions/order-mutations";
 
 interface InspectionActionsProps {
   orderId: string;
@@ -59,7 +64,6 @@ export function InspectionActions({
   const [isCanceling, setIsCanceling] = useState(false);
 
   const router = useRouter();
-  const supabase = createClient();
 
   const handleInspect = async () => {
     if (!invoiceReceived) {
@@ -70,83 +74,50 @@ export function InspectionActions({
     setInspectError("");
     setIsInspecting(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        status: "inspecting",
-        confirmed_quantity: confirmedQuantity,
-        invoice_received: invoiceReceived === "received",
-        inspection_notes: inspectionNotes.trim(),
-        inspected_by: user?.id,
-        inspected_at: new Date().toISOString(),
-      })
-      .eq("id", orderId);
-
-    if (error) {
+    try {
+      await inspectOrder(
+        orderId,
+        confirmedQuantity,
+        invoiceReceived === "received",
+        inspectionNotes,
+      );
+      logClientAction("inspection", "inspect", `${itemName ?? "품목"} 검수 완료`);
+      setInspectOpen(false);
+      router.push("/inspection");
+    } catch {
       setIsInspecting(false);
-      return;
     }
-
-    logClientAction("inspection", "inspect", `${itemName ?? "품목"} 검수 완료`);
-    setInspectOpen(false);
-    router.push("/inspection");
   };
 
   const handleOutOfStock = async () => {
     setIsOutOfStocking(true);
 
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        status: "out_of_stock",
-        order_notes: outOfStockReason.trim() || null,
-      })
-      .eq("id", orderId);
-
-    if (error) {
+    try {
+      await markOutOfStock(orderId, outOfStockReason);
+      logClientAction("inspection", "out_of_stock", `${itemName ?? "품목"} 품절 처리${outOfStockReason.trim() ? ` (사유: ${outOfStockReason.trim()})` : ""}`);
+      setOutOfStockOpen(false);
+      router.push("/inspection");
+    } catch {
       setIsOutOfStocking(false);
-      return;
     }
-
-    logClientAction("inspection", "out_of_stock", `${itemName ?? "품목"} 품절 처리${outOfStockReason.trim() ? ` (사유: ${outOfStockReason.trim()})` : ""}`);
-    setOutOfStockOpen(false);
-    router.push("/inspection");
   };
 
   const handleCancel = async (action: "revert" | "delete") => {
     setIsCanceling(true);
 
-    if (action === "delete") {
-      const { error } = await supabase
-        .from("orders")
-        .delete()
-        .eq("id", orderId);
-
-      if (error) {
-        setIsCanceling(false);
-        setCancelOpen(false);
-        return;
+    try {
+      if (action === "delete") {
+        await deleteOrder(orderId);
+        logClientAction("order", "delete_order", `${itemName ?? "품목"} 주문 삭제`);
+      } else {
+        await revertOrderToPending(orderId);
+        logClientAction("dispatch", "cancel_dispatch", `${itemName ?? "품목"} 발주 취소 (주문신청으로 되돌리기)`);
       }
-      logClientAction("order", "delete_order", `${itemName ?? "품목"} 주문 삭제`);
-    } else {
-      const { error } = await supabase
-        .from("orders")
-        .update({ status: "pending" })
-        .eq("id", orderId);
-
-      if (error) {
-        setIsCanceling(false);
-        setCancelOpen(false);
-        return;
-      }
-      logClientAction("dispatch", "cancel_dispatch", `${itemName ?? "품목"} 발주 취소 (주문신청으로 되돌리기)`);
+      router.push("/inspection");
+    } catch {
+      setIsCanceling(false);
+      setCancelOpen(false);
     }
-
-    router.push("/inspection");
   };
 
   return (

@@ -30,18 +30,26 @@ export function ItemNameAutocomplete({
     }
 
     timerRef.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from("orders")
-        .select("item_name")
-        .ilike("item_name", `%${value}%`)
-        .order("item_name")
-        .limit(20);
+      const [ordersRes, unifiedRes] = await Promise.all([
+        supabase
+          .from("orders")
+          .select("item_name")
+          .ilike("item_name", `%${value}%`)
+          .order("item_name")
+          .limit(20),
+        supabase
+          .from("unified_products")
+          .select("name")
+          .ilike("name", `%${value}%`)
+          .order("name")
+          .limit(20),
+      ]);
 
-      if (data) {
-        const unique = [...new Set(data.map((d) => d.item_name))];
-        setSuggestions(unique);
-        setOpen(unique.length > 0);
-      }
+      const orderNames = (ordersRes.data ?? []).map((d) => d.item_name);
+      const unifiedNames = (unifiedRes.data ?? []).map((d) => d.name);
+      const unique = [...new Set([...unifiedNames, ...orderNames])].slice(0, 20);
+      setSuggestions(unique);
+      setOpen(unique.length > 0);
     }, 300);
 
     return () => {

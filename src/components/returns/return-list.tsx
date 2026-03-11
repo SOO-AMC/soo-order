@@ -21,6 +21,7 @@ import { OrderStatusBadge, StatusLegend } from "@/components/orders/order-status
 import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
+import { bulkCompleteReturn } from "@/lib/actions/order-mutations";
 
 export function ReturnList() {
   const { userId: currentUserId } = useAuth();
@@ -105,25 +106,15 @@ export function ReturnList() {
     if (selectedIds.size === 0) return;
     setIsProcessing(true);
 
-    const updates = [...selectedIds].map((id) =>
-      supabase
-        .from("orders")
-        .update({ status: "return_completed", updated_by: currentUserId })
-        .eq("id", id)
-    );
-
-    const results = await Promise.all(updates);
-    const failed = results.find((r) => r.error);
-
-    if (failed) {
+    try {
+      await bulkCompleteReturn([...selectedIds]);
+      logClientAction("return", "complete_return_bulk", `${selectedIds.size}건 일괄 반품 완료`);
+      setSelectedIds(new Set());
       setIsProcessing(false);
-      return;
+      await fetchOrders();
+    } catch {
+      setIsProcessing(false);
     }
-
-    logClientAction("return", "complete_return_bulk", `${selectedIds.size}건 일괄 반품 완료`);
-    setSelectedIds(new Set());
-    setIsProcessing(false);
-    await fetchOrders();
   };
 
   if (isLoading) {
