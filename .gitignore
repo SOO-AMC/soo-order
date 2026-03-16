@@ -49,3 +49,6 @@ next-env.d.ts
 # serwist generated service worker
 public/sw*
 public/swe-worker*
+
+# claude code (personal files)
+.claude/settings.local.json
