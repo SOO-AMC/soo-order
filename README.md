@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 수오더 (soo-order)
 
-## Getting Started
+의약품 주문 및 검수 관리 PWA 웹 애플리케이션
 
-First, run the development server:
+간호사들이 매일 재고 체크 후 의약품 주문/반품 요청을 하고, 관리자가 발주 및 검수를 관리합니다.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router) + TypeScript
+- **Backend/DB**: Supabase (Auth + PostgreSQL + Storage + Realtime)
+- **UI**: shadcn/ui + Tailwind CSS v4
+- **Charts**: Recharts
+- **PWA**: Serwist
+- **Excel**: ExcelJS
+- **Package Manager**: pnpm
+
+## 주요 기능
+
+- **주문 관리**: 의약품 주문 신청, 긴급 주문, 사진 첨부
+- **발주/검수**: 관리자 일괄 발주, 검수 완료 처리
+- **반품 관리**: 반품 신청 및 완료 처리
+- **품절 관리**: 품절 처리/복구
+- **가격 비교**: 업체별 단가 비교표, 엑셀 업로드/내보내기
+- **혈액 대장**: 혈액 수령/출고 기록 관리
+- **대시보드**: 주문 현황 및 통계
+- **직원 관리**: 계정 생성 및 권한 관리
+- **활동 로그**: 전체 활동 이력 추적
+
+## 시작하기
+
+### 환경변수
+
+`.env.local` 파일을 생성하고 다음 변수를 설정합니다:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 개발 서버
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm install
+pnpm dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 프로덕션 빌드
 
-## Learn More
+```bash
+pnpm build
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 배포
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+vercel --prod
+```
