@@ -1,6 +1,7 @@
 export interface Vendor {
   id: string;
   name: string;
+  discount_rate: number;
   created_at: string;
   updated_at: string;
 }

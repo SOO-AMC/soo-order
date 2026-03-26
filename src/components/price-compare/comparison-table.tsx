@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useState, useMemo, useCallback } from "react";
-import { Search, Upload, FileDown, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Fragment, useState, useMemo, useCallback, useEffect } from "react";
+import { Search, Upload, FileDown, ChevronDown, ChevronUp, Plus, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/table";
 import { toKSTDateString } from "@/lib/utils/format";
 import { useAuth } from "@/hooks/use-auth";
-import { createUnifiedProduct, updateUnifiedProduct, upsertVendorPrice } from "@/app/(main)/price-compare/actions";
+import { createUnifiedProduct, updateUnifiedProduct, upsertVendorPrice, updateVendorDiscountRate } from "@/app/(main)/price-compare/actions";
 import type {
   Vendor,
   VendorProduct,
@@ -50,6 +50,18 @@ interface EditForm {
   prices: Record<string, string>; // vendorId → price string
 }
 
+function applyDiscount(price: number | null, rate: number): number | null {
+  if (price == null) return null;
+  if (!rate) return price;
+  return Math.round(price * (1 - rate / 100));
+}
+
+function reverseDiscount(price: number | null, rate: number): number | null {
+  if (price == null) return null;
+  if (!rate) return price;
+  return Math.round(price / (1 - rate / 100));
+}
+
 export function ComparisonTable({
   vendors,
   vendorProducts,
@@ -65,6 +77,16 @@ export function ComparisonTable({
   const [isSaving, setIsSaving] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newForm, setNewForm] = useState<EditForm | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [discountRates, setDiscountRates] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const rates: Record<string, string> = {};
+    for (const v of vendors) {
+      rates[v.id] = String(v.discount_rate ?? 0);
+    }
+    setDiscountRates(rates);
+  }, [vendors]);
 
   // Build index: unified_product_id → VendorProduct[]
   const productsByUnified = useMemo(() => {
@@ -164,7 +186,8 @@ export function ComparisonTable({
       const priceUpdates = vendors.map((vendor) => {
         const raw = editForm.prices[vendor.id]?.trim();
         const price = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
-        const validPrice = price != null && !isNaN(price) ? price : null;
+        const rawPrice = price != null && !isNaN(price) ? price : null;
+        const validPrice = applyDiscount(rawPrice, vendor.discount_rate ?? 0);
         return upsertVendorPrice(unified.id, vendor.id, validPrice, editForm.name);
       });
 
@@ -212,7 +235,8 @@ export function ComparisonTable({
       const priceUpdates = vendors.map((vendor) => {
         const raw = newForm.prices[vendor.id]?.trim();
         const price = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
-        const validPrice = price != null && !isNaN(price) ? price : null;
+        const rawPrice = price != null && !isNaN(price) ? price : null;
+        const validPrice = applyDiscount(rawPrice, vendor.discount_rate ?? 0);
         return upsertVendorPrice(newId, vendor.id, validPrice, newForm.name);
       });
 
@@ -254,22 +278,31 @@ export function ComparisonTable({
           onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") closeAdd(); }}
         />
       </TableCell>
-      {vendors.map((vendor) => (
-        <TableCell key={vendor.id}>
-          <Input
-            type="text"
-            inputMode="numeric"
-            placeholder="-"
-            value={newForm?.prices[vendor.id] ?? ""}
-            onChange={(e) =>
-              setNewForm((f) =>
-                f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
-              )
-            }
-            className="h-7 text-sm text-right"
-          />
-        </TableCell>
-      ))}
+      {vendors.map((vendor) => {
+        const rate = vendor.discount_rate ?? 0;
+        const raw = newForm?.prices[vendor.id] ?? "";
+        const parsed = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
+        const discounted = parsed != null && !isNaN(parsed) ? applyDiscount(parsed, rate) : null;
+        return (
+          <TableCell key={vendor.id}>
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="-"
+              value={raw}
+              onChange={(e) =>
+                setNewForm((f) =>
+                  f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
+                )
+              }
+              className="h-7 text-sm text-right"
+            />
+            {rate > 0 && discounted != null && (
+              <p className="text-[10px] text-right text-green-600 mt-0.5">→ {discounted.toLocaleString()}</p>
+            )}
+          </TableCell>
+        );
+      })}
       <TableCell>
         <Input
           placeholder="비고"
@@ -334,23 +367,34 @@ export function ComparisonTable({
       <div>
         <label className="text-xs text-muted-foreground mb-2 block">업체별 단가</label>
         <div className="grid grid-cols-2 gap-2">
-          {vendors.map((vendor) => (
-            <div key={vendor.id} className="space-y-1">
-              <label className="text-xs font-medium">{vendor.name}</label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                placeholder="미입력"
-                value={newForm?.prices[vendor.id] ?? ""}
-                onChange={(e) =>
-                  setNewForm((f) =>
-                    f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
-                  )
-                }
-                className="h-8 text-sm"
-              />
-            </div>
-          ))}
+          {vendors.map((vendor) => {
+            const rate = vendor.discount_rate ?? 0;
+            const raw = newForm?.prices[vendor.id] ?? "";
+            const parsed = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
+            const discounted = parsed != null && !isNaN(parsed) ? applyDiscount(parsed, rate) : null;
+            return (
+              <div key={vendor.id} className="space-y-1">
+                <label className="text-xs font-medium">
+                  {vendor.name}{rate > 0 ? ` (${rate}%)` : ""}
+                </label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="미입력"
+                  value={raw}
+                  onChange={(e) =>
+                    setNewForm((f) =>
+                      f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
+                    )
+                  }
+                  className="h-8 text-sm"
+                />
+                {rate > 0 && discounted != null && (
+                  <p className="text-[10px] text-green-600">→ {discounted.toLocaleString()}원</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
       <div className="flex justify-end gap-2">
@@ -391,22 +435,31 @@ export function ComparisonTable({
           onKeyDown={(e) => { if (e.key === "Enter") handleSave(row.unified); if (e.key === "Escape") closeEdit(); }}
         />
       </TableCell>
-      {vendors.map((vendor) => (
-        <TableCell key={vendor.id}>
-          <Input
-            type="text"
-            inputMode="numeric"
-            placeholder="-"
-            value={editForm?.prices[vendor.id] ?? ""}
-            onChange={(e) =>
-              setEditForm((f) =>
-                f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
-              )
-            }
-            className="h-7 text-sm text-right"
-          />
-        </TableCell>
-      ))}
+      {vendors.map((vendor) => {
+        const rate = vendor.discount_rate ?? 0;
+        const raw = editForm?.prices[vendor.id] ?? "";
+        const parsed = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
+        const discounted = parsed != null && !isNaN(parsed) ? applyDiscount(parsed, rate) : null;
+        return (
+          <TableCell key={vendor.id}>
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="-"
+              value={raw}
+              onChange={(e) =>
+                setEditForm((f) =>
+                  f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
+                )
+              }
+              className="h-7 text-sm text-right"
+            />
+            {rate > 0 && discounted != null && (
+              <p className="text-[10px] text-right text-green-600 mt-0.5">→ {discounted.toLocaleString()}</p>
+            )}
+          </TableCell>
+        );
+      })}
       <TableCell>
         <Input
           placeholder="비고"
@@ -468,23 +521,34 @@ export function ComparisonTable({
       <div>
         <label className="text-xs text-muted-foreground mb-2 block">업체별 단가</label>
         <div className="grid grid-cols-2 gap-2">
-          {vendors.map((vendor) => (
-            <div key={vendor.id} className="space-y-1">
-              <label className="text-xs font-medium">{vendor.name}</label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                placeholder="미입력"
-                value={editForm?.prices[vendor.id] ?? ""}
-                onChange={(e) =>
-                  setEditForm((f) =>
-                    f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
-                  )
-                }
-                className="h-8 text-sm"
-              />
-            </div>
-          ))}
+          {vendors.map((vendor) => {
+            const rate = vendor.discount_rate ?? 0;
+            const raw = editForm?.prices[vendor.id] ?? "";
+            const parsed = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
+            const discounted = parsed != null && !isNaN(parsed) ? applyDiscount(parsed, rate) : null;
+            return (
+              <div key={vendor.id} className="space-y-1">
+                <label className="text-xs font-medium">
+                  {vendor.name}{rate > 0 ? ` (${rate}%)` : ""}
+                </label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="미입력"
+                  value={raw}
+                  onChange={(e) =>
+                    setEditForm((f) =>
+                      f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
+                    )
+                  }
+                  className="h-8 text-sm"
+                />
+                {rate > 0 && discounted != null && (
+                  <p className="text-[10px] text-green-600">→ {discounted.toLocaleString()}원</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
       <div className="flex justify-end gap-2">
@@ -499,7 +563,6 @@ export function ComparisonTable({
   const handleTemplateDownload = async (includeData: boolean) => {
     const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("가격비교");
 
     const colors = {
       headerBg: "FF2563EB",
@@ -511,7 +574,6 @@ export function ComparisonTable({
       borderHeader: "FF1D4ED8",
       altRowBg: "FFF8FAFC",
     };
-
     const thinBorder = {
       top: { style: "thin" as const, color: { argb: colors.borderLight } },
       bottom: { style: "thin" as const, color: { argb: colors.borderLight } },
@@ -522,101 +584,116 @@ export function ComparisonTable({
     const vendorHeaders = includeData && vendors.length > 0
       ? vendors.map((v) => v.name)
       : ["우리엔팜", "화영", "VS팜", "서수약품"];
-    const headers = ["구분", "제품명", "비고", ...vendorHeaders];
 
-    if (includeData) {
-      const yymmdd = toKSTDateString(new Date().toISOString()).slice(2).replace(/-/g, "");
-      const titleRow = sheet.addRow([`단가 비교표 (${yymmdd})`]);
-      sheet.mergeCells(1, 1, 1, headers.length);
-      titleRow.height = 32;
-      const titleCell = titleRow.getCell(1);
-      titleCell.font = { bold: true, size: 14, color: { argb: colors.headerBg } };
-      titleCell.alignment = { vertical: "middle" };
-    }
+    const buildSheet = (sheetName: string, getPriceForRow: (row: ComparisonRow, vendorIdx: number) => number | null) => {
+      const sheet = workbook.addWorksheet(sheetName);
+      const headers = ["구분", "제품명", "비고", ...vendorHeaders];
 
-    const headerRow = sheet.addRow(headers);
-    headerRow.height = 28;
-    headerRow.eachCell((cell, colNumber) => {
-      cell.font = { bold: true, size: 10, color: { argb: colors.headerFont } };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.headerBg } };
-      cell.alignment = { vertical: "middle", horizontal: colNumber >= 4 ? "right" : "center" };
-      cell.border = {
-        top: { style: "thin" as const, color: { argb: colors.borderHeader } },
-        bottom: { style: "medium" as const, color: { argb: colors.borderHeader } },
-        left: { style: "thin" as const, color: { argb: colors.borderHeader } },
-        right: { style: "thin" as const, color: { argb: colors.borderHeader } },
-      };
-    });
+      if (includeData) {
+        const yymmdd = toKSTDateString(new Date().toISOString()).slice(2).replace(/-/g, "");
+        const titleRow = sheet.addRow([`단가 비교표 (${yymmdd}) - ${sheetName}`]);
+        sheet.mergeCells(1, 1, 1, headers.length);
+        titleRow.height = 32;
+        const titleCell = titleRow.getCell(1);
+        titleCell.font = { bold: true, size: 14, color: { argb: colors.headerBg } };
+        titleCell.alignment = { vertical: "middle" };
+      }
 
-    if (includeData) {
-      const vendorStartCol = 4;
+      const headerRow = sheet.addRow(headers);
+      headerRow.height = 28;
+      headerRow.eachCell((cell, colNumber) => {
+        cell.font = { bold: true, size: 10, color: { argb: colors.headerFont } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.headerBg } };
+        cell.alignment = { vertical: "middle", horizontal: colNumber >= 4 ? "right" : "center" };
+        cell.border = {
+          top: { style: "thin" as const, color: { argb: colors.borderHeader } },
+          bottom: { style: "medium" as const, color: { argb: colors.borderHeader } },
+          left: { style: "thin" as const, color: { argb: colors.borderHeader } },
+          right: { style: "thin" as const, color: { argb: colors.borderHeader } },
+        };
+      });
 
-      for (let ri = 0; ri < rows.length; ri++) {
-        const row = rows[ri];
-        const values: (string | number | null)[] = [
-          row.unified.notes || "",
-          row.unified.name,
-          row.unified.remarks || "",
-        ];
-        for (const vendor of vendors) {
-          const entry = row.prices.get(vendor.id);
-          values.push(entry?.price ?? null);
-        }
-
-        const dataRow = sheet.addRow(values);
-        dataRow.height = 22;
-        const isAlt = ri % 2 === 1;
-
-        dataRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-          cell.border = thinBorder;
-          cell.font = { size: 10 };
-          cell.alignment = { vertical: "middle" };
-
-          if (colNumber === 1) {
-            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.categoryBg } };
-            cell.alignment = { vertical: "middle", horizontal: "center" };
-            cell.font = { size: 9, color: { argb: "FF64748B" } };
-          } else if (colNumber === 2) {
-            cell.font = { size: 10, bold: true };
-            if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
-          } else if (colNumber >= vendorStartCol) {
-            cell.alignment = { vertical: "middle", horizontal: "right" };
-            if (cell.value != null && typeof cell.value === "number") {
-              cell.numFmt = "#,##0";
-            }
-            if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
-          } else {
-            cell.alignment = { vertical: "middle", horizontal: "center" };
-            if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
-          }
-        });
-
-        if (row.minPrice != null) {
+      if (includeData) {
+        const vendorStartCol = 4;
+        for (let ri = 0; ri < rows.length; ri++) {
+          const row = rows[ri];
+          const values: (string | number | null)[] = [
+            row.unified.notes || "",
+            row.unified.name,
+            row.unified.remarks || "",
+          ];
           for (let vi = 0; vi < vendors.length; vi++) {
-            const entry = row.prices.get(vendors[vi].id);
-            if (entry?.price === row.minPrice) {
-              const cell = dataRow.getCell(vendorStartCol + vi);
-              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.minPriceBg } };
-              cell.font = { size: 10, bold: true, color: { argb: colors.minPriceFont } };
+            values.push(getPriceForRow(row, vi));
+          }
+
+          const dataRow = sheet.addRow(values);
+          dataRow.height = 22;
+          const isAlt = ri % 2 === 1;
+
+          dataRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            cell.border = thinBorder;
+            cell.font = { size: 10 };
+            cell.alignment = { vertical: "middle" };
+            if (colNumber === 1) {
+              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.categoryBg } };
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+              cell.font = { size: 9, color: { argb: "FF64748B" } };
+            } else if (colNumber === 2) {
+              cell.font = { size: 10, bold: true };
+              if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
+            } else if (colNumber >= vendorStartCol) {
+              cell.alignment = { vertical: "middle", horizontal: "right" };
+              if (cell.value != null && typeof cell.value === "number") cell.numFmt = "#,##0";
+              if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
+            } else {
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+              if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
+            }
+          });
+
+          // 최저가 하이라이트
+          const sheetPrices = vendors.map((_, vi) => getPriceForRow(row, vi)).filter((p): p is number => p != null && p > 0);
+          const sheetMin = sheetPrices.length > 0 ? Math.min(...sheetPrices) : null;
+          if (sheetMin != null) {
+            for (let vi = 0; vi < vendors.length; vi++) {
+              if (getPriceForRow(row, vi) === sheetMin) {
+                const cell = dataRow.getCell(vendorStartCol + vi);
+                cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.minPriceBg } };
+                cell.font = { size: 10, bold: true, color: { argb: colors.minPriceFont } };
+              }
             }
           }
         }
       }
-    }
 
-    sheet.columns.forEach((col, idx) => {
-      let maxLen = 0;
-      col.eachCell?.({ includeEmpty: true }, (cell, rowNumber) => {
-        if (includeData && rowNumber === 1) return;
-        const val = cell.value != null ? String(cell.value) : "";
-        let len = 0;
-        for (const ch of val) len += ch.charCodeAt(0) > 127 ? 2.2 : 1;
-        if (len > maxLen) maxLen = len;
+      sheet.columns.forEach((col, idx) => {
+        let maxLen = 0;
+        col.eachCell?.({ includeEmpty: true }, (cell, rowNumber) => {
+          if (includeData && rowNumber === 1) return;
+          const val = cell.value != null ? String(cell.value) : "";
+          let len = 0;
+          for (const ch of val) len += ch.charCodeAt(0) > 127 ? 2.2 : 1;
+          if (len > maxLen) maxLen = len;
+        });
+        col.width = Math.max(idx === 1 ? 16 : 10, maxLen + 4);
       });
-      col.width = Math.max(idx === 1 ? 16 : 10, maxLen + 4);
-    });
+      sheet.views = [{ state: "frozen", ySplit: includeData ? 2 : 1, xSplit: 2 }];
+    };
 
-    sheet.views = [{ state: "frozen", ySplit: includeData ? 2 : 1, xSplit: 2 }];
+    if (includeData) {
+      // 시트1: 할인전 가격 (역산)
+      buildSheet("할인전", (row, vi) => {
+        const entry = row.prices.get(vendors[vi].id);
+        return reverseDiscount(entry?.price ?? null, vendors[vi].discount_rate ?? 0);
+      });
+      // 시트2: 할인후 가격 (저장된 값)
+      buildSheet("할인후", (row, vi) => {
+        const entry = row.prices.get(vendors[vi].id);
+        return entry?.price ?? null;
+      });
+    } else {
+      buildSheet("가격비교", () => null);
+    }
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -655,7 +732,60 @@ export function ComparisonTable({
           <FileDown className="h-4 w-4 mr-1" />
           {rows.length > 0 ? "내보내기" : "양식"}
         </Button>
+        {isAdmin && (
+          <Button
+            variant={showSettings ? "default" : "outline"}
+            size="sm"
+            className={showSettings ? "" : "bg-card"}
+            onClick={() => setShowSettings((v) => !v)}
+          >
+            <Settings2 className="h-4 w-4" />
+          </Button>
+        )}
       </div>
+
+      {showSettings && isAdmin && (
+        <div className="rounded-xl bg-card p-4 shadow-card space-y-3">
+          <p className="text-sm font-medium">업체별 할인율 설정</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {vendors.map((vendor) => (
+              <div key={vendor.id} className="space-y-1">
+                <label className="text-xs text-muted-foreground">{vendor.name}</label>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={discountRates[vendor.id] ?? "0"}
+                    onChange={(e) =>
+                      setDiscountRates((prev) => ({ ...prev, [vendor.id]: e.target.value }))
+                    }
+                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <span className="text-sm text-muted-foreground shrink-0">%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={async () => {
+                await Promise.all(
+                  vendors.map((vendor) => {
+                    const rate = parseFloat(discountRates[vendor.id] ?? "0") || 0;
+                    return updateVendorDiscountRate(vendor.id, rate);
+                  })
+                );
+                onDataChange();
+              }}
+            >
+              저장
+            </Button>
+          </div>
+        </div>
+      )}
 
       <ExcelUploadDialog
         open={uploadOpen}

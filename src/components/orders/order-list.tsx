@@ -28,14 +28,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OrderStatusBadge, StatusLegend } from "./order-status-badge";
-import { VendorPricePopover, VENDOR_COLORS, type VendorColor } from "./vendor-price-popover";
+import { VendorPricePopover, VENDOR_COLORS, initPriceCache, type VendorColor, type PriceData } from "./vendor-price-popover";
 import { formatDate } from "@/lib/utils/format";
 import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 import { bulkDispatchAll, bulkDispatchIndividual } from "@/lib/actions/order-mutations";
 
-export function OrderList() {
+export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }) {
+  if (initialPriceData) initPriceCache(initialPriceData);
   const { isAdmin, userId: currentUserId } = useAuth();
   const [orders, setOrders] = useState<OrderWithRequester[]>([]);
   const [isLoading, setIsLoading] = useState(true);

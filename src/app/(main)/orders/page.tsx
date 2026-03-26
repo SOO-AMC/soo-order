@@ -3,12 +3,15 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OrderList } from "@/components/orders/order-list";
+import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 
 export const metadata: Metadata = {
   title: "주문",
 };
 
-export default function OrdersPage() {
+export default async function OrdersPage() {
+  const { vendors, vendorProducts, unifiedProducts } = await fetchPriceCompareData();
+
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
@@ -20,7 +23,7 @@ export default function OrdersPage() {
         </Button>
       </header>
       <div className="p-4">
-        <OrderList />
+        <OrderList initialPriceData={{ vendors, products: vendorProducts, unified: unifiedProducts }} />
       </div>
     </div>
   );

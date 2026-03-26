@@ -31,6 +31,21 @@ export async function createVendor(name: string): Promise<ActionState> {
   return { success: true };
 }
 
+export async function updateVendorDiscountRate(vendorId: string, rate: number): Promise<ActionState> {
+  const { supabase } = await requireAdmin();
+
+  const clamped = Math.max(0, Math.min(100, rate));
+  const { error } = await supabase
+    .from("vendors")
+    .update({ discount_rate: clamped })
+    .eq("id", vendorId);
+
+  if (error) return { error: `할인율 업데이트 실패: ${error.message}` };
+
+  revalidatePath("/price-compare");
+  return { success: true };
+}
+
 export async function deleteVendor(vendorId: string, vendorName?: string): Promise<ActionState> {
   const { supabase, userId, userName } = await requireAdmin();
 

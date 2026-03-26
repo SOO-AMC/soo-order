@@ -26,24 +26,44 @@ interface PriceMatch {
 }
 
 // Shared price data cache (module-level singleton)
-interface PriceData {
+export interface PriceData {
   vendors: Vendor[];
   products: VendorProduct[];
   unified: UnifiedProduct[];
 }
 
 let cachedData: PriceData | null = null;
+let cachedAt: number = 0;
 let fetchPromise: Promise<PriceData> | null = null;
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2분
+
+function startFetch() {
+  if (fetchPromise) return fetchPromise;
+  fetchPromise = fetchPriceCompareData().then(({ vendors, vendorProducts, unifiedProducts }) => {
+    cachedData = { vendors, products: vendorProducts, unified: unifiedProducts };
+    cachedAt = Date.now();
+    fetchPromise = null;
+    return cachedData;
+  }).catch((e) => { fetchPromise = null; throw e; });
+  return fetchPromise;
+}
 
 async function getPriceData() {
-  if (cachedData) return cachedData;
-  if (!fetchPromise) {
-    fetchPromise = fetchPriceCompareData().then(({ vendors, vendorProducts, unifiedProducts }) => {
-      cachedData = { vendors, products: vendorProducts, unified: unifiedProducts };
-      return cachedData;
-    });
-  }
-  return fetchPromise;
+  const isStale = !cachedData || Date.now() - cachedAt >= CACHE_TTL_MS;
+  if (isStale) startFetch(); // 백그라운드 갱신 시작
+  if (cachedData) return cachedData; // 스테일이어도 즉시 반환
+  return startFetch(); // 데이터 없으면 기다림 (첫 로드)
+}
+
+export function initPriceCache(data: PriceData) {
+  if (cachedData) return; // 이미 초기화된 경우 덮어쓰지 않음
+  cachedData = data;
+  cachedAt = Date.now();
+}
+
+// 모듈 로드 시 즉시 프리페치 시작 (캐시 없을 때만)
+if (typeof window !== "undefined") {
+  startFetch();
 }
 
 /** Tokenize: strip manufacturer prefix, split into meaningful tokens */

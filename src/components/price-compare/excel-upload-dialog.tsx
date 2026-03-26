@@ -38,10 +38,17 @@ interface ComparisonSummary {
 
 type Step = "upload" | "parsing" | "compare" | "uploading";
 
+function applyDiscount(price: number | null, rate: number): number | null {
+  if (price == null) return null;
+  if (!rate) return price;
+  return Math.round(price * (1 - rate / 100));
+}
+
 export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialogProps) {
   const [step, setStep] = useState<Step>("upload");
   const [parsed, setParsed] = useState<ParsedPriceExcel | null>(null);
   const [comparison, setComparison] = useState<ComparisonSummary | null>(null);
+  const [vendorDiscountMap, setVendorDiscountMap] = useState<Map<string, number>>(new Map());
   const [error, setError] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,6 +57,7 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
     setStep("upload");
     setParsed(null);
     setComparison(null);
+    setVendorDiscountMap(new Map());
     setError("");
     setIsDragOver(false);
   };
@@ -141,6 +149,13 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
 
       setParsed(result);
 
+      // 업체별 할인율 맵 저장
+      const discountMap = new Map<string, number>();
+      for (const v of existingData.vendors) {
+        discountMap.set(v.name, v.discount_rate ?? 0);
+      }
+      setVendorDiscountMap(discountMap);
+
       // Build comparison summary — 유니크 이름 기준으로 비교
       const existingProductNames = new Set(existingData.unifiedProducts.map((p) => p.name));
       const uploadedProductNames = new Set(result.products.map((p) => p.name));
@@ -201,7 +216,12 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
       category: p.category,
       name: p.name,
       remarks: p.remarks,
-      vendorPrices: Object.fromEntries(p.vendorPrices),
+      vendorPrices: Object.fromEntries(
+        [...p.vendorPrices.entries()].map(([vendorName, price]) => {
+          const rate = vendorDiscountMap.get(vendorName) ?? 0;
+          return [vendorName, applyDiscount(price, rate)];
+        })
+      ),
     }));
 
     const result = await uploadPriceExcel(products, parsed.vendorNames, mode);
@@ -342,6 +362,50 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
                 )}
               </div>
             </div>
+
+            {/* 할인 미리보기 */}
+            {parsed && [...vendorDiscountMap.values()].some((r) => r > 0) && (
+              <div className="rounded-lg border p-3 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">할인 적용 미리보기 (상위 3개)</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-1 pr-2">제품명</th>
+                        {parsed.vendorNames.filter((n) => (vendorDiscountMap.get(n) ?? 0) > 0).map((n) => (
+                          <th key={n} className="text-right py-1 px-1 whitespace-nowrap">
+                            {n}<br/><span className="text-muted-foreground font-normal">({vendorDiscountMap.get(n)}% 할인)</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsed.products.slice(0, 3).map((p) => (
+                        <tr key={p.name} className="border-b last:border-0">
+                          <td className="py-1 pr-2 font-medium">{p.name}</td>
+                          {parsed.vendorNames.filter((n) => (vendorDiscountMap.get(n) ?? 0) > 0).map((n) => {
+                            const before = p.vendorPrices.get(n);
+                            const rate = vendorDiscountMap.get(n) ?? 0;
+                            const after = applyDiscount(before ?? null, rate);
+                            return (
+                              <td key={n} className="py-1 px-1 text-right">
+                                {before != null ? (
+                                  <span>
+                                    <span className="text-muted-foreground line-through">{before.toLocaleString()}</span>
+                                    {" → "}
+                                    <span className="text-green-600 font-medium">{after?.toLocaleString() ?? "-"}</span>
+                                  </span>
+                                ) : "-"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* 액션 선택 */}
             <div className="space-y-2">
