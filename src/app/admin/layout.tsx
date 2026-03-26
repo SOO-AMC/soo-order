@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AdminGuard } from "@/components/admin-guard";
 
+export const dynamic = "force-dynamic";
+
 export default function AdminLayout({
   children,
 }: {

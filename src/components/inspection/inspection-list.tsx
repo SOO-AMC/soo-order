@@ -10,13 +10,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -158,18 +151,6 @@ export function InspectionList() {
   const handleBulkInspect = async () => {
     if (selectedIds.size === 0) return;
 
-    const invalidItems = [...selectedIds].filter((id) => {
-      const data = getInspectionData(
-        orders.find((o) => o.id === id)!
-      );
-      return data.invoice_received === null;
-    });
-
-    if (invalidItems.length > 0) {
-      alert("거래명세서 수령 여부를 모두 선택해주세요.");
-      return;
-    }
-
     setIsProcessing(true);
 
     try {
@@ -179,7 +160,7 @@ export function InspectionList() {
         return {
           id,
           confirmedQuantity: data.confirmed_quantity,
-          invoiceReceived: data.invoice_received!,
+          invoiceReceived: false,
           inspectionNotes: data.inspection_notes,
         };
       });
@@ -323,50 +304,6 @@ export function InspectionList() {
                       <TableCell colSpan={colCount}>
                         <div className="flex items-end gap-3 py-1 pl-6">
                           <div>
-                            <label className="block text-xs text-muted-foreground">확인 수량</label>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={data.confirmed_quantity}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) =>
-                                updateInspectionData(
-                                  order.id,
-                                  "confirmed_quantity",
-                                  Number(e.target.value)
-                                )
-                              }
-                              className="mt-1 h-8 w-32"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-muted-foreground">거래명세서</label>
-                            <Select
-                              value={
-                                data.invoice_received === null
-                                  ? ""
-                                  : data.invoice_received
-                                    ? "received"
-                                    : "not_received"
-                              }
-                              onValueChange={(v) =>
-                                updateInspectionData(
-                                  order.id,
-                                  "invoice_received",
-                                  v === "received"
-                                )
-                              }
-                            >
-                              <SelectTrigger className="mt-1 h-8 w-32" onClick={(e) => e.stopPropagation()}>
-                                <SelectValue placeholder="선택" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="received">수령</SelectItem>
-                                <SelectItem value="not_received">미수령</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
                             <label className="block text-xs text-muted-foreground">비고</label>
                             <Input
                               type="text"
@@ -380,7 +317,7 @@ export function InspectionList() {
                                   e.target.value
                                 )
                               }
-                              className="mt-1 h-8 w-40"
+                              className="mt-1 h-8 w-60"
                             />
                           </div>
                         </div>
@@ -452,56 +389,7 @@ export function InspectionList() {
               </div>
 
               {isSelected && (
-                <div className="mt-3 space-y-2 pl-8">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <label className="text-xs text-muted-foreground">
-                        확인 수량
-                      </label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={data.confirmed_quantity}
-                        onChange={(e) =>
-                          updateInspectionData(
-                            order.id,
-                            "confirmed_quantity",
-                            Number(e.target.value)
-                          )
-                        }
-                        className="mt-0.5 h-8"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-muted-foreground">
-                        거래명세서
-                      </label>
-                      <Select
-                        value={
-                          data.invoice_received === null
-                            ? ""
-                            : data.invoice_received
-                              ? "received"
-                              : "not_received"
-                        }
-                        onValueChange={(v) =>
-                          updateInspectionData(
-                            order.id,
-                            "invoice_received",
-                            v === "received"
-                          )
-                        }
-                      >
-                        <SelectTrigger className="mt-0.5 h-8">
-                          <SelectValue placeholder="선택" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="received">수령</SelectItem>
-                          <SelectItem value="not_received">미수령</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                <div className="mt-3 pl-8">
                   <div>
                     <label className="text-xs text-muted-foreground">비고</label>
                     <Input

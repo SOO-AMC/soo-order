@@ -25,6 +25,8 @@ interface PriceMatch {
   minPrice: number | null;
 }
 
+const DEFAULT_VENDORS = ["VS팜", "우리엔팜", "서울수의약품", "화영"];
+
 // Shared price data cache (module-level singleton)
 interface PriceData {
   vendors: Vendor[];
@@ -247,8 +249,27 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
             <Spinner text="가격 데이터 로딩 중..." />
           </div>
         ) : !priceMatch ? (
-          <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-            일치하는 가격 데이터 없음
+          <div className="py-1">
+            <div className="mx-3 mb-1 mt-2 text-xs text-muted-foreground">
+              가격 데이터 없음 · 업체 직접 선택
+            </div>
+            <div className="px-1 py-1">
+              {DEFAULT_VENDORS.map((vendorName) => {
+                const isSelected = selectedVendor === vendorName;
+                return (
+                  <button
+                    key={vendorName}
+                    type="button"
+                    className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${
+                      isSelected ? "bg-accent" : ""
+                    }`}
+                    onClick={() => handleSelect(vendorName)}
+                  >
+                    <span className="font-medium">{vendorName}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <div className="py-1">
