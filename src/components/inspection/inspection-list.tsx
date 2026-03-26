@@ -22,11 +22,9 @@ import { OrderStatusBadge, StatusLegend } from "@/components/orders/order-status
 import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
-import { bulkInspectOrders, bulkMarkOutOfStock } from "@/lib/actions/order-mutations";
+import { bulkInspectOrders, bulkMarkOutOfStock, updateInspectionMemo } from "@/lib/actions/order-mutations";
 
 interface InspectionData {
-  confirmed_quantity: number;
-  invoice_received: boolean | null;
   inspection_notes: string;
 }
 
@@ -41,6 +39,9 @@ export function InspectionList() {
   >({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [sortByVendor, setSortByVendor] = useState(false);
+  const [memos, setMemos] = useState<Record<string, string>>({});
+  const dirtyMemos = useRef<Set<string>>(new Set());
+  const memoTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const supabase = createClient();
   const router = useRouter();
 
@@ -57,7 +58,17 @@ export function InspectionList() {
       return;
     }
 
-    setOrders((data as OrderWithRequester[]) ?? []);
+    const fetched = (data as OrderWithRequester[]) ?? [];
+    setOrders(fetched);
+    setMemos((prev) => {
+      const next = { ...prev };
+      for (const order of fetched) {
+        if (!dirtyMemos.current.has(order.id)) {
+          next[order.id] = order.inspection_memo ?? "";
+        }
+      }
+      return next;
+    });
     setIsLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -102,29 +113,24 @@ export function InspectionList() {
   const allSelected =
     sortedOrders.length > 0 && sortedOrders.every((o) => selectedIds.has(o.id));
 
-  const getInspectionData = (order: OrderWithRequester): InspectionData => {
-    return (
-      inspectionData[order.id] ?? {
-        confirmed_quantity: order.quantity,
-        invoice_received: null,
-        inspection_notes: "",
-      }
-    );
+  const handleMemoChange = (orderId: string, value: string) => {
+    setMemos((prev) => ({ ...prev, [orderId]: value }));
+    dirtyMemos.current.add(orderId);
+    if (memoTimers.current[orderId]) clearTimeout(memoTimers.current[orderId]);
+    memoTimers.current[orderId] = setTimeout(async () => {
+      await updateInspectionMemo(orderId, value);
+      dirtyMemos.current.delete(orderId);
+    }, 500);
   };
 
-  const updateInspectionData = (
-    id: string,
-    field: keyof InspectionData,
-    value: number | boolean | null | string
-  ) => {
+  const getInspectionData = (order: OrderWithRequester): InspectionData => {
+    return inspectionData[order.id] ?? { inspection_notes: "" };
+  };
+
+  const updateInspectionData = (id: string, value: string) => {
     setInspectionData((prev) => {
-      const existing = prev[id] ?? {
-        confirmed_quantity:
-          orders.find((o) => o.id === id)?.quantity ?? 0,
-        invoice_received: null,
-        inspection_notes: "",
-      };
-      return { ...prev, [id]: { ...existing, [field]: value } };
+      const existing = prev[id] ?? { inspection_notes: "" };
+      return { ...prev, [id]: { ...existing, inspection_notes: value } };
     });
   };
 
@@ -150,7 +156,6 @@ export function InspectionList() {
 
   const handleBulkInspect = async () => {
     if (selectedIds.size === 0) return;
-
     setIsProcessing(true);
 
     try {
@@ -159,8 +164,8 @@ export function InspectionList() {
         const data = getInspectionData(order);
         return {
           id,
-          confirmedQuantity: data.confirmed_quantity,
-          invoiceReceived: false,
+          confirmedQuantity: order.quantity,
+          invoiceReceived: true,
           inspectionNotes: data.inspection_notes,
         };
       });
@@ -224,6 +229,7 @@ export function InspectionList() {
       <div className="flex items-center justify-between px-1 py-2">
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox
+            className="h-5 w-5"
             checked={allSelected}
             onCheckedChange={toggleSelectAll}
           />
@@ -240,6 +246,7 @@ export function InspectionList() {
               <TableHead className="w-10" />
               <TableHead>상태</TableHead>
               <TableHead>품목명</TableHead>
+              <TableHead className="w-44">메모</TableHead>
               <TableHead>수량</TableHead>
               <TableHead>
                 <button
@@ -259,7 +266,7 @@ export function InspectionList() {
             {sortedOrders.map((order) => {
               const isSelected = selectedIds.has(order.id);
               const data = getInspectionData(order);
-              const colCount = 8;
+              const colCount = 9;
 
               return (
                 <Fragment key={order.id}>
@@ -269,6 +276,7 @@ export function InspectionList() {
                   >
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox
+                        className="h-5 w-5"
                         checked={isSelected}
                         onCheckedChange={() => toggleSelect(order.id)}
                       />
@@ -281,6 +289,15 @@ export function InspectionList() {
                         {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
                         {order.item_name}
                       </span>
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Input
+                        type="text"
+                        placeholder="메모"
+                        value={memos[order.id] ?? ""}
+                        onChange={(e) => handleMemoChange(order.id, e.target.value)}
+                        className="h-7 w-44 text-sm"
+                      />
                     </TableCell>
                     <TableCell>
                       {order.quantity > 0
@@ -310,14 +327,8 @@ export function InspectionList() {
                               placeholder="비고"
                               value={data.inspection_notes}
                               onClick={(e) => e.stopPropagation()}
-                              onChange={(e) =>
-                                updateInspectionData(
-                                  order.id,
-                                  "inspection_notes",
-                                  e.target.value
-                                )
-                              }
-                              className="mt-1 h-8 w-60"
+                              onChange={(e) => updateInspectionData(order.id, e.target.value)}
+                              className="mt-1 h-8 w-40"
                             />
                           </div>
                         </div>
@@ -344,6 +355,7 @@ export function InspectionList() {
             >
               <div className="flex items-center gap-3">
                 <Checkbox
+                  className="h-5 w-5"
                   checked={isSelected}
                   onCheckedChange={() => toggleSelect(order.id)}
                 />
@@ -390,22 +402,14 @@ export function InspectionList() {
 
               {isSelected && (
                 <div className="mt-3 pl-8">
-                  <div>
-                    <label className="text-xs text-muted-foreground">비고</label>
-                    <Input
-                      type="text"
-                      placeholder="비고 (선택)"
-                      value={data.inspection_notes}
-                      onChange={(e) =>
-                        updateInspectionData(
-                          order.id,
-                          "inspection_notes",
-                          e.target.value
-                        )
-                      }
-                      className="mt-0.5 h-8"
-                    />
-                  </div>
+                  <label className="text-xs text-muted-foreground">비고</label>
+                  <Input
+                    type="text"
+                    placeholder="비고 (선택)"
+                    value={data.inspection_notes}
+                    onChange={(e) => updateInspectionData(order.id, e.target.value)}
+                    className="mt-0.5 h-8"
+                  />
                 </div>
               )}
             </div>

@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, CircleAlert, Undo2 } from "lucide-react";
+import { Camera, ChevronRight, CircleAlert, Undo2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -147,6 +147,7 @@ export function ReturnList() {
       <div className="flex items-center justify-between px-1 py-2">
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox
+            className="h-5 w-5"
             checked={allSelected}
             onCheckedChange={toggleSelectAll}
           />
@@ -167,6 +168,7 @@ export function ReturnList() {
               <TableHead>반품사유</TableHead>
               <TableHead>신청자</TableHead>
               <TableHead>신청일</TableHead>
+              <TableHead className="w-12">사진</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -178,6 +180,7 @@ export function ReturnList() {
                 >
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Checkbox
+                      className="h-5 w-5"
                       checked={selectedIds.has(order.id)}
                       onCheckedChange={() => toggleSelect(order.id)}
                     />
@@ -200,6 +203,14 @@ export function ReturnList() {
                   </TableCell>
                   <TableCell>{order.return_requester?.full_name ?? "-"}</TableCell>
                   <TableCell>{order.return_requested_at ? formatDate(order.return_requested_at) : "-"}</TableCell>
+                  <TableCell>
+                    {order.return_photo_urls?.length > 0 && (
+                      <span className="flex items-center gap-1 text-muted-foreground">
+                        <Camera className="h-3.5 w-3.5" />
+                        {order.return_photo_urls.length}
+                      </span>
+                    )}
+                  </TableCell>
                 </TableRow>
               </Fragment>
             ))}
@@ -215,6 +226,7 @@ export function ReturnList() {
             className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-card transition-colors"
           >
             <Checkbox
+              className="h-5 w-5"
               checked={selectedIds.has(order.id)}
               onCheckedChange={() => toggleSelect(order.id)}
             />
@@ -235,6 +247,15 @@ export function ReturnList() {
                   </span>
                   <span>·</span>
                   <span>{order.return_requested_at ? formatDate(order.return_requested_at) : "-"}</span>
+                  {order.return_photo_urls?.length > 0 && (
+                    <>
+                      <span>·</span>
+                      <span className="flex items-center gap-0.5">
+                        <Camera className="h-3 w-3" />
+                        {order.return_photo_urls.length}
+                      </span>
+                    </>
+                  )}
                 </div>
                 {order.return_reason && (
                   <p className="mt-0.5 text-xs text-muted-foreground truncate">

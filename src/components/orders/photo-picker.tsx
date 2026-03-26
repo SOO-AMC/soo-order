@@ -64,7 +64,7 @@ export function PhotoPicker({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm font-medium leading-none">
           사진 {photos.length}/{maxPhotos}
         </span>
       </div>

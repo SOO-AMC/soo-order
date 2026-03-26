@@ -17,6 +17,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+import { PhotoPicker, type PhotoItem } from "@/components/orders/photo-picker";
+import { uploadPhoto } from "@/lib/utils/photo";
 import { logClientAction } from "@/app/(main)/log-action";
 
 interface ReturnRequestButtonProps {
@@ -35,6 +37,7 @@ export function ReturnRequestButton({
   const [open, setOpen] = useState(false);
   const [quantity, setQuantity] = useState(defaultQuantity);
   const [reason, setReason] = useState("");
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -44,6 +47,14 @@ export function ReturnRequestButton({
 
     const userId = (await supabase.auth.getSession()).data.session?.user.id;
 
+    const uploadedPaths: string[] = [];
+    for (const photo of photos) {
+      if (photo.type === "new") {
+        const path = await uploadPhoto(supabase, orderId, photo.file);
+        uploadedPaths.push(path);
+      }
+    }
+
     const { error } = await supabase
       .from("orders")
       .update({
@@ -52,6 +63,7 @@ export function ReturnRequestButton({
         return_reason: reason,
         return_requested_by: userId,
         return_requested_at: new Date().toISOString(),
+        return_photo_urls: uploadedPaths,
       })
       .eq("id", orderId);
 
@@ -65,8 +77,17 @@ export function ReturnRequestButton({
     router.refresh();
   };
 
+  const handleOpenChange = (value: boolean) => {
+    if (!value) {
+      setQuantity(defaultQuantity);
+      setReason("");
+      setPhotos([]);
+    }
+    setOpen(value);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" className="w-full border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800">
           <Undo2 className="h-4 w-4" />
@@ -101,6 +122,10 @@ export function ReturnRequestButton({
               onChange={(e) => setReason(e.target.value)}
               placeholder="사유를 입력하세요"
             />
+          </div>
+          <div className="space-y-2">
+            <Label>사진 (선택)</Label>
+            <PhotoPicker photos={photos} onChange={setPhotos} />
           </div>
         </div>
         <DialogFooter>

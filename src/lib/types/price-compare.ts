@@ -23,7 +23,6 @@ export interface UnifiedProduct {
   name: string;
   mg: string;
   tab: string;
-  quantity: string;
   notes: string;
   remarks: string;
   sort_order: number;

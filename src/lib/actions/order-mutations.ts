@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/supabase/server";
+import { requireAdmin, requireUser } from "@/lib/supabase/server";
 
 /** 개별 발주 (status → ordered) */
 export async function dispatchOrder(
@@ -83,6 +83,7 @@ export async function inspectOrder(
       confirmed_quantity: confirmedQuantity,
       invoice_received: invoiceReceived,
       inspection_notes: inspectionNotes.trim(),
+      inspection_memo: null,
       inspected_by: userId,
       inspected_at: new Date().toISOString(),
     })
@@ -113,6 +114,7 @@ export async function bulkInspectOrders(
           confirmed_quantity: item.confirmedQuantity,
           invoice_received: item.invoiceReceived,
           inspection_notes: item.inspectionNotes.trim(),
+          inspection_memo: null,
           inspected_by: userId,
           inspected_at: now,
         })
@@ -204,6 +206,18 @@ export async function bulkCompleteReturn(orderIds: string[]) {
   );
 
   if (results.some((r) => r.error)) throw new Error("일부 반품 완료 처리에 실패했습니다.");
+}
+
+/** 검수 메모 저장 */
+export async function updateInspectionMemo(orderId: string, memo: string) {
+  const { supabase } = await requireUser();
+
+  const { error } = await supabase
+    .from("orders")
+    .update({ inspection_memo: memo || null })
+    .eq("id", orderId);
+
+  if (error) throw new Error("메모 저장에 실패했습니다.");
 }
 
 /** 혈액 기록 확인 (status → confirmed) */

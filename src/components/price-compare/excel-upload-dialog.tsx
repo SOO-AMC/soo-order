@@ -70,7 +70,7 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
     const guideBg = "FFF8FAFC";
     const guideFont = "FF94A3B8";
 
-    const headers = ["구분", "제품명", "수량", "비고", "업체1", "업체2", "업체3"];
+    const headers = ["구분", "제품명", "비고", "우리엔팜", "화영", "VS팜", "서수약품"];
 
     // 헤더 행
     const headerRow = sheet.addRow(headers);
@@ -78,7 +78,7 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
     headerRow.eachCell((cell, colNumber) => {
       cell.font = { bold: true, size: 10, color: { argb: headerFont } };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerBg } };
-      cell.alignment = { vertical: "middle", horizontal: colNumber >= 5 ? "right" : "center" };
+      cell.alignment = { vertical: "middle", horizontal: colNumber >= 4 ? "right" : "center" };
       cell.border = {
         top: { style: "thin" as const, color: { argb: borderColor } },
         bottom: { style: "medium" as const, color: { argb: borderColor } },
@@ -88,19 +88,19 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
     });
 
     // 안내 행 (예시 데이터)
-    const guideRow = sheet.addRow(["약품", "예시 제품명", "100T", "", 1500, 1400, 1600]);
+    const guideRow = sheet.addRow(["약품", "예시 제품명", "", 1500, 1400, 1600, 1550]);
     guideRow.height = 22;
     guideRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.font = { size: 10, italic: true, color: { argb: guideFont } };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: guideBg } };
-      cell.alignment = { vertical: "middle", horizontal: colNumber >= 5 ? "right" : colNumber === 1 ? "center" : "left" };
-      if (colNumber >= 5 && typeof cell.value === "number") {
+      cell.alignment = { vertical: "middle", horizontal: colNumber >= 4 ? "right" : colNumber === 1 ? "center" : "left" };
+      if (colNumber >= 4 && typeof cell.value === "number") {
         cell.numFmt = "#,##0";
       }
     });
 
     // 열 너비
-    const widths = [8, 20, 10, 12, 14, 14, 14];
+    const widths = [8, 20, 12, 14, 14, 14, 14];
     sheet.columns.forEach((col, idx) => {
       col.width = widths[idx] ?? 14;
     });
@@ -200,7 +200,6 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
     const products = parsed.products.map((p) => ({
       category: p.category,
       name: p.name,
-      quantity: p.quantity,
       remarks: p.remarks,
       vendorPrices: Object.fromEntries(p.vendorPrices),
     }));
@@ -264,7 +263,7 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
 
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                양식: A열=구분, B열=제품명, C열=수량, D열=비고, E열~=업체별 단가
+                양식: A열=구분, B열=제품명, C열=비고, D열~=업체별 단가
               </p>
               <Button
                 variant="ghost"

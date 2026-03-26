@@ -157,6 +157,12 @@ export default async function ReturnDetailPage({
               </div>
             )}
           </dl>
+          {order.return_photo_urls?.length > 0 && (
+            <div className="mt-4">
+              <dt className="text-sm text-muted-foreground mb-2">반품 사진</dt>
+              <PhotoGallery photoUrls={order.return_photo_urls} />
+            </div>
+          )}
         </div>
 
         <Separator />

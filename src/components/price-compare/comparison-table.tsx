@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Search, Upload, FileDown } from "lucide-react";
+import { Fragment, useState, useMemo, useCallback } from "react";
+import { Search, Upload, FileDown, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ExcelUploadDialog } from "./excel-upload-dialog";
 import {
   Table,
@@ -15,6 +22,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toKSTDateString } from "@/lib/utils/format";
+import { useAuth } from "@/hooks/use-auth";
+import { createUnifiedProduct, updateUnifiedProduct, upsertVendorPrice } from "@/app/(main)/price-compare/actions";
 import type {
   Vendor,
   VendorProduct,
@@ -34,15 +43,28 @@ interface ComparisonRow {
   minPrice: number | null;
 }
 
+interface EditForm {
+  name: string;
+  notes: string;
+  remarks: string;
+  prices: Record<string, string>; // vendorId → price string
+}
+
 export function ComparisonTable({
   vendors,
   vendorProducts,
   unifiedProducts,
   onDataChange,
 }: ComparisonTableProps) {
+  const { isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newForm, setNewForm] = useState<EditForm | null>(null);
 
   // Build index: unified_product_id → VendorProduct[]
   const productsByUnified = useMemo(() => {
@@ -57,7 +79,6 @@ export function ComparisonTable({
   }, [vendorProducts]);
 
   const rows: ComparisonRow[] = useMemo(() => {
-    // 제품명 ㄱㄴㄷ순 정렬
     const sorted = [...unifiedProducts].sort((a, b) =>
       a.name.localeCompare(b.name, "ko")
     );
@@ -106,12 +127,380 @@ export function ComparisonTable({
     return result;
   }, [rows, searchQuery, categoryFilter]);
 
+  const openEdit = useCallback((row: ComparisonRow) => {
+    const prices: Record<string, string> = {};
+    for (const vendor of vendors) {
+      const entry = row.prices.get(vendor.id);
+      prices[vendor.id] = entry?.price != null ? String(entry.price) : "";
+    }
+    setEditForm({
+      name: row.unified.name,
+      notes: row.unified.notes || "",
+      remarks: row.unified.remarks || "",
+      prices,
+    });
+    setExpandedId(row.unified.id);
+  }, [vendors]);
+
+  const closeEdit = useCallback(() => {
+    setExpandedId(null);
+    setEditForm(null);
+  }, []);
+
+  const handleToggle = useCallback((row: ComparisonRow) => {
+    if (!isAdmin) return;
+    if (expandedId === row.unified.id) {
+      closeEdit();
+    } else {
+      openEdit(row);
+    }
+  }, [isAdmin, expandedId, openEdit, closeEdit]);
+
+  const handleSave = async (unified: UnifiedProduct) => {
+    if (!editForm) return;
+    setIsSaving(true);
+
+    try {
+      const priceUpdates = vendors.map((vendor) => {
+        const raw = editForm.prices[vendor.id]?.trim();
+        const price = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
+        const validPrice = price != null && !isNaN(price) ? price : null;
+        return upsertVendorPrice(unified.id, vendor.id, validPrice, editForm.name);
+      });
+
+      await Promise.all([
+        updateUnifiedProduct(unified.id, editForm.name, unified.mg, unified.tab, editForm.notes, editForm.remarks),
+        ...priceUpdates,
+      ]);
+
+      closeEdit();
+      onDataChange();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openAdd = useCallback(() => {
+    const prices: Record<string, string> = {};
+    for (const vendor of vendors) {
+      prices[vendor.id] = "";
+    }
+    setNewForm({ name: "", notes: "", remarks: "", prices });
+    setIsAdding(true);
+    setExpandedId(null);
+    setEditForm(null);
+  }, [vendors]);
+
+  const closeAdd = useCallback(() => {
+    setIsAdding(false);
+    setNewForm(null);
+  }, []);
+
+  const handleCreate = async () => {
+    if (!newForm) return;
+    if (!newForm.name.trim()) return;
+    setIsSaving(true);
+
+    try {
+      const createResult = await createUnifiedProduct(newForm.name, "", "", newForm.notes, newForm.remarks);
+      if (createResult.error) {
+        alert(createResult.error);
+        return;
+      }
+      const newId = createResult.id!;
+
+      const priceUpdates = vendors.map((vendor) => {
+        const raw = newForm.prices[vendor.id]?.trim();
+        const price = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
+        const validPrice = price != null && !isNaN(price) ? price : null;
+        return upsertVendorPrice(newId, vendor.id, validPrice, newForm.name);
+      });
+
+      await Promise.all(priceUpdates);
+      closeAdd();
+      onDataChange();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // PC: 기존 테이블 행과 동일한 레이아웃으로 인라인 입력
+  const renderAddRowPc = () => (
+    <TableRow className="bg-blue-50/40 hover:bg-blue-50/40">
+      {categoryFilter === "all" && (
+        <TableCell>
+          <Select
+            value={newForm?.notes ?? ""}
+            onValueChange={(v) => setNewForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
+          >
+            <SelectTrigger className="h-7 text-xs w-[68px]">
+              <SelectValue placeholder="구분" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="없음">없음</SelectItem>
+              <SelectItem value="약품">약품</SelectItem>
+              <SelectItem value="약국">약국</SelectItem>
+            </SelectContent>
+          </Select>
+        </TableCell>
+      )}
+      <TableCell>
+        <Input
+          autoFocus
+          placeholder="제품명 *"
+          value={newForm?.name ?? ""}
+          onChange={(e) => setNewForm((f) => f ? { ...f, name: e.target.value } : f)}
+          className="h-7 text-sm"
+          onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") closeAdd(); }}
+        />
+      </TableCell>
+      {vendors.map((vendor) => (
+        <TableCell key={vendor.id}>
+          <Input
+            type="text"
+            inputMode="numeric"
+            placeholder="-"
+            value={newForm?.prices[vendor.id] ?? ""}
+            onChange={(e) =>
+              setNewForm((f) =>
+                f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
+              )
+            }
+            className="h-7 text-sm text-right"
+          />
+        </TableCell>
+      ))}
+      <TableCell>
+        <Input
+          placeholder="비고"
+          value={newForm?.remarks ?? ""}
+          onChange={(e) => setNewForm((f) => f ? { ...f, remarks: e.target.value } : f)}
+          className="h-7 text-sm"
+        />
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={closeAdd} disabled={isSaving}>
+            취소
+          </Button>
+          <Button size="sm" className="h-7 px-2 text-xs" onClick={handleCreate} disabled={isSaving || !newForm?.name.trim()}>
+            {isSaving ? "..." : "저장"}
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+
+  // 모바일: 카드 형태
+  const renderAddCardMobile = () => (
+    <div className="rounded-xl bg-card p-4 shadow-card border-2 border-primary/20 space-y-4">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="col-span-2 space-y-1">
+          <label className="text-xs text-muted-foreground">제품명 *</label>
+          <Input
+            autoFocus
+            placeholder="제품명 입력"
+            value={newForm?.name ?? ""}
+            onChange={(e) => setNewForm((f) => f ? { ...f, name: e.target.value } : f)}
+            className="h-8 text-sm"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">카테고리</label>
+          <Select
+            value={newForm?.notes ?? ""}
+            onValueChange={(v) => setNewForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="선택" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="없음">없음</SelectItem>
+              <SelectItem value="약품">약품</SelectItem>
+              <SelectItem value="약국">약국</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">비고</label>
+          <Input
+            placeholder="비고 (선택)"
+            value={newForm?.remarks ?? ""}
+            onChange={(e) => setNewForm((f) => f ? { ...f, remarks: e.target.value } : f)}
+            className="h-8 text-sm"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground mb-2 block">업체별 단가</label>
+        <div className="grid grid-cols-2 gap-2">
+          {vendors.map((vendor) => (
+            <div key={vendor.id} className="space-y-1">
+              <label className="text-xs font-medium">{vendor.name}</label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="미입력"
+                value={newForm?.prices[vendor.id] ?? ""}
+                onChange={(e) =>
+                  setNewForm((f) =>
+                    f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
+                  )
+                }
+                className="h-8 text-sm"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={closeAdd} disabled={isSaving}>취소</Button>
+        <Button size="sm" onClick={handleCreate} disabled={isSaving || !newForm?.name.trim()}>
+          {isSaving ? "저장 중..." : "추가"}
+        </Button>
+      </div>
+    </div>
+  );
+
+  // PC: 기존 행과 동일한 레이아웃으로 인라인 편집
+  const renderEditRowPc = (row: ComparisonRow) => (
+    <TableRow className="bg-amber-50/40 hover:bg-amber-50/40">
+      {categoryFilter === "all" && (
+        <TableCell>
+          <Select
+            value={editForm?.notes ?? ""}
+            onValueChange={(v) => setEditForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
+          >
+            <SelectTrigger className="h-7 text-xs w-[68px]">
+              <SelectValue placeholder="구분" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="없음">없음</SelectItem>
+              <SelectItem value="약품">약품</SelectItem>
+              <SelectItem value="약국">약국</SelectItem>
+            </SelectContent>
+          </Select>
+        </TableCell>
+      )}
+      <TableCell>
+        <Input
+          autoFocus
+          value={editForm?.name ?? ""}
+          onChange={(e) => setEditForm((f) => f ? { ...f, name: e.target.value } : f)}
+          className="h-7 text-sm"
+          onKeyDown={(e) => { if (e.key === "Enter") handleSave(row.unified); if (e.key === "Escape") closeEdit(); }}
+        />
+      </TableCell>
+      {vendors.map((vendor) => (
+        <TableCell key={vendor.id}>
+          <Input
+            type="text"
+            inputMode="numeric"
+            placeholder="-"
+            value={editForm?.prices[vendor.id] ?? ""}
+            onChange={(e) =>
+              setEditForm((f) =>
+                f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
+              )
+            }
+            className="h-7 text-sm text-right"
+          />
+        </TableCell>
+      ))}
+      <TableCell>
+        <Input
+          placeholder="비고"
+          value={editForm?.remarks ?? ""}
+          onChange={(e) => setEditForm((f) => f ? { ...f, remarks: e.target.value } : f)}
+          className="h-7 text-sm"
+        />
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={closeEdit} disabled={isSaving}>
+            취소
+          </Button>
+          <Button size="sm" className="h-7 px-2 text-xs" onClick={() => handleSave(row.unified)} disabled={isSaving}>
+            {isSaving ? "..." : "저장"}
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+
+  // 모바일: 카드 내 인라인 편집 패널
+  const renderMobileEditPanel = (row: ComparisonRow) => (
+    <div className="mt-3 pt-3 border-t space-y-4">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="col-span-2 space-y-1">
+          <label className="text-xs text-muted-foreground">제품명</label>
+          <Input
+            value={editForm?.name ?? ""}
+            onChange={(e) => setEditForm((f) => f ? { ...f, name: e.target.value } : f)}
+            className="h-8 text-sm"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">카테고리</label>
+          <Select
+            value={editForm?.notes ?? ""}
+            onValueChange={(v) => setEditForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="선택" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="없음">없음</SelectItem>
+              <SelectItem value="약품">약품</SelectItem>
+              <SelectItem value="약국">약국</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">비고</label>
+          <Input
+            value={editForm?.remarks ?? ""}
+            onChange={(e) => setEditForm((f) => f ? { ...f, remarks: e.target.value } : f)}
+            className="h-8 text-sm"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground mb-2 block">업체별 단가</label>
+        <div className="grid grid-cols-2 gap-2">
+          {vendors.map((vendor) => (
+            <div key={vendor.id} className="space-y-1">
+              <label className="text-xs font-medium">{vendor.name}</label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="미입력"
+                value={editForm?.prices[vendor.id] ?? ""}
+                onChange={(e) =>
+                  setEditForm((f) =>
+                    f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
+                  )
+                }
+                className="h-8 text-sm"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={closeEdit} disabled={isSaving}>취소</Button>
+        <Button size="sm" onClick={() => handleSave(row.unified)} disabled={isSaving}>
+          {isSaving ? "저장 중..." : "저장"}
+        </Button>
+      </div>
+    </div>
+  );
+
   const handleTemplateDownload = async (includeData: boolean) => {
     const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("가격비교");
 
-    // --- 색상 팔레트 ---
     const colors = {
       headerBg: "FF2563EB",
       headerFont: "FFFFFFFF",
@@ -132,10 +521,9 @@ export function ComparisonTable({
 
     const vendorHeaders = includeData && vendors.length > 0
       ? vendors.map((v) => v.name)
-      : ["업체1", "업체2", "업체3"];
-    const headers = ["구분", "제품명", "수량", "비고", ...vendorHeaders];
+      : ["우리엔팜", "화영", "VS팜", "서수약품"];
+    const headers = ["구분", "제품명", "비고", ...vendorHeaders];
 
-    // --- 타이틀 행 ---
     if (includeData) {
       const yymmdd = toKSTDateString(new Date().toISOString()).slice(2).replace(/-/g, "");
       const titleRow = sheet.addRow([`단가 비교표 (${yymmdd})`]);
@@ -146,13 +534,12 @@ export function ComparisonTable({
       titleCell.alignment = { vertical: "middle" };
     }
 
-    // --- 헤더 행 ---
     const headerRow = sheet.addRow(headers);
     headerRow.height = 28;
     headerRow.eachCell((cell, colNumber) => {
       cell.font = { bold: true, size: 10, color: { argb: colors.headerFont } };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.headerBg } };
-      cell.alignment = { vertical: "middle", horizontal: colNumber >= 5 ? "right" : "center" };
+      cell.alignment = { vertical: "middle", horizontal: colNumber >= 4 ? "right" : "center" };
       cell.border = {
         top: { style: "thin" as const, color: { argb: colors.borderHeader } },
         bottom: { style: "medium" as const, color: { argb: colors.borderHeader } },
@@ -161,16 +548,14 @@ export function ComparisonTable({
       };
     });
 
-    // --- 데이터 행 ---
     if (includeData) {
-      const vendorStartCol = 5; // E열부터 업체 가격
+      const vendorStartCol = 4;
 
       for (let ri = 0; ri < rows.length; ri++) {
         const row = rows[ri];
         const values: (string | number | null)[] = [
           row.unified.notes || "",
           row.unified.name,
-          row.unified.quantity || "",
           row.unified.remarks || "",
         ];
         for (const vendor of vendors) {
@@ -187,33 +572,25 @@ export function ComparisonTable({
           cell.font = { size: 10 };
           cell.alignment = { vertical: "middle" };
 
-          // 구분 열 스타일
           if (colNumber === 1) {
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.categoryBg } };
             cell.alignment = { vertical: "middle", horizontal: "center" };
             cell.font = { size: 9, color: { argb: "FF64748B" } };
-          }
-          // 제품명 열
-          else if (colNumber === 2) {
+          } else if (colNumber === 2) {
             cell.font = { size: 10, bold: true };
             if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
-          }
-          // 업체 가격 열
-          else if (colNumber >= vendorStartCol) {
+          } else if (colNumber >= vendorStartCol) {
             cell.alignment = { vertical: "middle", horizontal: "right" };
             if (cell.value != null && typeof cell.value === "number") {
               cell.numFmt = "#,##0";
             }
             if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
-          }
-          // 나머지 열
-          else {
+          } else {
             cell.alignment = { vertical: "middle", horizontal: "center" };
             if (isAlt) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.altRowBg } };
           }
         });
 
-        // 최저가 하이라이트
         if (row.minPrice != null) {
           for (let vi = 0; vi < vendors.length; vi++) {
             const entry = row.prices.get(vendors[vi].id);
@@ -227,11 +604,9 @@ export function ComparisonTable({
       }
     }
 
-    // --- 열 너비 자동 조정 ---
     sheet.columns.forEach((col, idx) => {
       let maxLen = 0;
       col.eachCell?.({ includeEmpty: true }, (cell, rowNumber) => {
-        // 타이틀 행(merged) 제외
         if (includeData && rowNumber === 1) return;
         const val = cell.value != null ? String(cell.value) : "";
         let len = 0;
@@ -241,7 +616,6 @@ export function ComparisonTable({
       col.width = Math.max(idx === 1 ? 16 : 10, maxLen + 4);
     });
 
-    // --- 시트 설정 ---
     sheet.views = [{ state: "frozen", ySplit: includeData ? 2 : 1, xSplit: 2 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -267,6 +641,12 @@ export function ComparisonTable({
             className="pl-9 bg-card"
           />
         </div>
+        {isAdmin && (
+          <Button variant="outline" size="sm" className="bg-card" onClick={openAdd}>
+            <Plus className="h-4 w-4 mr-1" />
+            추가
+          </Button>
+        )}
         <Button variant="outline" size="sm" className="bg-card" onClick={() => setUploadOpen(true)}>
           <Upload className="h-4 w-4 mr-1" />
           업로드
@@ -285,15 +665,9 @@ export function ComparisonTable({
 
       <Tabs value={categoryFilter} onValueChange={setCategoryFilter}>
         <TabsList>
-          <TabsTrigger value="all">
-            전체 ({rows.length})
-          </TabsTrigger>
-          <TabsTrigger value="약품">
-            약품 ({categoryCounts.약품})
-          </TabsTrigger>
-          <TabsTrigger value="약국">
-            약국 ({categoryCounts.약국})
-          </TabsTrigger>
+          <TabsTrigger value="all">전체 ({rows.length})</TabsTrigger>
+          <TabsTrigger value="약품">약품 ({categoryCounts.약품})</TabsTrigger>
+          <TabsTrigger value="약국">약국 ({categoryCounts.약국})</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -311,52 +685,59 @@ export function ComparisonTable({
         <>
           {/* 모바일 카드 뷰 */}
           <div className="space-y-3 lg:hidden">
-            {filtered.map((row) => (
-              <div key={row.unified.id} className="rounded-xl bg-card p-4 shadow-card space-y-2">
-                <div className="flex items-center gap-2">
-                  {categoryFilter === "all" && row.unified.notes && (
-                    <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                      row.unified.notes === "약품"
-                        ? "bg-blue-100 text-blue-700"
-                        : "bg-emerald-100 text-emerald-700"
-                    }`}>
-                      {row.unified.notes}
-                    </span>
-                  )}
-                  <span className="font-medium">{row.unified.name}</span>
-                  {row.unified.quantity && (
-                    <span className="text-xs text-muted-foreground">{row.unified.quantity}</span>
-                  )}
-                  {row.unified.remarks && (
-                    <span className="text-xs text-muted-foreground">({row.unified.remarks})</span>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-1">
-                  {vendors.map((vendor) => {
-                    const entry = row.prices.get(vendor.id);
-                    const isMin =
-                      row.minPrice != null && entry?.price === row.minPrice;
-                    return (
-                      <div
-                        key={vendor.id}
-                        className={`flex items-center justify-between text-sm px-2 py-1 rounded ${
-                          isMin ? "bg-green-50 dark:bg-green-950/30" : ""
-                        }`}
-                      >
-                        <span className="text-muted-foreground text-xs">
-                          {vendor.name}
+            {isAdding && newForm && renderAddCardMobile()}
+            {filtered.map((row) => {
+              const isExpanded = expandedId === row.unified.id;
+              return (
+                <div key={row.unified.id} className="rounded-xl bg-card p-4 shadow-card space-y-2">
+                  <div
+                    className={`flex items-center gap-2 ${isAdmin ? "cursor-pointer" : ""}`}
+                    onClick={() => handleToggle(row)}
+                  >
+                    <div className="flex-1 flex items-center gap-2 flex-wrap">
+                      {categoryFilter === "all" && row.unified.notes && (
+                        <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                          row.unified.notes === "약품"
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-emerald-100 text-emerald-700"
+                        }`}>
+                          {row.unified.notes}
                         </span>
-                        <span className={isMin ? "font-bold text-green-600" : ""}>
-                          {entry?.price != null
-                            ? `${entry.price.toLocaleString()}원`
-                            : "-"}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      )}
+                      <span className="font-medium">{row.unified.name}</span>
+                      {row.unified.remarks && (
+                        <span className="text-xs text-muted-foreground">({row.unified.remarks})</span>
+                      )}
+                    </div>
+                    {isAdmin && (
+                      isExpanded
+                        ? <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        : <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {vendors.map((vendor) => {
+                      const entry = row.prices.get(vendor.id);
+                      const isMin = row.minPrice != null && entry?.price === row.minPrice;
+                      return (
+                        <div
+                          key={vendor.id}
+                          className={`flex items-center justify-between text-sm px-2 py-1 rounded ${
+                            isMin ? "bg-green-50 dark:bg-green-950/30" : ""
+                          }`}
+                        >
+                          <span className="text-muted-foreground text-xs">{vendor.name}</span>
+                          <span className={isMin ? "font-bold text-green-600" : ""}>
+                            {entry?.price != null ? `${entry.price.toLocaleString()}원` : "-"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {isExpanded && editForm && renderMobileEditPanel(row)}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* PC 테이블 뷰 */}
@@ -368,62 +749,71 @@ export function ComparisonTable({
                     <TableHead className="w-[60px]">구분</TableHead>
                   )}
                   <TableHead className="w-[200px]">제품명</TableHead>
-                  <TableHead className="w-[80px]">수량</TableHead>
                   {vendors.map((vendor) => (
                     <TableHead key={vendor.id} className="w-[120px] text-right">
                       {vendor.name}
                     </TableHead>
                   ))}
                   <TableHead className="w-[120px]">비고</TableHead>
+                  {isAdmin && <TableHead className="w-[40px]" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((row) => (
-                  <TableRow key={row.unified.id}>
-                    {categoryFilter === "all" && (
-                      <TableCell>
-                        {row.unified.notes && (
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                            row.unified.notes === "약품"
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-emerald-100 text-emerald-700"
-                          }`}>
-                            {row.unified.notes}
-                          </span>
-                        )}
-                      </TableCell>
-                    )}
-                    <TableCell className="font-medium">
-                      {row.unified.name}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {row.unified.quantity || ""}
-                    </TableCell>
-                    {vendors.map((vendor) => {
-                      const entry = row.prices.get(vendor.id);
-                      const isMin =
-                        row.minPrice != null && entry?.price === row.minPrice;
-                      return (
-                        <TableCell
-                          key={vendor.id}
-                          className={`text-right ${
-                            isMin
-                              ? "bg-green-50 dark:bg-green-950/30 font-bold text-green-600"
-                              : ""
-                          }`}
-                          title={entry?.productName}
+                {isAdding && newForm && renderAddRowPc()}
+                {filtered.map((row) => {
+                  const isExpanded = expandedId === row.unified.id;
+
+                  return (
+                    <Fragment key={row.unified.id}>
+                      {isExpanded && editForm ? renderEditRowPc(row) : (
+                        <TableRow
+                          className={isAdmin ? "cursor-pointer" : ""}
+                          onClick={() => handleToggle(row)}
                         >
-                          {entry?.price != null
-                            ? entry.price.toLocaleString()
-                            : "-"}
-                        </TableCell>
-                      );
-                    })}
-                    <TableCell className="text-sm text-muted-foreground">
-                      {row.unified.remarks || ""}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          {categoryFilter === "all" && (
+                            <TableCell>
+                              {row.unified.notes && (
+                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                  row.unified.notes === "약품"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "bg-emerald-100 text-emerald-700"
+                                }`}>
+                                  {row.unified.notes}
+                                </span>
+                              )}
+                            </TableCell>
+                          )}
+                          <TableCell className="font-medium">{row.unified.name}</TableCell>
+                          {vendors.map((vendor) => {
+                            const entry = row.prices.get(vendor.id);
+                            const isMin = row.minPrice != null && entry?.price === row.minPrice;
+                            return (
+                              <TableCell
+                                key={vendor.id}
+                                className={`text-right ${
+                                  isMin
+                                    ? "bg-green-50 dark:bg-green-950/30 font-bold text-green-600"
+                                    : ""
+                                }`}
+                                title={entry?.productName}
+                              >
+                                {entry?.price != null ? entry.price.toLocaleString() : "-"}
+                              </TableCell>
+                            );
+                          })}
+                          <TableCell className="text-sm text-muted-foreground">
+                            {row.unified.remarks || ""}
+                          </TableCell>
+                          {isAdmin && (
+                            <TableCell className="text-muted-foreground">
+                              <ChevronDown className="h-4 w-4" />
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

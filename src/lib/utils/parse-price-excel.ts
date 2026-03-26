@@ -1,12 +1,11 @@
 /**
  * 통합 가격비교 엑셀 파서
- * 양식: A=구분(약품/약국), B=제품명, C=수량, D=비고, E~=업체별 단가
+ * 양식: A=구분(약품/약국), B=제품명, C=비고, D~=업체별 단가
  */
 
 interface ParsedProduct {
   category: string;
   name: string;
-  quantity: string;
   remarks: string;
   vendorPrices: Map<string, number | null>;
 }
@@ -25,7 +24,7 @@ export async function parsePriceExcel(file: File): Promise<ParsedPriceExcel> {
   const sheet = workbook.worksheets[0];
   if (!sheet) throw new Error("시트를 찾을 수 없습니다.");
 
-  // 헤더 행 자동 감지: B열이 "제품명"인 행을 찾고, 없으면 E열에 값이 2개 이상인 첫 행
+  // 헤더 행 자동 감지: B열이 "제품명"인 행을 찾고, 없으면 D열에 값이 2개 이상인 첫 행
   let headerRowNum = 0;
   for (let rowNum = 1; rowNum <= Math.min(sheet.rowCount, 5); rowNum++) {
     const row = sheet.getRow(rowNum);
@@ -34,10 +33,10 @@ export async function parsePriceExcel(file: File): Promise<ParsedPriceExcel> {
       headerRowNum = rowNum;
       break;
     }
-    // E열부터 값이 2개 이상이면 헤더 행으로 간주
+    // D열부터 값이 2개 이상이면 헤더 행으로 간주
     let vendorCount = 0;
     row.eachCell({ includeEmpty: false }, (_cell, colNumber) => {
-      if (colNumber >= 5) vendorCount++;
+      if (colNumber >= 4) vendorCount++;
     });
     if (vendorCount >= 2 && headerRowNum === 0) {
       headerRowNum = rowNum;
@@ -51,15 +50,15 @@ export async function parsePriceExcel(file: File): Promise<ParsedPriceExcel> {
 
   headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
     const val = String(cell.value ?? "").trim();
-    // E열(5)부터 업체명
-    if (colNumber >= 5 && val) {
+    // D열(4)부터 업체명
+    if (colNumber >= 4 && val) {
       vendorNames.push(val);
       vendorColIndices.push(colNumber);
     }
   });
 
   if (vendorNames.length === 0) {
-    throw new Error("E열부터 업체명 헤더를 찾을 수 없습니다.");
+    throw new Error("D열부터 업체명 헤더를 찾을 수 없습니다.");
   }
 
   // 데이터 행 파싱 (헤더 다음 행부터)
@@ -71,8 +70,7 @@ export async function parsePriceExcel(file: File): Promise<ParsedPriceExcel> {
     if (!name) continue;
 
     const category = String(row.getCell(1).value ?? "").trim();
-    const quantity = String(row.getCell(3).value ?? "").trim();
-    const remarks = String(row.getCell(4).value ?? "").trim();
+    const remarks = String(row.getCell(3).value ?? "").trim();
 
     const vendorPrices = new Map<string, number | null>();
     for (let i = 0; i < vendorColIndices.length; i++) {
@@ -81,7 +79,7 @@ export async function parsePriceExcel(file: File): Promise<ParsedPriceExcel> {
       vendorPrices.set(vendorNames[i], price);
     }
 
-    products.push({ category, name, quantity, remarks, vendorPrices });
+    products.push({ category, name, remarks, vendorPrices });
   }
 
   return { vendorNames, products };

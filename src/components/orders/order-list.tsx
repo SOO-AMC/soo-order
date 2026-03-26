@@ -40,7 +40,14 @@ export function OrderList() {
   const [orders, setOrders] = useState<OrderWithRequester[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
+    try {
+      const saved = sessionStorage.getItem("order-selected-ids");
+      return saved ? new Set(JSON.parse(saved) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [isOrdering, setIsOrdering] = useState(false);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkMode, setBulkMode] = useState<"all" | "individual">("all");
@@ -72,6 +79,13 @@ export function OrderList() {
     setIsLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // selectedIds가 바뀔 때마다 sessionStorage에 동기화
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("order-selected-ids", JSON.stringify([...selectedIds]));
+    } catch {}
+  }, [selectedIds]);
 
   const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -236,6 +250,7 @@ export function OrderList() {
         setVendorSelections(new Map());
       } else {
         setSelectedIds(new Set());
+        sessionStorage.removeItem("order-selected-ids");
       }
       setIsOrdering(false);
       await fetchOrders();
@@ -280,6 +295,7 @@ export function OrderList() {
         {isAdmin && pendingOrders.length > 0 ? (
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
             <Checkbox
+              className="h-5 w-5"
               checked={allPendingSelected}
               onCheckedChange={toggleSelectAll}
             />
@@ -322,6 +338,7 @@ export function OrderList() {
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       {showCheckbox && (
                         <Checkbox
+                          className="h-5 w-5"
                           checked={isSelected}
                           onCheckedChange={() => toggleSelect(order.id)}
                         />
@@ -384,6 +401,7 @@ export function OrderList() {
               <div className="flex items-center gap-3 p-4 transition-colors">
                 {showCheckbox && (
                   <Checkbox
+                    className="h-5 w-5"
                     checked={isSelected}
                     onCheckedChange={() => toggleSelect(order.id)}
                   />
@@ -447,8 +465,8 @@ export function OrderList() {
           )}
           {selectedIds.size > 0 && (
             <Button
-              variant={vendorSelectedIds.length > 0 ? "outline" : "default"}
-              className="flex-1 max-w-md shadow-lg bg-card"
+              variant="default"
+              className="flex-1 max-w-md shadow-lg"
               onClick={() => openBulkDialog("checkbox")}
             >
               <ShoppingCart className="h-4 w-4" />
@@ -506,6 +524,24 @@ export function OrderList() {
                   onChange={(e) => setBulkOrderNotes(e.target.value)}
                 />
               </div>
+              {(() => {
+                const targetIds = bulkSource === "vendor" ? new Set(vendorSelectedIds) : selectedIds;
+                const targetOrders = sortedOrders.filter((o) => targetIds.has(o.id));
+                const isCopied = copiedVendor !== "" && copiedVendor === bulkVendorName;
+                const label = bulkVendorName.trim()
+                  ? `${bulkVendorName} (${targetOrders.length}건) 문구 복사`
+                  : `주문 요청 문구 복사 (${targetOrders.length}건)`;
+                return (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2"
+                    onClick={() => handleCopyVendorMessage(bulkVendorName, targetOrders)}
+                  >
+                    {isCopied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+                    {isCopied ? "복사됨" : label}
+                  </Button>
+                );
+              })()}
             </div>
           ) : (
             <div className="max-h-60 space-y-3 overflow-y-auto">

@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/utils/activity-log";
 type ActionState = {
   error?: string;
   success?: boolean;
+  id?: string;
 };
 
 // --- Vendors ---
@@ -115,8 +116,8 @@ export async function createUnifiedProduct(
   name: string,
   mg: string,
   tab: string,
-  quantity: string = "",
-  notes: string = ""
+  notes: string = "",
+  remarks: string = ""
 ): Promise<ActionState> {
   const { supabase, userId, userName } = await requireAdmin();
 
@@ -133,20 +134,24 @@ export async function createUnifiedProduct(
 
   const nextOrder = (maxRow?.sort_order ?? 0) + 1;
 
-  const { error } = await supabase.from("unified_products").insert({
-    name: trimmed,
-    mg: mg.trim(),
-    tab: tab.trim(),
-    quantity: quantity.trim(),
-    notes: notes.trim(),
-    sort_order: nextOrder,
-  });
+  const { data, error } = await supabase
+    .from("unified_products")
+    .insert({
+      name: trimmed,
+      mg: mg.trim(),
+      tab: tab.trim(),
+      notes: notes.trim(),
+      remarks: remarks.trim(),
+      sort_order: nextOrder,
+    })
+    .select("id")
+    .single();
 
   if (error) return { error: `통합 제품 생성 실패: ${error.message}` };
 
   await logActivity({ userId, userName, category: "price", action: "create_unified_product", description: `${trimmed} 통합제품 등록` });
   revalidatePath("/price-compare");
-  return { success: true };
+  return { success: true, id: data.id };
 }
 
 export async function updateUnifiedProduct(
@@ -154,14 +159,14 @@ export async function updateUnifiedProduct(
   name: string,
   mg: string,
   tab: string,
-  quantity: string = "",
-  notes: string = ""
+  notes: string = "",
+  remarks: string = ""
 ): Promise<ActionState> {
   const { supabase, userId, userName } = await requireAdmin();
 
   const { error } = await supabase
     .from("unified_products")
-    .update({ name: name.trim(), mg: mg.trim(), tab: tab.trim(), quantity: quantity.trim(), notes: notes.trim() })
+    .update({ name: name.trim(), mg: mg.trim(), tab: tab.trim(), notes: notes.trim(), remarks: remarks.trim() })
     .eq("id", id);
 
   if (error) return { error: `수정 실패: ${error.message}` };
@@ -191,7 +196,6 @@ export async function deleteUnifiedProduct(id: string, productName?: string): Pr
 interface PriceUploadProduct {
   category: string;
   name: string;
-  quantity: string;
   remarks: string;
   vendorPrices: Record<string, number | null>;
 }
@@ -264,7 +268,6 @@ export async function uploadPriceExcel(
       name: p.name,
       mg: "",
       tab: "",
-      quantity: p.quantity,
       notes: p.category,
       remarks: p.remarks,
       sort_order: nextOrder++,
@@ -289,7 +292,6 @@ export async function uploadPriceExcel(
       name: p.name,
       mg: "",
       tab: "",
-      quantity: p.quantity,
       notes: p.category,
       remarks: p.remarks,
       sort_order: nextOrder++,
@@ -369,6 +371,47 @@ export async function uploadPriceExcel(
     userId, userName, category: "price", action: "upload_price_excel",
     description: `통합 엑셀 업로드 (${mode === "overwrite" ? "덮어쓰기" : "병합"}, ${products.length}개 제품, ${vendorNames.length}개 업체)`,
   });
+  revalidatePath("/price-compare");
+  return { success: true };
+}
+
+// --- 인라인 가격 편집 ---
+
+export async function upsertVendorPrice(
+  unifiedProductId: string,
+  vendorId: string,
+  price: number | null,
+  productName: string,
+): Promise<ActionState> {
+  const { supabase } = await requireAdmin();
+
+  const { data: existing } = await supabase
+    .from("vendor_products")
+    .select("id")
+    .eq("vendor_id", vendorId)
+    .eq("unified_product_id", unifiedProductId)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase
+      .from("vendor_products")
+      .update({ unit_price: price })
+      .eq("id", existing.id);
+    if (error) return { error: `가격 수정 실패: ${error.message}` };
+  } else {
+    const { error } = await supabase.from("vendor_products").insert({
+      vendor_id: vendorId,
+      unified_product_id: unifiedProductId,
+      product_name: productName,
+      unit_price: price,
+      manufacturer: "",
+      spec: "",
+      ingredient: "",
+      category: "",
+    });
+    if (error) return { error: `가격 저장 실패: ${error.message}` };
+  }
+
   revalidatePath("/price-compare");
   return { success: true };
 }

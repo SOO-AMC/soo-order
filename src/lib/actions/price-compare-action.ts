@@ -3,7 +3,7 @@
 import { requireAdmin } from "@/lib/supabase/server";
 import type { Vendor, VendorProduct, UnifiedProduct } from "@/lib/types/price-compare";
 
-const VENDOR_ORDER = ["우리엔팜", "VS팜", "화영", "라라엠케어"];
+const VENDOR_ORDER = ["우리엔팜", "화영", "VS팜", "서수약품"];
 
 async function fetchAll<T>(
   supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"],

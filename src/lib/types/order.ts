@@ -21,6 +21,8 @@ export interface Order {
   return_reason: string | null;
   return_requested_by: string | null;
   return_requested_at: string | null;
+  return_photo_urls: string[];
+  inspection_memo: string | null;
   notes: string;
   order_notes: string;
   inspection_notes: string;

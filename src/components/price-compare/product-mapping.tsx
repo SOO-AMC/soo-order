@@ -45,7 +45,6 @@ export function ProductMapping({
   const [formName, setFormName] = useState("");
   const [formMg, setFormMg] = useState("");
   const [formTab, setFormTab] = useState("");
-  const [formQuantity, setFormQuantity] = useState("");
   const [formNotes, setFormNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,7 +80,6 @@ export function ProductMapping({
     setFormName("");
     setFormMg("");
     setFormTab("");
-    setFormQuantity("");
     setFormNotes("");
     setError(null);
     setDialogType("create");
@@ -92,7 +90,6 @@ export function ProductMapping({
     setFormName(p.name);
     setFormMg(p.mg);
     setFormTab(p.tab);
-    setFormQuantity(p.quantity);
     setFormNotes(p.notes);
     setError(null);
     setDialogType("edit");
@@ -112,7 +109,7 @@ export function ProductMapping({
   const handleCreate = async () => {
     setIsSubmitting(true);
     try {
-      const result = await createUnifiedProduct(formName, formMg, formTab, formQuantity, formNotes);
+      const result = await createUnifiedProduct(formName, formMg, formTab, formNotes);
       if (result.error) {
         setError(result.error);
       } else {
@@ -127,7 +124,7 @@ export function ProductMapping({
     if (!selectedProduct) return;
     setIsSubmitting(true);
     try {
-      const result = await updateUnifiedProduct(selectedProduct.id, formName, formMg, formTab, formQuantity, formNotes);
+      const result = await updateUnifiedProduct(selectedProduct.id, formName, formMg, formTab, formNotes);
       if (result.error) {
         setError(result.error);
       } else {
@@ -357,7 +354,7 @@ export function ProductMapping({
                 placeholder="예: 타이레놀"
               />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="unified-mg">mg (용량)</Label>
                 <Input
@@ -374,15 +371,6 @@ export function ProductMapping({
                   value={formTab}
                   onChange={(e) => setFormTab(e.target.value)}
                   placeholder="예: 100T"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="unified-quantity">수량</Label>
-                <Input
-                  id="unified-quantity"
-                  value={formQuantity}
-                  onChange={(e) => setFormQuantity(e.target.value)}
-                  placeholder="예: 1박스"
                 />
               </div>
             </div>

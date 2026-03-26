@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +24,6 @@ interface PriceMatch {
   prices: PriceEntry[];
   minPrice: number | null;
 }
-
-const DEFAULT_VENDORS = ["VS팜", "우리엔팜", "서울수의약품", "화영"];
 
 // Shared price data cache (module-level singleton)
 interface PriceData {
@@ -195,6 +193,12 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
     unified: UnifiedProduct[];
   } | null>(null);
 
+  // 마운트 시 백그라운드 프리페치 — 첫 번째 인스턴스가 fetch를 시작하고
+  // 나머지는 동일한 Promise를 공유하므로 실제 요청은 한 번만 발생
+  useEffect(() => {
+    getPriceData().then((result) => setData(result)).catch(() => {});
+  }, []);
+
   const handleOpen = async (isOpen: boolean) => {
     setOpen(isOpen);
     if (isOpen && !data) {
@@ -249,28 +253,30 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
             <Spinner text="가격 데이터 로딩 중..." />
           </div>
         ) : !priceMatch ? (
-          <div className="py-1">
-            <div className="mx-3 mb-1 mt-2 text-xs text-muted-foreground">
-              가격 데이터 없음 · 업체 직접 선택
+          data?.vendors && data.vendors.length > 0 ? (
+            <div className="py-1">
+              <div className="px-3 pt-2 pb-1 text-xs text-muted-foreground">가격 데이터 없음</div>
+              <div className="px-1 pb-1">
+                {data.vendors.map((v) => {
+                  const isSelected = selectedVendor === v.name;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      className={`flex w-full items-center rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${isSelected ? "bg-accent" : ""}`}
+                      onClick={() => handleSelect(v.name)}
+                    >
+                      <span className="font-medium">{v.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="px-1 py-1">
-              {DEFAULT_VENDORS.map((vendorName) => {
-                const isSelected = selectedVendor === vendorName;
-                return (
-                  <button
-                    key={vendorName}
-                    type="button"
-                    className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${
-                      isSelected ? "bg-accent" : ""
-                    }`}
-                    onClick={() => handleSelect(vendorName)}
-                  >
-                    <span className="font-medium">{vendorName}</span>
-                  </button>
-                );
-              })}
+          ) : (
+            <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+              일치하는 가격 데이터 없음
             </div>
-          </div>
+          )
         ) : (
           <div className="py-1">
             {priceMatch.remarks && (

@@ -161,6 +161,7 @@ export function OutOfStockList() {
         <div className="flex items-center justify-between px-1 py-2">
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
             <Checkbox
+              className="h-5 w-5"
               checked={allSelected}
               onCheckedChange={toggleSelectAll}
             />
@@ -196,6 +197,7 @@ export function OutOfStockList() {
                   {isAdmin && (
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox
+                        className="h-5 w-5"
                         checked={isSelected}
                         onCheckedChange={() => toggleSelect(order.id)}
                       />
@@ -245,6 +247,7 @@ export function OutOfStockList() {
               <div className="flex items-center gap-3">
                 {isAdmin && (
                   <Checkbox
+                    className="h-5 w-5"
                     checked={isSelected}
                     onCheckedChange={() => toggleSelect(order.id)}
                   />
