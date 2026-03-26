@@ -1,3 +1,9 @@
+---
+paths:
+  - "src/app/**"
+  - "src/lib/**"
+---
+
 # 아키텍처 규칙
 
 ## Server vs Client 컴포넌트
@@ -17,3 +23,14 @@
 - 조회 페이지: Server Action + 클라이언트 상태 관리
 - 대시보드/가격비교/직원관리: Server Action으로 마운트 시 fetch
 - 상세 페이지: Server Component SSR
+
+## Server Actions (`src/lib/actions/`)
+- `order-mutations.ts`: 주문 발주/검수/품절/취소/반품완료/혈액확인 (`requireAdmin()`)
+- `price-compare-action.ts`: 업체/제품/통합제품 CRUD (인라인 편집/추가 포함)
+- `search-action.ts`: 조회 필터 검색
+- `dashboard-action.ts`: 대시보드 RPC + Firebase 분석
+
+## 활동 로그
+- `logActivity()` (서버): admin client로 INSERT (fire-and-forget)
+- `logClientAction()`: Client Component용 Server Action
+- 카테고리: auth, order, dispatch, inspection, return, account, price, blood
