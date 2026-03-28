@@ -100,7 +100,7 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
         { event: "*", schema: "public", table: "orders" },
         () => {
           if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
-          realtimeTimer.current = setTimeout(fetchOrders, 500);
+          realtimeTimer.current = setTimeout(fetchOrders, 200);
         }
       )
       .subscribe();

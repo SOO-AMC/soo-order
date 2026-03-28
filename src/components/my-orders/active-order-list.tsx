@@ -11,6 +11,7 @@ const STATUS_DOT_COLORS: Record<OrderStatus, string> = {
   ordered: "bg-green-500",
   inspecting: "bg-blue-500",
   return_requested: "bg-orange-500",
+  return_pending: "bg-purple-500",
   return_completed: "bg-gray-400",
   out_of_stock: "bg-red-500",
 };

@@ -62,7 +62,7 @@ export function BloodList({ type }: BloodListProps) {
         { event: "*", schema: "public", table: "blood_records" },
         () => {
           if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
-          realtimeTimer.current = setTimeout(fetchRecords, 500);
+          realtimeTimer.current = setTimeout(fetchRecords, 200);
         }
       )
       .subscribe();

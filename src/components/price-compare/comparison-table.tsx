@@ -439,7 +439,7 @@ export function ComparisonTable({
         const rate = vendor.discount_rate ?? 0;
         const raw = editForm?.prices[vendor.id] ?? "";
         const parsed = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
-        const discounted = parsed != null && !isNaN(parsed) ? applyDiscount(parsed, rate) : null;
+        const preDiscount = parsed != null && !isNaN(parsed) ? reverseDiscount(parsed, rate) : null;
         return (
           <TableCell key={vendor.id}>
             <Input
@@ -454,8 +454,8 @@ export function ComparisonTable({
               }
               className="h-7 text-sm text-right"
             />
-            {rate > 0 && discounted != null && (
-              <p className="text-[10px] text-right text-green-600 mt-0.5">→ {discounted.toLocaleString()}</p>
+            {rate > 0 && preDiscount != null && (
+              <p className="text-[10px] text-right text-muted-foreground mt-0.5">→ 할인전 {preDiscount.toLocaleString()}</p>
             )}
           </TableCell>
         );
@@ -525,7 +525,7 @@ export function ComparisonTable({
             const rate = vendor.discount_rate ?? 0;
             const raw = editForm?.prices[vendor.id] ?? "";
             const parsed = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
-            const discounted = parsed != null && !isNaN(parsed) ? applyDiscount(parsed, rate) : null;
+            const preDiscount = parsed != null && !isNaN(parsed) ? reverseDiscount(parsed, rate) : null;
             return (
               <div key={vendor.id} className="space-y-1">
                 <label className="text-xs font-medium">
@@ -543,8 +543,8 @@ export function ComparisonTable({
                   }
                   className="h-8 text-sm"
                 />
-                {rate > 0 && discounted != null && (
-                  <p className="text-[10px] text-green-600">→ {discounted.toLocaleString()}원</p>
+                {rate > 0 && preDiscount != null && (
+                  <p className="text-[10px] text-muted-foreground">→ 할인전 {preDiscount.toLocaleString()}원</p>
                 )}
               </div>
             );

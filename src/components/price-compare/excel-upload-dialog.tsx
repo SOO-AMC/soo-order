@@ -78,7 +78,7 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
     const guideBg = "FFF8FAFC";
     const guideFont = "FF94A3B8";
 
-    const headers = ["구분", "제품명", "비고", "우리엔팜", "화영", "VS팜", "서수약품"];
+    const headers = ["구분", "제품명", "비고", "우리엔팜", "화영", "vs팜", "서수약품"];
 
     // 헤더 행
     const headerRow = sheet.addRow(headers);

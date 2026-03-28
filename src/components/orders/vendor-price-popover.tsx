@@ -35,7 +35,7 @@ export interface PriceData {
 let cachedData: PriceData | null = null;
 let cachedAt: number = 0;
 let fetchPromise: Promise<PriceData> | null = null;
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2분
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10분
 
 function startFetch() {
   if (fetchPromise) return fetchPromise;

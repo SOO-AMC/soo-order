@@ -1,8 +1,8 @@
-export type StatusValue = "pending" | "ordered" | "inspecting" | "return_requested" | "return_completed" | "out_of_stock";
+export type StatusValue = "pending" | "ordered" | "inspecting" | "return_requested" | "return_pending" | "return_completed" | "out_of_stock";
 export type UrgentValue = "urgent" | "normal";
 export type InvoiceValue = "received" | "not_received";
 
-const ALL_STATUSES: StatusValue[] = ["pending", "ordered", "inspecting", "return_requested", "return_completed", "out_of_stock"];
+const ALL_STATUSES: StatusValue[] = ["pending", "ordered", "inspecting", "return_requested", "return_pending", "return_completed", "out_of_stock"];
 const ALL_URGENTS: UrgentValue[] = ["urgent", "normal"];
 const ALL_INVOICES: InvoiceValue[] = ["received", "not_received"];
 

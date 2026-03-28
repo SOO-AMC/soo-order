@@ -45,36 +45,37 @@ export function ReturnRequestButton({
   const handleSubmit = async () => {
     setIsSubmitting(true);
 
-    const userId = (await supabase.auth.getSession()).data.session?.user.id;
+    try {
+      const userId = (await supabase.auth.getSession()).data.session?.user.id;
 
-    const uploadedPaths: string[] = [];
-    for (const photo of photos) {
-      if (photo.type === "new") {
-        const path = await uploadPhoto(supabase, orderId, photo.file);
-        uploadedPaths.push(path);
+      const uploadedPaths: string[] = [];
+      for (const photo of photos) {
+        if (photo.type === "new") {
+          const path = await uploadPhoto(supabase, orderId, photo.file);
+          uploadedPaths.push(path);
+        }
       }
-    }
 
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        status: "return_requested",
-        return_quantity: quantity,
-        return_reason: reason,
-        return_requested_by: userId,
-        return_requested_at: new Date().toISOString(),
-        return_photo_urls: uploadedPaths,
-      })
-      .eq("id", orderId);
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          status: "return_requested",
+          return_quantity: quantity,
+          return_reason: reason,
+          return_requested_by: userId,
+          return_requested_at: new Date().toISOString(),
+          return_photo_urls: uploadedPaths,
+        })
+        .eq("id", orderId);
 
-    if (error) {
+      if (error) throw error;
+
+      logClientAction("return", "request_return", `${itemName ?? "품목"} 반품 신청`);
+      setOpen(false);
+      router.refresh();
+    } catch {
       setIsSubmitting(false);
-      return;
     }
-
-    logClientAction("return", "request_return", `${itemName ?? "품목"} 반품 신청`);
-    setOpen(false);
-    router.refresh();
   };
 
   const handleOpenChange = (value: boolean) => {

@@ -180,14 +180,45 @@ export async function deleteOrder(orderId: string) {
   if (error) throw new Error("주문 삭제에 실패했습니다.");
 }
 
-/** 반품 완료 (status → return_completed) */
+/** 반품 접수 (status: return_requested → return_pending) */
+export async function dispatchReturn(orderId: string) {
+  const { supabase, userId } = await requireAdmin();
+
+  const { error } = await supabase
+    .from("orders")
+    .update({ status: "return_pending", updated_by: userId })
+    .eq("id", orderId)
+    .eq("status", "return_requested");
+
+  if (error) throw new Error("반품 접수 처리에 실패했습니다.");
+}
+
+/** 일괄 반품 접수 */
+export async function bulkDispatchReturn(orderIds: string[]) {
+  const { supabase, userId } = await requireAdmin();
+
+  const results = await Promise.all(
+    orderIds.map((id) =>
+      supabase
+        .from("orders")
+        .update({ status: "return_pending", updated_by: userId })
+        .eq("id", id)
+        .eq("status", "return_requested"),
+    ),
+  );
+
+  if (results.some((r) => r.error)) throw new Error("일부 반품 접수 처리에 실패했습니다.");
+}
+
+/** 반품 완료 (status: return_pending → return_completed) */
 export async function completeReturn(orderId: string) {
   const { supabase, userId } = await requireAdmin();
 
   const { error } = await supabase
     .from("orders")
     .update({ status: "return_completed", updated_by: userId })
-    .eq("id", orderId);
+    .eq("id", orderId)
+    .eq("status", "return_pending");
 
   if (error) throw new Error("반품 완료 처리에 실패했습니다.");
 }
@@ -201,11 +232,47 @@ export async function bulkCompleteReturn(orderIds: string[]) {
       supabase
         .from("orders")
         .update({ status: "return_completed", updated_by: userId })
-        .eq("id", id),
+        .eq("id", id)
+        .eq("status", "return_pending"),
     ),
   );
 
   if (results.some((r) => r.error)) throw new Error("일부 반품 완료 처리에 실패했습니다.");
+}
+
+/** 관리자 직접 반품 신청 — 새 레코드 INSERT */
+export async function adminCreateDirectReturn(
+  orderId: string,
+  itemName: string,
+  quantity: number,
+  unit: string,
+  returnReason: string,
+  returnPhotoUrls: string[],
+) {
+  const { supabase, userId } = await requireAdmin();
+
+  const now = new Date().toISOString();
+
+  const { error } = await supabase.from("orders").insert({
+    id: orderId,
+    type: "return",
+    status: "return_requested",
+    item_name: itemName.trim(),
+    quantity,
+    unit: unit.trim(),
+    requester_id: userId,
+    return_quantity: quantity,
+    return_reason: returnReason.trim() || null,
+    return_requested_by: userId,
+    return_requested_at: now,
+    return_photo_urls: returnPhotoUrls,
+    vendor_name: "",
+    notes: "",
+    order_notes: "",
+    inspection_notes: "",
+  });
+
+  if (error) throw new Error("반품 신청에 실패했습니다.");
 }
 
 /** 검수 메모 저장 */

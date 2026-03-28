@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BarChart3, ChevronRight, Droplets, LogOut, Scale, Search, Undo2, UserCog, Users } from "lucide-react";
+import { BarChart3, ChevronRight, Droplets, LogOut, PackageX, Scale, Undo2, UserCog, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -70,12 +70,12 @@ export function MorePage() {
                 <ChevronRight className="h-5 w-5 text-muted-foreground" />
               </Link>
               <Link
-                href="/search"
+                href="/out-of-stock"
                 className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
               >
                 <div className="flex items-center gap-3">
-                  <Search className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">조회</span>
+                  <PackageX className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">품절</span>
                 </div>
                 <ChevronRight className="h-5 w-5 text-muted-foreground" />
               </Link>

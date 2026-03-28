@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Package, BarChart3, ClipboardCheck, PackageX, Menu } from "lucide-react";
+import { Package, BarChart3, ClipboardCheck, Search, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabCounts } from "@/hooks/use-tab-counts";
 
 const tabs = [
   { href: "/dashboard", label: "내 현황", icon: BarChart3, countKey: null },
   { href: "/orders", label: "주문", icon: Package, countKey: "orders" as const },
-  { href: "/out-of-stock", label: "품절", icon: PackageX, countKey: "outOfStock" as const },
   { href: "/inspection", label: "검수", icon: ClipboardCheck, countKey: "inspection" as const },
+  { href: "/search", label: "조회", icon: Search, countKey: null },
   { href: "/more", label: "더보기", icon: Menu, countKey: null },
 ];
 
@@ -35,7 +35,7 @@ export function BottomNav() {
         {tabs.map(({ href, label, icon: Icon, countKey }) => {
           const isActive =
             href === "/more"
-              ? pathname.startsWith("/more") || pathname.startsWith("/account") || pathname.startsWith("/search") || pathname.startsWith("/returns") || pathname.startsWith("/blood")
+              ? pathname.startsWith("/more") || pathname.startsWith("/account") || pathname.startsWith("/out-of-stock") || pathname.startsWith("/returns") || pathname.startsWith("/blood")
               : pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
           const info = countKey ? counts[countKey] : null;
           const count = info?.count ?? 0;

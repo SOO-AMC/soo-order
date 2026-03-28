@@ -35,59 +35,41 @@ export function useTabCountsProvider() {
   const fetchCounts = useCallback(async () => {
     const supabase = createClient();
 
-    // 2개 쿼리로 통합: 상태별 전체 카운트 + 긴급 카운트
-    const [pending, returnReq, ordered, outOfStock, pendingUrgent, returnReqUrgent, orderedUrgent, outOfStockUrgent, bloodPending] =
-      await Promise.all([
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("type", "order")
-          .eq("status", "pending"),
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "return_requested"),
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "ordered"),
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "out_of_stock"),
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("type", "order")
-          .eq("status", "pending")
-          .eq("is_urgent", true),
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "return_requested")
-          .eq("is_urgent", true),
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "ordered")
-          .eq("is_urgent", true),
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "out_of_stock")
-          .eq("is_urgent", true),
-        supabase
-          .from("blood_records")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "pending"),
-      ]);
+    const [ordersRes, bloodRes] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("status, is_urgent, type")
+        .in("status", ["pending", "ordered", "return_requested", "return_pending", "out_of_stock"]),
+      supabase
+        .from("blood_records")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending"),
+    ]);
+
+    const rows = ordersRes.data ?? [];
+
+    const tally = (
+      filterFn: (r: { status: string; is_urgent: boolean; type: string }) => boolean
+    ) => rows.filter(filterFn).length;
 
     setCounts({
-      orders: { count: pending.count ?? 0, hasUrgent: (pendingUrgent.count ?? 0) > 0 },
-      outOfStock: { count: outOfStock.count ?? 0, hasUrgent: (outOfStockUrgent.count ?? 0) > 0 },
-      returns: { count: returnReq.count ?? 0, hasUrgent: (returnReqUrgent.count ?? 0) > 0 },
-      inspection: { count: ordered.count ?? 0, hasUrgent: (orderedUrgent.count ?? 0) > 0 },
-      blood: { count: bloodPending.count ?? 0, hasUrgent: false },
+      orders: {
+        count: tally((r) => r.type === "order" && r.status === "pending"),
+        hasUrgent: rows.some((r) => r.type === "order" && r.status === "pending" && r.is_urgent),
+      },
+      inspection: {
+        count: tally((r) => r.status === "ordered"),
+        hasUrgent: rows.some((r) => r.status === "ordered" && r.is_urgent),
+      },
+      returns: {
+        count: tally((r) => r.status === "return_requested" || r.status === "return_pending"),
+        hasUrgent: rows.some((r) => (r.status === "return_requested" || r.status === "return_pending") && r.is_urgent),
+      },
+      outOfStock: {
+        count: tally((r) => r.status === "out_of_stock"),
+        hasUrgent: rows.some((r) => r.status === "out_of_stock" && r.is_urgent),
+      },
+      blood: { count: bloodRes.count ?? 0, hasUrgent: false },
     });
   }, []);
 

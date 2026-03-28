@@ -1,12 +1,12 @@
 "use server";
 
-import { requireAdmin } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import type { Vendor, VendorProduct, UnifiedProduct } from "@/lib/types/price-compare";
 
 const VENDOR_ORDER = ["우리엔팜", "화영", "VS팜", "서수약품"];
 
 async function fetchAll<T>(
-  supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"],
+  supabase: Awaited<ReturnType<typeof requireUser>>["supabase"],
   table: string,
   order: string,
 ): Promise<T[]> {
@@ -28,7 +28,7 @@ async function fetchAll<T>(
 }
 
 export async function fetchPriceCompareData() {
-  const { supabase } = await requireAdmin();
+  const { supabase } = await requireUser();
 
   const [vendors, vendorProductData, unifiedProducts] = await Promise.all([
     fetchAll<Vendor>(supabase, "vendors", "name"),

@@ -5,6 +5,7 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   ordered: "bg-green-100 text-green-800 border-green-300",
   inspecting: "bg-blue-100 text-blue-800 border-blue-300",
   return_requested: "bg-orange-100 text-orange-800 border-orange-300",
+  return_pending: "bg-purple-100 text-purple-800 border-purple-300",
   return_completed: "bg-gray-100 text-gray-600 border-gray-300",
   out_of_stock: "bg-red-100 text-red-800 border-red-300",
 };
@@ -14,6 +15,7 @@ const STATUS_DOT_COLORS: Record<OrderStatus, string> = {
   ordered: "bg-green-500",
   inspecting: "bg-blue-500",
   return_requested: "bg-orange-500",
+  return_pending: "bg-purple-500",
   return_completed: "bg-gray-400",
   out_of_stock: "bg-red-500",
 };
@@ -37,6 +39,7 @@ export function StatusLegend() {
   const row2: { status: OrderStatus; label: string }[] = [
     { status: "inspecting", label: "검수완료" },
     { status: "return_requested", label: "반품신청" },
+    { status: "return_pending", label: "반품대기" },
     { status: "out_of_stock", label: "품절" },
   ];
 

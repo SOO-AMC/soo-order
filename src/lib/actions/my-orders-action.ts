@@ -11,26 +11,18 @@ export interface MyOrdersData {
 
 export async function fetchMyOrdersStatus(): Promise<MyOrdersData> {
   const { supabase, userId } = await requireUser();
-  const myStatuses: OrderStatus[] = ["pending", "ordered", "out_of_stock"];
+  const activeStatuses: OrderStatus[] = ["pending", "ordered", "out_of_stock", "return_requested", "return_pending"];
 
-  const [myResult, returnResult, completedResult] = await Promise.all([
-    // 내가 요청한 진행중 주문
+  const [activeResult, completedResult] = await Promise.all([
+    // 내가 관련된 진행중 주문 (요청 또는 반품신청)
     supabase
       .from("orders")
       .select("*")
-      .eq("requester_id", userId)
-      .in("status", myStatuses)
+      .or(`requester_id.eq.${userId},return_requested_by.eq.${userId}`)
+      .in("status", activeStatuses)
       .order("is_urgent", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(50),
-    // 내가 반품 신청한 건
-    supabase
-      .from("orders")
-      .select("*")
-      .eq("return_requested_by", userId)
-      .eq("status", "return_requested")
-      .order("return_requested_at", { ascending: false })
-      .limit(50),
+      .limit(100),
     // 최근 검수완료 (내가 요청한 건)
     supabase
       .from("orders")
@@ -41,11 +33,15 @@ export async function fetchMyOrdersStatus(): Promise<MyOrdersData> {
       .limit(5),
   ]);
 
-  if (myResult.error) throw new Error(myResult.error.message);
-  if (returnResult.error) throw new Error(returnResult.error.message);
+  if (activeResult.error) throw new Error(activeResult.error.message);
   if (completedResult.error) throw new Error(completedResult.error.message);
 
-  const activeOrders = [...(myResult.data as Order[]), ...(returnResult.data as Order[])];
+  const allActive = activeResult.data as Order[];
+  const activeOrders = allActive.filter(
+    (o) => o.requester_id === userId
+      ? ["pending", "ordered", "out_of_stock"].includes(o.status)
+      : o.return_requested_by === userId && ["return_requested", "return_pending"].includes(o.status)
+  );
   const recentCompleted = completedResult.data as Order[];
 
   // 상태별 카운트 계산

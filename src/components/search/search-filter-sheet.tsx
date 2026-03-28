@@ -75,7 +75,7 @@ export function SearchFilterSheet({
             <div className="space-y-2">
               <Label className="text-sm font-medium">주문 상태</Label>
               <div className="flex flex-wrap gap-2">
-                {(["pending", "ordered", "inspecting", "return_requested", "return_completed"] as const).map((value) => {
+                {(["pending", "ordered", "inspecting", "return_requested", "return_pending", "return_completed"] as const).map((value) => {
                   const label = ORDER_STATUS_LABEL[value as OrderStatus];
                   const isSelected = local.status.includes(value);
                   return (

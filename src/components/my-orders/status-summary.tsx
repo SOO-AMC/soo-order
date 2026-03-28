@@ -5,6 +5,7 @@ const STATUS_DOT_COLORS: Record<OrderStatus, string> = {
   ordered: "bg-green-500",
   inspecting: "bg-blue-500",
   return_requested: "bg-orange-500",
+  return_pending: "bg-purple-500",
   return_completed: "bg-gray-400",
   out_of_stock: "bg-red-500",
 };
@@ -14,6 +15,7 @@ const STATUS_BG_COLORS: Record<OrderStatus, string> = {
   ordered: "bg-green-50 text-green-800",
   inspecting: "bg-blue-50 text-blue-800",
   return_requested: "bg-orange-50 text-orange-800",
+  return_pending: "bg-purple-50 text-purple-800",
   return_completed: "bg-gray-50 text-gray-600",
   out_of_stock: "bg-red-50 text-red-800",
 };

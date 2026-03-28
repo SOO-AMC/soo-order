@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { BackButton } from "@/components/back-button";
 import { ReturnList } from "@/components/returns/return-list";
+import { AdminReturnCreateDialog } from "@/components/returns/admin-return-create-dialog";
 
 export const metadata: Metadata = {
   title: "반품",
@@ -14,6 +15,9 @@ export default function ReturnsPage() {
           <BackButton fallbackHref="/more" />
         </div>
         <h1 className="text-lg font-bold">반품</h1>
+        <div className="ml-auto">
+          <AdminReturnCreateDialog />
+        </div>
       </header>
       <div className="p-4">
         <ReturnList />
