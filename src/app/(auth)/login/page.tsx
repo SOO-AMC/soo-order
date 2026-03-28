@@ -65,22 +65,39 @@ export default function LoginPage() {
   return (
     <>
       {/* 모바일: 풀스크린 */}
-      <div className="flex flex-1 flex-col lg:hidden animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-1 flex-col lg:hidden animate-in fade-in-0 duration-700">
         {/* 상단: 로고 + 브랜드 */}
-        <div className="flex flex-col items-center pt-16 pb-8 px-6">
-          <Image
-            src="/icons/logo.png"
-            alt="수오더 로고"
-            width={80}
-            height={80}
-            priority
-          />
-          <h1 className="mt-4 text-2xl font-bold text-white">수오더</h1>
-          <p className="mt-1 text-sm text-white/70">의약품 주문 및 검수 관리</p>
+        <div className="relative flex flex-col items-center pt-16 pb-10 px-6 overflow-hidden">
+          {/* 배경 장식 원형들 */}
+          <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-white/10" />
+          <div className="absolute -top-6 -left-10 w-36 h-36 rounded-full bg-white/10" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-white/5" />
+
+          {/* 로고 */}
+          <div className="relative z-10 flex items-center justify-center w-24 h-24 rounded-2xl bg-white shadow-2xl shadow-black/30 animate-in zoom-in-75 duration-500">
+            <Image
+              src="/icons/logo.png"
+              alt="수오더 로고"
+              width={72}
+              height={72}
+              priority
+            />
+          </div>
+
+          {/* 텍스트 */}
+          <h1 className="relative z-10 mt-5 text-3xl font-extrabold text-white tracking-tight animate-in slide-in-from-bottom-2 duration-500 delay-100">수오더</h1>
+          <p className="relative z-10 mt-1.5 text-sm text-white/70 animate-in slide-in-from-bottom-2 duration-500 delay-150">SOO Animal Medical Center</p>
+
+          {/* 하단 구분선 장식 */}
+          <div className="relative z-10 mt-6 flex items-center gap-2">
+            <div className="w-8 h-px bg-white/30" />
+            <div className="w-1.5 h-1.5 rounded-full bg-white/50" />
+            <div className="w-8 h-px bg-white/30" />
+          </div>
         </div>
 
         {/* 하단: 폼 영역 (흰색 라운드) */}
-        <div className="flex-1 rounded-t-3xl bg-white px-6 pt-8 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+        <div className="flex-1 rounded-t-3xl bg-white px-6 pt-8 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(0,0,0,0.15)]">
           <p className="text-sm text-muted-foreground mb-6">로그인하여 시작하세요</p>
           <form action={formAction}>
             <LoginForm isPending={isPending} state={state} />
