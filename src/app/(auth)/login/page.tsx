@@ -69,7 +69,7 @@ export default function LoginPage() {
         {/* 상단: 로고 + 브랜드 */}
         <div className="flex flex-col items-center pt-16 pb-8 px-6">
           <Image
-            src="/icons/icon-192x192.png"
+            src="/icons/logo.png"
             alt="수오더 로고"
             width={80}
             height={80}
@@ -92,7 +92,7 @@ export default function LoginPage() {
       <div className="hidden lg:block animate-in fade-in-0 duration-500">
         <div className="mb-8">
           <Image
-            src="/icons/icon-192x192.png"
+            src="/icons/logo.png"
             alt="수오더 로고"
             width={48}
             height={48}
