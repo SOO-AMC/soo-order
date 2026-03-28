@@ -32,9 +32,9 @@ export default function AuthLayout({
           <div className="relative z-10 flex h-full flex-col justify-between p-10">
             <div className="flex items-center gap-3">
               <img
-                src="/icons/icon-192x192.png"
+                src="/icons/logo.png"
                 alt="수오더 로고"
-                className="h-10 w-10 rounded-lg"
+                className="h-10 w-10"
               />
               <span className="text-xl font-bold text-white">수오더</span>
             </div>

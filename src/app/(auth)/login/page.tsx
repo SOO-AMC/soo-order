@@ -74,12 +74,12 @@ export default function LoginPage() {
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-white/5" />
 
           {/* 로고 */}
-          <div className="relative z-10 flex items-center justify-center w-24 h-24 rounded-2xl bg-white shadow-2xl shadow-black/30 animate-in zoom-in-75 duration-500">
+          <div className="relative z-10 animate-in zoom-in-75 duration-500">
             <Image
               src="/icons/logo.png"
               alt="수오더 로고"
-              width={72}
-              height={72}
+              width={96}
+              height={96}
               priority
             />
           </div>
