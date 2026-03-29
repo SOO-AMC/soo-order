@@ -35,8 +35,8 @@
 - [x] Supabase 운영 데이터 초기화 (orders, blood_records, activity_logs) — Phase 1 complete
 - [x] Firebase 최신 데이터 재내보내기 — Phase 2 complete (9,697건)
 - [x] Items → orders 재마이그레이션 — Phase 3 complete (9,697건 적재)
-- [ ] Firebase Cloud Functions 제거
-- [ ] Firebase 코드/의존성 정리
+- [x] Firebase Cloud Functions 제거 — Phase 4 complete
+- [x] Firebase 코드/의존성 정리 — Phase 4 complete
 
 ### Out of Scope
 
@@ -84,4 +84,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-29 after Phase 3 complete*
+*Last updated: 2026-03-29 after Milestone v1.0 complete (all 4 phases)*
