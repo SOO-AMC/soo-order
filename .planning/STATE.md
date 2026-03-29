@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Phase 3 context gathered
-last_updated: "2026-03-29T14:07:29.680Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-29T14:19:17.414Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** 간호사가 의약품을 빠르게 주문 요청하고, 관리자가 효율적으로 발주/검수할 수 있어야 한다.
-**Current focus:** Phase 02 — firebase-export
+**Current focus:** Phase 03 — data-migration
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
+Phase: 03 (data-migration) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-03-29
 
@@ -50,6 +50,7 @@ Progress: [..........] 0%
 
 | Phase 01 P01 | 7min | 2 tasks | 2 files |
 | Phase 02 P01 | 8min | 3 tasks | 3 files |
+| Phase 03 P01 | 3min | 2 tasks | 1 files |
 
 ### Decisions
 
@@ -62,6 +63,8 @@ Recent decisions affecting current work:
 - [Phase 01]: TRUNCATE over DELETE for instant table reset; transaction wrapper with pre/post COUNT verification for preservation tables
 - [Phase 02]: Export all 16 FirebaseItem fields verbatim preserving original typos for Phase 3 mapping
 - [Phase 02]: 9,697 items exported (up from 9,378) accepted as reasonable growth
+- [Phase 03]: Type-aware mapStatus for return+progress=1 edge case (return_completed instead of Cloud Functions ordered)
+- [Phase 03]: Updated_by fallback to admin matching Cloud Functions resolveProfileId behavior
 
 ### Pending Todos
 
@@ -73,6 +76,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-29T14:07:29.677Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-data-migration/03-CONTEXT.md
+Last session: 2026-03-29T14:19:17.411Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None

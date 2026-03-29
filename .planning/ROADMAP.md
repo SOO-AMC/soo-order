@@ -52,7 +52,7 @@ Plans:
   3. 관리자가 주문 목록 페이지에서 마이그레이션된 주문 데이터를 정상적으로 조회할 수 있다
 **Plans:** 1 plan
 Plans:
-- [ ] 03-01-PLAN.md -- Firebase Items를 Supabase orders에 적재 및 정합성 검증
+- [x] 03-01-PLAN.md -- Firebase Items를 Supabase orders에 적재 및 정합성 검증
 
 ### Phase 4: Firebase Cleanup
 **Goal**: Firebase 실시간 동기화가 완전히 중단되고, 프로젝트에서 Firebase 관련 코드와 의존성이 제거되어 Supabase 단독 운영 상태이다

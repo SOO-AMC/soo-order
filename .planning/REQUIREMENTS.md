@@ -20,8 +20,8 @@
 
 ### 데이터 마이그레이션
 
-- [ ] **MIGR-01**: 내보낸 Firebase Items를 Supabase orders 테이블에 적재
-- [ ] **MIGR-02**: 마이그레이션 후 데이터 정합성 검증 (건수, 상태 분포 확인)
+- [x] **MIGR-01**: 내보낸 Firebase Items를 Supabase orders 테이블에 적재
+- [x] **MIGR-02**: 마이그레이션 후 데이터 정합성 검증 (건수, 상태 분포 확인)
 
 ### Firebase 정리
 
@@ -52,8 +52,8 @@
 | RESET-03 | Phase 1 | Complete |
 | EXPORT-01 | Phase 2 | Complete |
 | EXPORT-02 | Phase 2 | Complete |
-| MIGR-01 | Phase 3 | Pending |
-| MIGR-02 | Phase 3 | Pending |
+| MIGR-01 | Phase 3 | Complete |
+| MIGR-02 | Phase 3 | Complete |
 | CLEAN-01 | Phase 4 | Pending |
 | CLEAN-02 | Phase 4 | Pending |
 | CLEAN-03 | Phase 4 | Pending |
