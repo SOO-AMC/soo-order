@@ -38,7 +38,9 @@ Plans:
   1. Firestore Items 컬렉션의 전체 문서가 JSON 파일로 내보내져 있다 (이전 9,378건과 비교하여 건수 차이 확인 가능)
   2. 내보낸 JSON의 각 문서가 마이그레이션에 필요한 필드(item_name, quantity, status 등)를 포함하고 있다
   3. dry-run 리포트를 통해 건수, 필드 분포, 누락 데이터를 사전에 확인할 수 있다
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 02-01-PLAN.md -- Firebase Items 내보내기 및 데이터 검증
 
 ### Phase 3: Data Migration
 **Goal**: Firebase에서 내보낸 주문 데이터가 Supabase orders 테이블에 정확하게 적재되어 운영 가능한 상태이다
@@ -69,6 +71,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Supabase Data Reset | 0/1 | Planning complete | - |
-| 2. Firebase Export | 0/? | Not started | - |
+| 2. Firebase Export | 0/1 | Planning complete | - |
 | 3. Data Migration | 0/? | Not started | - |
 | 4. Firebase Cleanup | 0/? | Not started | - |
