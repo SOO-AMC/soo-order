@@ -26,7 +26,9 @@
   2. blood_records 테이블에 0건의 데이터가 존재한다 (SELECT COUNT(*) = 0)
   3. activity_logs 테이블에 0건의 데이터가 존재한다 (SELECT COUNT(*) = 0)
   4. profiles, vendors, vendor_products, unified_products 테이블 데이터는 변경 없이 그대로 유지된다
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 01-01-PLAN.md -- 데이터 리셋 SQL + Storage 정리 스크립트 생성 및 실행
 
 ### Phase 2: Firebase Export
 **Goal**: Firebase Firestore의 최신 Items 데이터가 검증된 JSON 파일로 로컬에 존재하여 마이그레이션 입력으로 사용할 수 있다
@@ -66,7 +68,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Supabase Data Reset | 0/? | Not started | - |
+| 1. Supabase Data Reset | 0/1 | Planning complete | - |
 | 2. Firebase Export | 0/? | Not started | - |
 | 3. Data Migration | 0/? | Not started | - |
 | 4. Firebase Cleanup | 0/? | Not started | - |
