@@ -28,7 +28,7 @@
   4. profiles, vendors, vendor_products, unified_products 테이블 데이터는 변경 없이 그대로 유지된다
 **Plans:** 1 plan
 Plans:
-- [ ] 01-01-PLAN.md -- 데이터 리셋 SQL + Storage 정리 스크립트 생성 및 실행
+- [x] 01-01-PLAN.md -- 데이터 리셋 SQL + Storage 정리 스크립트 생성 및 실행
 
 ### Phase 2: Firebase Export
 **Goal**: Firebase Firestore의 최신 Items 데이터가 검증된 JSON 파일로 로컬에 존재하여 마이그레이션 입력으로 사용할 수 있다

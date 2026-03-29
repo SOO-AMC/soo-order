@@ -9,9 +9,9 @@
 
 ### 데이터 초기화
 
-- [ ] **RESET-01**: Supabase orders 테이블 전체 데이터 삭제
-- [ ] **RESET-02**: Supabase blood_records 테이블 전체 데이터 삭제
-- [ ] **RESET-03**: Supabase activity_logs 테이블 전체 데이터 삭제
+- [x] **RESET-01**: Supabase orders 테이블 전체 데이터 삭제
+- [x] **RESET-02**: Supabase blood_records 테이블 전체 데이터 삭제
+- [x] **RESET-03**: Supabase activity_logs 테이블 전체 데이터 삭제
 
 ### Firebase 내보내기
 
@@ -47,9 +47,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RESET-01 | Phase 1 | Pending |
-| RESET-02 | Phase 1 | Pending |
-| RESET-03 | Phase 1 | Pending |
+| RESET-01 | Phase 1 | Complete |
+| RESET-02 | Phase 1 | Complete |
+| RESET-03 | Phase 1 | Complete |
 | EXPORT-01 | Phase 2 | Pending |
 | EXPORT-02 | Phase 2 | Pending |
 | MIGR-01 | Phase 3 | Pending |
