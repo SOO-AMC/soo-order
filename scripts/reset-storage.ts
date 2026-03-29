@@ -8,8 +8,10 @@
 // Requires: .env.local with NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 // =============================================================================
 
-import "dotenv/config";
+import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+
+config({ path: ".env.local" });
 
 const BUCKET_NAME = "order-photos";
 const BATCH_SIZE = 1000;
