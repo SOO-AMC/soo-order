@@ -314,17 +314,9 @@ async function main() {
     );
   }
 
-  // Check 2: Status distribution
-  const { data: statusRows, error: statusError } = await supabase.rpc(
-    "get_status_distribution",
-  ).catch(() => ({ data: null, error: { message: "RPC not available" } })) as {
-    data: Array<{ status: string; count: number }> | null;
-    error: { message: string } | null;
-  };
-
-  if (statusError || !statusRows) {
-    // Fallback: manually verify by querying each status
-    console.log("  CHECK 2 - Status distribution (manual query):");
+  // Check 2: Status distribution (query each status individually)
+  {
+    console.log("  CHECK 2 - Status distribution:");
     for (const [expectedStatus, expectedCount] of Object.entries(
       statusCounts,
     ).sort()) {
