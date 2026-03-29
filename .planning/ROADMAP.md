@@ -50,7 +50,9 @@ Plans:
   1. 내보낸 JSON의 전체 Items가 orders 테이블에 적재되어 있다 (원본 건수 = 적재 건수)
   2. 주문 상태(status) 분포가 Firebase 원본과 일치한다 (pending, ordered, inspecting 등 각 상태별 건수 대조)
   3. 관리자가 주문 목록 페이지에서 마이그레이션된 주문 데이터를 정상적으로 조회할 수 있다
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 03-01-PLAN.md -- Firebase Items를 Supabase orders에 적재 및 정합성 검증
 
 ### Phase 4: Firebase Cleanup
 **Goal**: Firebase 실시간 동기화가 완전히 중단되고, 프로젝트에서 Firebase 관련 코드와 의존성이 제거되어 Supabase 단독 운영 상태이다
@@ -72,5 +74,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Supabase Data Reset | 0/1 | Planning complete | - |
 | 2. Firebase Export | 0/1 | Planning complete | - |
-| 3. Data Migration | 0/? | Not started | - |
+| 3. Data Migration | 0/1 | Planning complete | - |
 | 4. Firebase Cleanup | 0/? | Not started | - |
