@@ -32,7 +32,7 @@
 
 ### Active
 
-- [ ] Supabase 운영 데이터 초기화 (orders, blood_records, activity_logs)
+- [x] Supabase 운영 데이터 초기화 (orders, blood_records, activity_logs) — Phase 1 complete
 - [ ] Firebase 최신 데이터 재내보내기
 - [ ] Items → orders 재마이그레이션
 - [ ] Firebase Cloud Functions 제거
@@ -84,4 +84,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-29 after milestone v1.0 initialization*
+*Last updated: 2026-03-29 after Phase 1 complete*
