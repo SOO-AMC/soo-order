@@ -25,9 +25,9 @@
 
 ### Firebase 정리
 
-- [ ] **CLEAN-01**: Firebase Cloud Functions (onItemCreated/Updated/Deleted) 배포 해제
+- [x] **CLEAN-01**: Firebase Cloud Functions (onItemCreated/Updated/Deleted) 배포 해제
 - [ ] **CLEAN-02**: functions/ 디렉토리 및 Firebase 관련 설정 파일 제거
-- [ ] **CLEAN-03**: orders 테이블의 firebase_id 컬럼 제거 검토 및 처리
+- [x] **CLEAN-03**: orders 테이블의 firebase_id 컬럼 제거 검토 및 처리
 
 ## Future Requirements
 
@@ -54,9 +54,9 @@
 | EXPORT-02 | Phase 2 | Complete |
 | MIGR-01 | Phase 3 | Complete |
 | MIGR-02 | Phase 3 | Complete |
-| CLEAN-01 | Phase 4 | Pending |
+| CLEAN-01 | Phase 4 | Complete |
 | CLEAN-02 | Phase 4 | Pending |
-| CLEAN-03 | Phase 4 | Pending |
+| CLEAN-03 | Phase 4 | Complete |
 
 **Coverage:**
 - v1.0 requirements: 10 total
