@@ -10,9 +10,6 @@ import { OrderTrendChart } from "./order-trend-chart";
 import { TopItemsChart } from "./top-items-chart";
 import { VendorStatusChart } from "./vendor-status-chart";
 import { ReturnAnalysisChart } from "./return-analysis-chart";
-import { ReorderIntervalChart } from "./reorder-interval-chart";
-import { ItemVendorTable } from "./item-vendor-table";
-import { VendorDeliveryChart } from "./vendor-delivery-chart";
 import { fetchDashboardData } from "@/lib/actions/dashboard-action";
 import type { DashboardData } from "@/lib/types/dashboard";
 
@@ -64,17 +61,6 @@ export function DashboardPage() {
           </div>
 
           <ReturnAnalysisChart data={data.returnAnalysis} />
-
-          {data.firebase && (
-            <ReorderIntervalChart data={data.firebase.reorderIntervals} />
-          )}
-
-          {data.firebase && (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <ItemVendorTable data={data.firebase.itemVendorMappings} />
-              <VendorDeliveryChart data={data.firebase.vendorDeliverySpeeds} />
-            </div>
-          )}
         </div>
       )}
     </div>

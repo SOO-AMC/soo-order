@@ -17,7 +17,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm dev              # 개발 서버 (Turbopack)
 pnpm build            # 프로덕션 빌드 (webpack — Serwist가 webpack 필요)
 git push origin main  # 배포 (GitHub → Vercel 자동 배포)
-firebase deploy --only functions  # Firestore→Supabase 동기화 함수 배포
 ```
 
 ## 브랜드
@@ -57,7 +56,7 @@ firebase deploy --only functions  # Firestore→Supabase 동기화 함수 배포
 
 ### 주요 테이블
 - **profiles**: id, full_name, role(admin/user), position, is_active
-- **orders**: id, type(order/return), item_name, quantity, unit, status, vendor_name, confirmed_quantity, invoice_received, photo_urls(text[]), return_photo_urls(text[]), inspection_memo, is_urgent, firebase_id(UNIQUE)
+- **orders**: id, type(order/return), item_name, quantity, unit, status, vendor_name, confirmed_quantity, invoice_received, photo_urls(text[]), return_photo_urls(text[]), inspection_memo, is_urgent
   - 상태: `pending → ordered → inspecting → return_requested → return_completed` (+ `out_of_stock`)
 - **vendors**: id, name(UNIQUE), **discount_rate**(DECIMAL 5,2, DEFAULT 0)
 - **vendor_products**: id, vendor_id, product_name, unit_price, unified_product_id

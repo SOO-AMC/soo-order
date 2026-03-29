@@ -24,8 +24,9 @@ function getEnvOrThrow(key: string): string {
   return value;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function listAllFiles(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   bucket: string
 ): Promise<string[]> {
   const allPaths: string[] = [];
@@ -71,8 +72,9 @@ async function listAllFiles(
   return allPaths;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function deleteInBatches(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   bucket: string,
   paths: string[]
 ): Promise<{ deleted: number; errors: number }> {

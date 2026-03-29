@@ -20,6 +20,5 @@ export function transformRpcResponse(rpc: Record<string, unknown>): DashboardDat
     topItems,
     vendors,
     returnAnalysis,
-    firebase: null,
   };
 }

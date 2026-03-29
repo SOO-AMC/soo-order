@@ -11,7 +11,7 @@ paths:
 id, email, full_name, role(admin/user), pharmacy_name, position(manager/technician/veterinarian/admin_staff), is_active, created_at, updated_at
 
 ## orders
-id, type(order/return), item_name, quantity, unit, status, requester_id, updated_by, vendor_name, confirmed_quantity, invoice_received, inspected_by, inspected_at, photo_urls(text[]), is_urgent, return_quantity, return_reason, return_requested_by, return_requested_at, firebase_id(UNIQUE), notes, order_notes, inspection_notes, created_at, updated_at
+id, type(order/return), item_name, quantity, unit, status, requester_id, updated_by, vendor_name, confirmed_quantity, invoice_received, inspected_by, inspected_at, photo_urls(text[]), is_urgent, return_quantity, return_reason, return_requested_by, return_requested_at, notes, order_notes, inspection_notes, created_at, updated_at
 
 **상태 흐름**: pending → ordered → inspecting → return_requested → return_completed (+ out_of_stock)
 

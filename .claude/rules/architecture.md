@@ -28,7 +28,7 @@ paths:
 - `order-mutations.ts`: 주문 발주/검수/품절/취소/반품완료/혈액확인 (`requireAdmin()`)
 - `price-compare-action.ts`: 업체/제품/통합제품 CRUD (인라인 편집/추가 포함)
 - `search-action.ts`: 조회 필터 검색
-- `dashboard-action.ts`: 대시보드 RPC + Firebase 분석
+- `dashboard-action.ts`: 대시보드 RPC 통계
 
 ## 활동 로그
 - `logActivity()` (서버): admin client로 INSERT (fire-and-forget)
