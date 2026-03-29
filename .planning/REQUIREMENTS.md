@@ -47,22 +47,22 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RESET-01 | — | Pending |
-| RESET-02 | — | Pending |
-| RESET-03 | — | Pending |
-| EXPORT-01 | — | Pending |
-| EXPORT-02 | — | Pending |
-| MIGR-01 | — | Pending |
-| MIGR-02 | — | Pending |
-| CLEAN-01 | — | Pending |
-| CLEAN-02 | — | Pending |
-| CLEAN-03 | — | Pending |
+| RESET-01 | Phase 1 | Pending |
+| RESET-02 | Phase 1 | Pending |
+| RESET-03 | Phase 1 | Pending |
+| EXPORT-01 | Phase 2 | Pending |
+| EXPORT-02 | Phase 2 | Pending |
+| MIGR-01 | Phase 3 | Pending |
+| MIGR-02 | Phase 3 | Pending |
+| CLEAN-01 | Phase 4 | Pending |
+| CLEAN-02 | Phase 4 | Pending |
+| CLEAN-03 | Phase 4 | Pending |
 
 **Coverage:**
 - v1.0 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10
+- Mapped to phases: 10
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-03-29 after initial definition*
+*Last updated: 2026-03-29 after roadmap creation*
