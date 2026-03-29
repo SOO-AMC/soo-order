@@ -63,7 +63,10 @@ Plans:
   2. functions/ 디렉토리와 Firebase 관련 설정 파일(firebase.json, .firebaserc 등)이 프로젝트에서 제거되어 있다
   3. firebase_id 컬럼이 제거되었거나, 유지 결정이 문서화되어 있다
   4. pnpm build가 Firebase 관련 import 없이 정상 완료된다
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 04-01-PLAN.md -- Cloud Functions 배포 해제 및 firebase_id 컬럼 제거
+- [ ] 04-02-PLAN.md -- Firebase 코드/의존성/설정 파일 제거 및 빌드 검증
 
 ## Progress
 
@@ -75,4 +78,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Supabase Data Reset | 0/1 | Planning complete | - |
 | 2. Firebase Export | 0/1 | Planning complete | - |
 | 3. Data Migration | 0/1 | Planning complete | - |
-| 4. Firebase Cleanup | 0/? | Not started | - |
+| 4. Firebase Cleanup | 0/2 | Planning complete | - |
