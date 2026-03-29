@@ -66,7 +66,7 @@ Plans:
 **Plans:** 2 plans
 Plans:
 - [x] 04-01-PLAN.md -- Cloud Functions 배포 해제 및 firebase_id 컬럼 제거
-- [ ] 04-02-PLAN.md -- Firebase 코드/의존성/설정 파일 제거 및 빌드 검증
+- [x] 04-02-PLAN.md -- Firebase 코드/의존성/설정 파일 제거 및 빌드 검증
 
 ## Progress
 
