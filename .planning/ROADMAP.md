@@ -40,7 +40,7 @@ Plans:
   3. dry-run 리포트를 통해 건수, 필드 분포, 누락 데이터를 사전에 확인할 수 있다
 **Plans:** 1 plan
 Plans:
-- [ ] 02-01-PLAN.md -- Firebase Items 내보내기 및 데이터 검증
+- [x] 02-01-PLAN.md -- Firebase Items 내보내기 및 데이터 검증
 
 ### Phase 3: Data Migration
 **Goal**: Firebase에서 내보낸 주문 데이터가 Supabase orders 테이블에 정확하게 적재되어 운영 가능한 상태이다

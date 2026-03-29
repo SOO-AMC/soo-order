@@ -15,8 +15,8 @@
 
 ### Firebase 내보내기
 
-- [ ] **EXPORT-01**: Firebase Firestore Items 컬렉션에서 최신 데이터를 JSON으로 내보내기
-- [ ] **EXPORT-02**: 내보낸 데이터의 건수/필드 검증 (dry-run 확인)
+- [x] **EXPORT-01**: Firebase Firestore Items 컬렉션에서 최신 데이터를 JSON으로 내보내기
+- [x] **EXPORT-02**: 내보낸 데이터의 건수/필드 검증 (dry-run 확인)
 
 ### 데이터 마이그레이션
 
@@ -50,8 +50,8 @@
 | RESET-01 | Phase 1 | Complete |
 | RESET-02 | Phase 1 | Complete |
 | RESET-03 | Phase 1 | Complete |
-| EXPORT-01 | Phase 2 | Pending |
-| EXPORT-02 | Phase 2 | Pending |
+| EXPORT-01 | Phase 2 | Complete |
+| EXPORT-02 | Phase 2 | Complete |
 | MIGR-01 | Phase 3 | Pending |
 | MIGR-02 | Phase 3 | Pending |
 | CLEAN-01 | Phase 4 | Pending |
