@@ -115,7 +115,7 @@ function findBestPriceMatch(
   vendorProducts: VendorProduct[],
   unifiedProducts: UnifiedProduct[],
 ): PriceMatch | null {
-  const MIN_THRESHOLD = 0.3;
+  const MIN_THRESHOLD = 0.5;
   const aTokens = tokenize(itemName);
   const aNorm = aTokens.join("");
 

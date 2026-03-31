@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Camera, ChevronRight, CircleAlert, ClipboardCopy, Check, ShoppingCart } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -290,8 +291,10 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
     );
   }
 
+  const showActionBar = selectedIds.size > 0 || vendorSelectedIds.length > 0;
+
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", showActionBar && "pb-24 lg:pb-20")}>
       <div className="flex items-center justify-between px-1 py-2">
         {isAdmin && pendingOrders.length > 0 ? (
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
@@ -453,7 +456,7 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
         })}
       </div>
 
-      {(selectedIds.size > 0 || vendorSelectedIds.length > 0) && (
+      {showActionBar && (
         <div className="fixed bottom-20 left-0 right-0 z-50 flex items-center justify-center gap-2 px-4 lg:left-60 lg:bottom-4">
           {vendorSelectedIds.length > 0 && (
             <Button

@@ -11,6 +11,7 @@ import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { CancelInspectionButton } from "@/components/search/cancel-inspection-button";
 import { ReturnRequestButton } from "@/components/search/return-request-button";
+import { DeleteOrderButton } from "@/components/search/delete-order-button";
 import { PhotoGallery } from "@/components/orders/photo-gallery";
 import { formatDateTime } from "@/lib/utils/format";
 import type { OrderType, OrderStatus } from "@/lib/types/order";
@@ -259,6 +260,14 @@ export default async function SearchDetailPage({
               defaultQuantity={order.confirmed_quantity ?? order.quantity}
               unit={order.unit}
             />
+          </>
+        )}
+
+        {/* 삭제 버튼 (관리자만) */}
+        {isAdmin && (
+          <>
+            <Separator />
+            <DeleteOrderButton orderId={order.id} itemName={order.item_name} />
           </>
         )}
       </div></div>
