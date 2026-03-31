@@ -220,7 +220,7 @@ export function OutOfStockList() {
                   </TableCell>
                   <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
                   <TableCell>{formatDate(order.created_at)}</TableCell>
-                  <TableCell className="text-muted-foreground">{order.notes || "-"}</TableCell>
+                  <TableCell className="text-muted-foreground">{order.order_notes || "-"}</TableCell>
                   <TableCell>
                     {order.photo_urls?.length > 0 && (
                       <span className="flex items-center gap-1 text-muted-foreground">
