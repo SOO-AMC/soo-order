@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Trash2 } from "lucide-react";
+import { ChevronLeft, Pencil, Trash2 } from "lucide-react";
 import { createClient, getSessionProfile } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -40,7 +40,9 @@ export default async function BloodDetailPage({
 
   if (!record) notFound();
 
-  const canDelete = isAdmin;
+  const isOwner = record.created_by === userId;
+  const canEdit = isAdmin || isOwner;
+  const canDelete = isAdmin || isOwner;
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
@@ -171,6 +173,18 @@ export default async function BloodDetailPage({
                 hospitalName={record.hospital_name}
                 recordType={record.type}
               />
+            </>
+          )}
+
+          {canEdit && (
+            <>
+              <Separator />
+              <Button variant="outline" className="w-full" asChild>
+                <Link href={`/blood/${record.id}/edit`}>
+                  <Pencil className="h-4 w-4" />
+                  수정
+                </Link>
+              </Button>
             </>
           )}
 
