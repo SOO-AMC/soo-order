@@ -275,6 +275,15 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
         ) : !priceMatch ? (
           data?.vendors && data.vendors.length > 0 ? (
             <div className="py-1">
+              <div className="px-1 pb-1 border-b mb-1">
+                <button
+                  type="button"
+                  className={`flex w-full items-center rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${!selectedVendor ? "bg-accent" : ""}`}
+                  onClick={() => handleSelect("")}
+                >
+                  <span className="text-muted-foreground">선택없음</span>
+                </button>
+              </div>
               <div className="px-3 pt-2 pb-1 text-xs text-muted-foreground">가격 데이터 없음</div>
               <div className="px-1 pb-1">
                 {data.vendors.map((v) => {
@@ -299,6 +308,15 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
           )
         ) : (
           <div className="py-1">
+            <div className="px-1 pb-1 border-b mb-1">
+              <button
+                type="button"
+                className={`flex w-full items-center rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${!selectedVendor ? "bg-accent" : ""}`}
+                onClick={() => handleSelect("")}
+              >
+                <span className="text-muted-foreground">선택없음</span>
+              </button>
+            </div>
             {priceMatch.remarks && (
               <div className="mx-3 mb-1 mt-2 rounded-md bg-yellow-50 px-2 py-1 text-xs text-yellow-700">
                 비고: {priceMatch.remarks}
