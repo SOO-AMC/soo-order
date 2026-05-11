@@ -323,6 +323,7 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
               <TableHead>수량</TableHead>
               <TableHead>요청자</TableHead>
               <TableHead>요청일</TableHead>
+              <TableHead>비고</TableHead>
               <TableHead className="w-12">사진</TableHead>
             </TableRow>
           </TableHeader>
@@ -375,6 +376,7 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
                   </TableCell>
                   <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
                   <TableCell>{formatDate(order.created_at)}</TableCell>
+                  <TableCell className="text-muted-foreground">{order.notes || "-"}</TableCell>
                   <TableCell>
                     {order.photo_urls?.length > 0 && (
                       <span className="flex items-center gap-1 text-muted-foreground">
@@ -438,6 +440,11 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
                         </>
                       )}
                     </div>
+                    {order.notes && (
+                      <div className="mt-1 truncate text-sm text-muted-foreground">
+                        비고: {order.notes}
+                      </div>
+                    )}
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </Link>
