@@ -15,19 +15,22 @@ interface OrderFormData {
   unit: string;
   is_urgent: boolean;
   notes: string;
+  vendor_name?: string;
 }
 
-export interface OrderFormResult extends OrderFormData {
+export interface OrderFormResult extends Omit<OrderFormData, "vendor_name"> {
+  vendor_name: string;
   photos: PhotoItem[];
 }
 
 interface OrderFormProps {
   defaultValues?: OrderFormData;
   existingPhotoUrls?: string[];
+  showVendorField?: boolean;
   onSubmit: (data: OrderFormResult) => Promise<void>;
 }
 
-export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderFormProps) {
+export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, onSubmit }: OrderFormProps) {
   const [itemName, setItemName] = useState(defaultValues?.item_name ?? "");
   const [quantity, setQuantity] = useState(
     defaultValues?.quantity?.toString() ?? ""
@@ -35,6 +38,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
   const [unit, setUnit] = useState(defaultValues?.unit ?? "");
   const [isUrgent, setIsUrgent] = useState(defaultValues?.is_urgent ?? false);
   const [notes, setNotes] = useState(defaultValues?.notes ?? "");
+  const [vendorName, setVendorName] = useState(defaultValues?.vendor_name ?? "");
   const [photos, setPhotos] = useState<PhotoItem[]>(
     existingPhotoUrls ? photoItemsFromPaths(existingPhotoUrls) : []
   );
@@ -66,6 +70,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
         unit: unit.trim(),
         is_urgent: isUrgent,
         notes: notes.trim(),
+        vendor_name: vendorName.trim(),
         photos,
       });
     } catch {
@@ -119,6 +124,19 @@ export function OrderForm({ defaultValues, existingPhotoUrls, onSubmit }: OrderF
           />
         </div>
       </div>
+
+      {showVendorField && (
+        <div className="space-y-2">
+          <Label htmlFor="vendor_name">업체명</Label>
+          <Input
+            id="vendor_name"
+            type="text"
+            placeholder="업체명"
+            value={vendorName}
+            onChange={(e) => setVendorName(e.target.value)}
+          />
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="notes">비고</Label>

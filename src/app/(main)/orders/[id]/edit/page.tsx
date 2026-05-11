@@ -57,6 +57,11 @@ export default function EditOrderPage() {
       .filter((p) => p.type === "new")
       .map((p) => p.file);
 
+    // 업체명은 이미 발주된 주문(주문신청 이후 단계)에서만 수정 가능
+    const prevVendor = order?.vendor_name ?? "";
+    const canEditVendor = !!order && order.status !== "pending";
+    const vendorChanged = canEditVendor && data.vendor_name !== prevVendor;
+
     // 1. Update order text data immediately
     const { error } = await supabase
       .from("orders")
@@ -67,6 +72,7 @@ export default function EditOrderPage() {
         unit: data.unit,
         is_urgent: data.is_urgent,
         notes: data.notes,
+        ...(vendorChanged ? { vendor_name: data.vendor_name } : {}),
         updated_by: user?.id,
         photo_urls: keptPaths, // set kept paths now, new ones added after upload
       })
@@ -76,6 +82,13 @@ export default function EditOrderPage() {
 
     // 2. Navigate immediately
     logClientAction("order", "update_order", `${data.item_name} 주문 수정`);
+    if (vendorChanged) {
+      logClientAction(
+        "dispatch",
+        "update_vendor",
+        `${data.item_name} 업체명 변경: ${prevVendor || "(없음)"} → ${data.vendor_name || "(없음)"}`
+      );
+    }
     router.push(`/orders/${id}`);
 
     // 3. Upload new photos & delete old ones in background
@@ -110,8 +123,10 @@ export default function EditOrderPage() {
               unit: order.unit,
               is_urgent: order.is_urgent,
               notes: order.notes ?? "",
+              vendor_name: order.vendor_name ?? "",
             }}
             existingPhotoUrls={order.photo_urls}
+            showVendorField={order.status !== "pending"}
             onSubmit={handleSubmit}
           />
         )}

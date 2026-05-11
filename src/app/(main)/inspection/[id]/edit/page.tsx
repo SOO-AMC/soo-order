@@ -54,6 +54,9 @@ export default function InspectionEditPage() {
       .filter((p) => p.type === "new")
       .map((p) => p.file);
 
+    const prevVendor = order?.vendor_name ?? "";
+    const vendorChanged = data.vendor_name !== prevVendor;
+
     const { error } = await supabase
       .from("orders")
       .update({
@@ -62,6 +65,7 @@ export default function InspectionEditPage() {
         unit: data.unit,
         is_urgent: data.is_urgent,
         notes: data.notes,
+        vendor_name: data.vendor_name,
         updated_by: user?.id,
         photo_urls: keptPaths,
       })
@@ -70,6 +74,13 @@ export default function InspectionEditPage() {
     if (error) throw error;
 
     logClientAction("inspection", "edit_item", `${data.item_name} 품목 정보 수정`);
+    if (vendorChanged) {
+      logClientAction(
+        "dispatch",
+        "update_vendor",
+        `${data.item_name} 업체명 변경: ${prevVendor || "(없음)"} → ${data.vendor_name || "(없음)"}`
+      );
+    }
     router.push(`/inspection/${id}`);
 
     enqueueEditOrderPhotos(supabase, id, keptPaths, newFiles, deletedPaths);
@@ -103,8 +114,10 @@ export default function InspectionEditPage() {
                 unit: order.unit,
                 is_urgent: order.is_urgent,
                 notes: order.notes ?? "",
+                vendor_name: order.vendor_name ?? "",
               }}
               existingPhotoUrls={order.photo_urls}
+              showVendorField
               onSubmit={handleSubmit}
             />
           )}
