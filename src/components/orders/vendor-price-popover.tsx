@@ -237,10 +237,12 @@ interface VendorPricePopoverProps {
   itemName: string;
   selectedVendor: string;
   vendorColor?: VendorColor;
+  /** 이 품목을 가장 최근에 발주했던 업체명 (있으면 드롭다운에 바로가기로 표시) */
+  lastOrderedVendor?: string;
   onSelectVendor: (vendorName: string) => void;
 }
 
-export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSelectVendor }: VendorPricePopoverProps) {
+export function VendorPricePopover({ itemName, selectedVendor, vendorColor, lastOrderedVendor, onSelectVendor }: VendorPricePopoverProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<PriceData | null>(null);
@@ -449,6 +451,20 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
                 <span className="text-muted-foreground">선택없음</span>
               </button>
             </div>
+
+            {/* 이전 주문 업체 바로가기 */}
+            {lastOrderedVendor && (
+              <div className="px-1 pb-1 border-b mb-1">
+                <button
+                  type="button"
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${selectedVendor === lastOrderedVendor ? "bg-accent" : ""}`}
+                  onClick={() => handleSelect(lastOrderedVendor)}
+                >
+                  <span className="shrink-0 rounded bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-700">이전 주문 업체</span>
+                  <span className="truncate font-medium">{lastOrderedVendor}</span>
+                </button>
+              </div>
+            )}
 
             {priceMatch ? (
               <>

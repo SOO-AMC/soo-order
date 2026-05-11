@@ -31,6 +31,7 @@ import {
 import { OrderStatusBadge, StatusLegend } from "./order-status-badge";
 import { VendorPricePopover, VENDOR_COLORS, initPriceCache, type VendorColor, type PriceData } from "./vendor-price-popover";
 import { formatDate } from "@/lib/utils/format";
+import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
@@ -60,24 +61,43 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
   const [vendorSelections, setVendorSelections] = useState<Map<string, string>>(new Map());
   const [copiedVendor, setCopiedVendor] = useState("");
   const [bulkSource, setBulkSource] = useState<"checkbox" | "vendor">("checkbox");
+  // 품목명(정규화) → 가장 최근에 발주했던 업체명
+  const [lastVendorByItem, setLastVendorByItem] = useState<Map<string, string>>(new Map());
   const supabase = createClient();
   const router = useRouter();
 
   const fetchOrders = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*, requester:profiles!requester_id(full_name)")
-      .eq("type", "order")
-      .eq("status", "pending")
-      .order("created_at", { ascending: false });
+    const [ordersRes, historyRes] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("*, requester:profiles!requester_id(full_name)")
+        .eq("type", "order")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("orders")
+        .select("item_name, vendor_name, created_at")
+        .eq("type", "order")
+        .neq("vendor_name", "")
+        .order("created_at", { ascending: false })
+        .limit(3000),
+    ]);
 
-    if (error) {
-      setError(error.message);
+    if (ordersRes.error) {
+      setError(ordersRes.error.message);
       setIsLoading(false);
       return;
     }
 
-    setOrders((data as OrderWithRequester[]) ?? []);
+    setOrders((ordersRes.data as OrderWithRequester[]) ?? []);
+
+    const historyMap = new Map<string, string>();
+    for (const row of (historyRes.data ?? []) as { item_name: string; vendor_name: string }[]) {
+      const key = normalizeItemName(row.item_name);
+      if (key && !historyMap.has(key)) historyMap.set(key, row.vendor_name);
+    }
+    setLastVendorByItem(historyMap);
+
     setIsLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -359,6 +379,7 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
                         itemName={order.item_name}
                         selectedVendor={vendorSelections.get(order.id) ?? ""}
                         vendorColor={vendorColorMap.get(vendorSelections.get(order.id) ?? "")}
+                        lastOrderedVendor={lastVendorByItem.get(normalizeItemName(order.item_name))}
                         onSelectVendor={(v) => handleVendorSelect(order.id, v)}
                       />
                     </TableCell>
@@ -454,6 +475,7 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
                   <VendorPricePopover
                     itemName={order.item_name}
                     selectedVendor={vendorSelections.get(order.id) ?? ""}
+                    lastOrderedVendor={lastVendorByItem.get(normalizeItemName(order.item_name))}
                     onSelectVendor={(v) => handleVendorSelect(order.id, v)}
                   />
                 </div>
