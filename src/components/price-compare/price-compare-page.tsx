@@ -5,23 +5,28 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ComparisonTable } from "./comparison-table";
+import { AliasManagement } from "./alias-management";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 import type {
   Vendor,
   VendorProduct,
   UnifiedProduct,
+  ItemNameAlias,
 } from "@/lib/types/price-compare";
 
 interface PriceCompareData {
   vendors: (Vendor & { product_count: number })[];
   vendorProducts: VendorProduct[];
   unifiedProducts: UnifiedProduct[];
+  itemAliases: ItemNameAlias[];
 }
 
 export function PriceComparePage() {
   const [data, setData] = useState<PriceCompareData | null>(null);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<"compare" | "aliases">("compare");
 
   const loadData = useCallback(() => {
     fetchPriceCompareData()
@@ -56,13 +61,28 @@ export function PriceComparePage() {
           <Spinner text="불러오는 중..." />
         </div>
       ) : (
-        <div className="p-4">
-          <ComparisonTable
-            vendors={data.vendors}
-            vendorProducts={data.vendorProducts}
-            unifiedProducts={data.unifiedProducts}
-            onDataChange={loadData}
-          />
+        <div className="space-y-4 p-4">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "compare" | "aliases")}>
+            <TabsList>
+              <TabsTrigger value="compare">가격 비교표</TabsTrigger>
+              <TabsTrigger value="aliases">품목 매칭 ({data.itemAliases.length})</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {tab === "compare" ? (
+            <ComparisonTable
+              vendors={data.vendors}
+              vendorProducts={data.vendorProducts}
+              unifiedProducts={data.unifiedProducts}
+              onDataChange={loadData}
+            />
+          ) : (
+            <AliasManagement
+              aliases={data.itemAliases}
+              unifiedProducts={data.unifiedProducts}
+              onChange={loadData}
+            />
+          )}
         </div>
       )}
     </div>
