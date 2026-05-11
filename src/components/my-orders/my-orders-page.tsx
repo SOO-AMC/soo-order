@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { fetchMyOrdersStatus, type MyOrdersData } from "@/lib/actions/my-orders-action";
+import { NotificationBell } from "@/components/notification-bell";
 import { StatusSummary } from "./status-summary";
 import { ActiveOrderList } from "./active-order-list";
 import { RecentCompleted } from "./recent-completed";
@@ -20,7 +21,11 @@ export function MyOrdersPage() {
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center gap-2 bg-card px-4 py-3 shadow-header">
-        <h1 className="text-lg font-bold">내 주문 현황</h1>
+        <h1 className="flex-1 text-lg font-bold">내 주문 현황</h1>
+        {/* PC는 사이드바에 종 아이콘이 있으므로 모바일/태블릿에서만 노출 */}
+        <div className="lg:hidden">
+          <NotificationBell />
+        </div>
       </header>
 
       {loading ? (

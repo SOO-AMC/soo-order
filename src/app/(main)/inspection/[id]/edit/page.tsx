@@ -11,6 +11,8 @@ import type { OrderFormResult } from "@/components/orders/order-form";
 import type { Order } from "@/lib/types/order";
 import { enqueueEditOrderPhotos } from "@/lib/utils/upload-queue";
 import { logClientAction } from "@/app/(main)/log-action";
+import { notifyOrderEdited } from "@/lib/actions/notification-actions";
+import { describeOrderChanges } from "@/lib/utils/order-changes";
 
 export default function InspectionEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -81,6 +83,32 @@ export default function InspectionEditPage() {
         `${data.item_name} 업체명 변경: ${prevVendor || "(없음)"} → ${data.vendor_name || "(없음)"}`
       );
     }
+
+    // 요청자가 아닌 사람(관리자)이 수정했으면 요청자에게 알림
+    if (order?.requester_id && user?.id && user.id !== order.requester_id) {
+      const changes = describeOrderChanges(
+        {
+          item_name: order.item_name,
+          quantity: order.quantity,
+          unit: order.unit ?? "",
+          is_urgent: !!order.is_urgent,
+          notes: order.notes ?? "",
+          vendor_name: order.vendor_name ?? "",
+          photoCount: order.photo_urls?.length ?? 0,
+        },
+        {
+          item_name: data.item_name,
+          quantity: data.quantity,
+          unit: data.unit ?? "",
+          is_urgent: !!data.is_urgent,
+          notes: data.notes ?? "",
+          vendor_name: data.vendor_name ?? "",
+          photoCount: data.photos.length,
+        }
+      );
+      notifyOrderEdited(id, order.requester_id, data.item_name, `/inspection/${id}`, changes).catch(() => {});
+    }
+
     router.push(`/inspection/${id}`);
 
     enqueueEditOrderPhotos(supabase, id, keptPaths, newFiles, deletedPaths);

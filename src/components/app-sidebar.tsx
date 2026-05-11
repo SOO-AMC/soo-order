@@ -19,9 +19,11 @@ import {
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useTabCounts } from "@/hooks/use-tab-counts";
+import { useNotifications } from "@/hooks/use-notifications";
 import { useIsAdmin } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { NotificationBell } from "@/components/notification-bell";
 
 const mainTabs = [
   { href: "/orders", label: "주문", icon: Package, countKey: "orders" as const },
@@ -50,6 +52,7 @@ export function AppSidebar() {
   const supabase = createClient();
   const isAdmin = useIsAdmin();
   const counts = useTabCounts();
+  const { unreadCount } = useNotifications();
   const fromDashboard = searchParams.get("from") === "dashboard";
 
   const handleLogout = async () => {
@@ -62,11 +65,15 @@ export function AppSidebar() {
     label,
     icon: Icon,
     countKey,
+    badgeCount,
+    badgeUrgent,
   }: {
     href: string;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
     countKey?: "orders" | "outOfStock" | "returns" | "inspection" | "blood" | null;
+    badgeCount?: number;
+    badgeUrgent?: boolean;
   }) => {
     const isActive =
       href === "/account"
@@ -77,8 +84,8 @@ export function AppSidebar() {
             ? false
             : pathname.startsWith(href);
     const info = countKey ? counts[countKey] : null;
-    const count = info?.count ?? 0;
-    const hasUrgent = info?.hasUrgent ?? false;
+    const count = badgeCount ?? info?.count ?? 0;
+    const hasUrgent = badgeUrgent ?? info?.hasUrgent ?? false;
     return (
       <Link
         key={href}
@@ -114,10 +121,11 @@ export function AppSidebar() {
           height={32}
           className="rounded-lg"
         />
-        <span className="text-lg font-bold text-foreground">수오더</span>
+        <span className="flex-1 text-lg font-bold text-foreground">수오더</span>
+        <NotificationBell />
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {renderLink(myOrdersTab)}
+        {renderLink({ ...myOrdersTab, badgeCount: unreadCount, badgeUrgent: unreadCount > 0 })}
         {mainTabs.map(renderLink)}
 
         <Separator className="my-3 bg-border/40" />

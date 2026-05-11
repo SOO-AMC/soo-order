@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Package, BarChart3, ClipboardCheck, Search, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabCounts } from "@/hooks/use-tab-counts";
+import { useNotifications } from "@/hooks/use-notifications";
 
 const tabs = [
   { href: "/dashboard", label: "내 현황", icon: BarChart3, countKey: null },
@@ -25,6 +26,7 @@ export function useShowBottomNav() {
 export function BottomNav() {
   const pathname = usePathname();
   const counts = useTabCounts();
+  const { unreadCount } = useNotifications();
   const show = useShowBottomNav();
 
   if (!show) return null;
@@ -38,8 +40,9 @@ export function BottomNav() {
               ? pathname.startsWith("/more") || pathname.startsWith("/account") || pathname.startsWith("/out-of-stock") || pathname.startsWith("/returns") || pathname.startsWith("/blood")
               : pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
           const info = countKey ? counts[countKey] : null;
-          const count = info?.count ?? 0;
-          const hasUrgent = info?.hasUrgent ?? false;
+          const isMyStatus = href === "/dashboard";
+          const count = isMyStatus ? unreadCount : info?.count ?? 0;
+          const hasUrgent = isMyStatus ? unreadCount > 0 : info?.hasUrgent ?? false;
           return (
             <Link
               key={href}
