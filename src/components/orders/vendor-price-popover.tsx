@@ -27,7 +27,11 @@ interface PriceMatch {
   minPrice: number | null;
   unifiedProductId: string | null;
   source: "alias" | "fuzzy";
+  score: number; // 별칭이면 1, 퍼지면 최고 유사도 점수
 }
+
+// 발주 시 자동 학습을 허용하는 퍼지 매칭 최소 신뢰도
+const AUTO_LEARN_MIN_SCORE = 0.7;
 
 // Shared price data cache (module-level singleton)
 export interface PriceData {
@@ -125,7 +129,7 @@ function buildUnifiedMatch(
   vendors: Vendor[],
   vendorProducts: VendorProduct[],
   unifiedProducts: UnifiedProduct[],
-): Omit<PriceMatch, "source"> | null {
+): Omit<PriceMatch, "source" | "score"> | null {
   const unified = unifiedProducts.find((u) => u.id === unifiedId);
   if (!unified) return null;
   const byUnified = vendorProducts.filter((p) => p.unified_product_id === unifiedId);
@@ -185,7 +189,8 @@ function findFuzzyMatch(
   if (bestScore < MIN_THRESHOLD) return null;
 
   if (bestUnifiedId) {
-    return buildUnifiedMatch(bestUnifiedId, vendors, vendorProducts, unifiedProducts);
+    const m = buildUnifiedMatch(bestUnifiedId, vendors, vendorProducts, unifiedProducts);
+    return m ? { ...m, score: bestScore } : null;
   }
 
   if (bestDirectProduct) {
@@ -201,6 +206,7 @@ function findFuzzyMatch(
       prices,
       minPrice: validPrices.length > 0 ? Math.min(...validPrices) : null,
       unifiedProductId: null,
+      score: bestScore,
     };
   }
 
@@ -213,7 +219,7 @@ function resolveMatch(itemName: string, data: PriceData): PriceMatch | null {
   const alias = data.aliases.find((a) => a.item_name === key);
   if (alias) {
     const m = buildUnifiedMatch(alias.unified_product_id, data.vendors, data.products, data.unified);
-    if (m) return { ...m, source: "alias" };
+    if (m) return { ...m, source: "alias", score: 1 };
   }
   const fuzzy = findFuzzyMatch(itemName, data.vendors, data.products, data.unified);
   if (fuzzy) return { ...fuzzy, source: "fuzzy" };
@@ -288,7 +294,33 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, last
     return list.slice(0, 50);
   }, [data, matchSearch]);
 
+  // 퍼지 매칭으로 뜬 가격 목록에서 업체를 골랐고 신뢰도가 높으면 별칭 자동 학습
+  const autoLearnFromSelection = (vendorName: string) => {
+    if (
+      !vendorName ||
+      !data ||
+      !priceMatch ||
+      priceMatch.source !== "fuzzy" ||
+      !priceMatch.unifiedProductId ||
+      priceMatch.score < AUTO_LEARN_MIN_SCORE ||
+      !priceMatch.prices.some((p) => p.vendorName === vendorName)
+    ) {
+      return;
+    }
+    const key = normalizeItemName(itemName);
+    if (data.aliases.some((a) => a.item_name === key)) return;
+    const unifiedId = priceMatch.unifiedProductId;
+    const next: ItemNameAlias[] = [
+      ...data.aliases,
+      { id: crypto.randomUUID(), item_name: key, unified_product_id: unifiedId, created_by: null, created_at: new Date().toISOString() },
+    ];
+    setCachedAliases(next);
+    setData({ ...data, aliases: next });
+    setItemAlias(itemName, unifiedId).catch(() => {});
+  };
+
   const handleSelect = (vendorName: string) => {
+    autoLearnFromSelection(vendorName);
     onSelectVendor(vendorName);
     setOpen(false);
   };
