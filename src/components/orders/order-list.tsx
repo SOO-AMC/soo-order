@@ -37,11 +37,19 @@ import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 import { bulkDispatchAll, bulkDispatchIndividual } from "@/lib/actions/order-mutations";
 
-export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }) {
+export function OrderList({
+  initialPriceData,
+  initialOrders,
+  initialLastVendors,
+}: {
+  initialPriceData?: PriceData;
+  initialOrders?: OrderWithRequester[];
+  initialLastVendors?: Record<string, string>;
+}) {
   if (initialPriceData) initPriceCache(initialPriceData);
   const { isAdmin, userId: currentUserId } = useAuth();
-  const [orders, setOrders] = useState<OrderWithRequester[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [orders, setOrders] = useState<OrderWithRequester[]>(initialOrders ?? []);
+  const [isLoading, setIsLoading] = useState(!initialOrders);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
     try {
@@ -62,25 +70,21 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
   const [copiedVendor, setCopiedVendor] = useState("");
   const [bulkSource, setBulkSource] = useState<"checkbox" | "vendor">("checkbox");
   // 품목명(정규화) → 가장 최근에 발주했던 업체명
-  const [lastVendorByItem, setLastVendorByItem] = useState<Map<string, string>>(new Map());
+  const [lastVendorByItem, setLastVendorByItem] = useState<Map<string, string>>(
+    () => new Map(Object.entries(initialLastVendors ?? {}))
+  );
   const supabase = createClient();
   const router = useRouter();
 
   const fetchOrders = useCallback(async () => {
-    const [ordersRes, historyRes] = await Promise.all([
+    const [ordersRes, lastVendorRes] = await Promise.all([
       supabase
         .from("orders")
         .select("*, requester:profiles!requester_id(full_name)")
         .eq("type", "order")
         .eq("status", "pending")
         .order("created_at", { ascending: false }),
-      supabase
-        .from("orders")
-        .select("item_name, vendor_name, created_at")
-        .eq("type", "order")
-        .neq("vendor_name", "")
-        .order("created_at", { ascending: false })
-        .limit(3000),
+      supabase.rpc("get_last_vendor_by_item"),
     ]);
 
     if (ordersRes.error) {
@@ -91,12 +95,14 @@ export function OrderList({ initialPriceData }: { initialPriceData?: PriceData }
 
     setOrders((ordersRes.data as OrderWithRequester[]) ?? []);
 
-    const historyMap = new Map<string, string>();
-    for (const row of (historyRes.data ?? []) as { item_name: string; vendor_name: string }[]) {
-      const key = normalizeItemName(row.item_name);
-      if (key && !historyMap.has(key)) historyMap.set(key, row.vendor_name);
+    if (!lastVendorRes.error) {
+      const historyMap = new Map<string, string>();
+      for (const row of (lastVendorRes.data ?? []) as { item_name: string; vendor_name: string }[]) {
+        const key = normalizeItemName(row.item_name);
+        if (key && !historyMap.has(key)) historyMap.set(key, row.vendor_name);
+      }
+      setLastVendorByItem(historyMap);
     }
-    setLastVendorByItem(historyMap);
 
     setIsLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -28,10 +28,10 @@ interface InspectionData {
   inspection_notes: string;
 }
 
-export function InspectionList() {
+export function InspectionList({ initialOrders }: { initialOrders?: OrderWithRequester[] }) {
   const { isAdmin, userId: currentUserId } = useAuth();
-  const [orders, setOrders] = useState<OrderWithRequester[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [orders, setOrders] = useState<OrderWithRequester[]>(initialOrders ?? []);
+  const [isLoading, setIsLoading] = useState(!initialOrders);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [inspectionData, setInspectionData] = useState<
@@ -39,7 +39,11 @@ export function InspectionList() {
   >({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [sortByVendor, setSortByVendor] = useState(false);
-  const [memos, setMemos] = useState<Record<string, string>>({});
+  const [memos, setMemos] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const o of initialOrders ?? []) m[o.id] = o.inspection_memo ?? "";
+    return m;
+  });
   const dirtyMemos = useRef<Set<string>>(new Set());
   const memoTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const supabase = createClient();
