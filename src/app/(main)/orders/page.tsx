@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OrderList } from "@/components/orders/order-list";
-import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import type { OrderWithRequester } from "@/lib/types/order";
@@ -14,17 +13,17 @@ export const metadata: Metadata = {
 
 export default async function OrdersPage() {
   const supabase = await createClient();
-  const [{ vendors, vendorProducts, unifiedProducts, itemAliases }, ordersRes, lastVendorRes] =
-    await Promise.all([
-      fetchPriceCompareData(),
-      supabase
-        .from("orders")
-        .select("*, requester:profiles!requester_id(full_name)")
-        .eq("type", "order")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false }),
-      supabase.rpc("get_last_vendor_by_item"),
-    ]);
+  // 가격비교 데이터는 무겁고 팝업 열 때만 필요하므로 페이지 렌더를 막지 않음
+  // (vendor-price-popover 모듈이 클라이언트 마운트 시 백그라운드로 프리페치함)
+  const [ordersRes, lastVendorRes] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("*, requester:profiles!requester_id(full_name)")
+      .eq("type", "order")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false }),
+    supabase.rpc("get_last_vendor_by_item"),
+  ]);
 
   const initialOrders = (ordersRes.data as OrderWithRequester[] | null) ?? [];
   const initialLastVendors: Record<string, string> = {};
@@ -44,11 +43,7 @@ export default async function OrdersPage() {
         </Button>
       </header>
       <div className="p-4">
-        <OrderList
-          initialPriceData={{ vendors, products: vendorProducts, unified: unifiedProducts, aliases: itemAliases }}
-          initialOrders={initialOrders}
-          initialLastVendors={initialLastVendors}
-        />
+        <OrderList initialOrders={initialOrders} initialLastVendors={initialLastVendors} />
       </div>
     </div>
   );
