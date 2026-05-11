@@ -39,3 +39,11 @@ export interface VendorProductRow {
   ingredient: string;
   category: string;
 }
+
+export interface ItemNameAlias {
+  id: string;
+  item_name: string;            // 정규화된 품목명 (normalizeItemName)
+  unified_product_id: string;
+  created_by: string | null;
+  created_at: string;
+}

@@ -1,7 +1,7 @@
 "use server";
 
 import { requireUser } from "@/lib/supabase/server";
-import type { Vendor, VendorProduct, UnifiedProduct } from "@/lib/types/price-compare";
+import type { Vendor, VendorProduct, UnifiedProduct, ItemNameAlias } from "@/lib/types/price-compare";
 
 const VENDOR_ORDER = ["우리엔팜", "화영", "VS팜", "서수약품"];
 
@@ -30,10 +30,11 @@ async function fetchAll<T>(
 export async function fetchPriceCompareData() {
   const { supabase } = await requireUser();
 
-  const [vendors, vendorProductData, unifiedProducts] = await Promise.all([
+  const [vendors, vendorProductData, unifiedProducts, itemAliases] = await Promise.all([
     fetchAll<Vendor>(supabase, "vendors", "name"),
     fetchAll<VendorProduct>(supabase, "vendor_products", "product_name"),
     fetchAll<UnifiedProduct>(supabase, "unified_products", "sort_order"),
+    fetchAll<ItemNameAlias>(supabase, "item_name_aliases", "item_name"),
   ]);
 
   const countByVendor = new Map<string, number>();
@@ -56,5 +57,6 @@ export async function fetchPriceCompareData() {
     vendors: sortedVendors,
     vendorProducts: vendorProductData,
     unifiedProducts,
+    itemAliases,
   };
 }

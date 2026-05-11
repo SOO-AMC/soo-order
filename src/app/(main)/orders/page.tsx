@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function OrdersPage() {
-  const { vendors, vendorProducts, unifiedProducts } = await fetchPriceCompareData();
+  const { vendors, vendorProducts, unifiedProducts, itemAliases } = await fetchPriceCompareData();
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
@@ -23,7 +23,7 @@ export default async function OrdersPage() {
         </Button>
       </header>
       <div className="p-4">
-        <OrderList initialPriceData={{ vendors, products: vendorProducts, unified: unifiedProducts }} />
+        <OrderList initialPriceData={{ vendors, products: vendorProducts, unified: unifiedProducts, aliases: itemAliases }} />
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { ChevronsUpDown } from "lucide-react";
+import { ChevronsUpDown, Search, X, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -10,7 +10,9 @@ import {
 } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
-import type { Vendor, VendorProduct, UnifiedProduct } from "@/lib/types/price-compare";
+import { setItemAlias, removeItemAlias } from "@/lib/actions/item-alias-actions";
+import { normalizeItemName } from "@/lib/utils/normalize-item-name";
+import type { Vendor, VendorProduct, UnifiedProduct, ItemNameAlias } from "@/lib/types/price-compare";
 
 interface PriceEntry {
   vendorName: string;
@@ -23,6 +25,8 @@ interface PriceMatch {
   remarks: string;
   prices: PriceEntry[];
   minPrice: number | null;
+  unifiedProductId: string | null;
+  source: "alias" | "fuzzy";
 }
 
 // Shared price data cache (module-level singleton)
@@ -30,6 +34,7 @@ export interface PriceData {
   vendors: Vendor[];
   products: VendorProduct[];
   unified: UnifiedProduct[];
+  aliases: ItemNameAlias[];
 }
 
 let cachedData: PriceData | null = null;
@@ -39,8 +44,8 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 10분
 
 function startFetch() {
   if (fetchPromise) return fetchPromise;
-  fetchPromise = fetchPriceCompareData().then(({ vendors, vendorProducts, unifiedProducts }) => {
-    cachedData = { vendors, products: vendorProducts, unified: unifiedProducts };
+  fetchPromise = fetchPriceCompareData().then(({ vendors, vendorProducts, unifiedProducts, itemAliases }) => {
+    cachedData = { vendors, products: vendorProducts, unified: unifiedProducts, aliases: itemAliases };
     cachedAt = Date.now();
     fetchPromise = null;
     return cachedData;
@@ -59,6 +64,11 @@ export function initPriceCache(data: PriceData) {
   if (cachedData) return; // 이미 초기화된 경우 덮어쓰지 않음
   cachedData = data;
   cachedAt = Date.now();
+}
+
+// 별칭 변경 후 모듈 캐시 갱신 — 이후 새로 열리는 popover 인스턴스가 반영
+function setCachedAliases(aliases: ItemNameAlias[]) {
+  if (cachedData) cachedData = { ...cachedData, aliases };
 }
 
 // 모듈 로드 시 즉시 프리페치 시작 (캐시 없을 때만)
@@ -109,12 +119,36 @@ function similarity(aTokens: string[], aNorm: string, bTokens: string[], bNorm: 
   return coverage * 0.7 + jaccard * 0.3;
 }
 
-function findBestPriceMatch(
+/** 통합제품 1개 → 업체별 가격표 */
+function buildUnifiedMatch(
+  unifiedId: string,
+  vendors: Vendor[],
+  vendorProducts: VendorProduct[],
+  unifiedProducts: UnifiedProduct[],
+): Omit<PriceMatch, "source"> | null {
+  const unified = unifiedProducts.find((u) => u.id === unifiedId);
+  if (!unified) return null;
+  const byUnified = vendorProducts.filter((p) => p.unified_product_id === unifiedId);
+  const prices = vendors.map((v) => {
+    const vp = byUnified.find((p) => p.vendor_id === v.id);
+    return { vendorName: v.name, price: vp?.unit_price ?? null, productName: vp?.product_name ?? "-" };
+  });
+  const validPrices = prices.filter((p) => p.price !== null).map((p) => p.price!);
+  return {
+    productName: byUnified[0]?.product_name ?? unified.name,
+    remarks: unified.remarks ?? "",
+    prices,
+    minPrice: validPrices.length > 0 ? Math.min(...validPrices) : null,
+    unifiedProductId: unifiedId,
+  };
+}
+
+function findFuzzyMatch(
   itemName: string,
   vendors: Vendor[],
   vendorProducts: VendorProduct[],
   unifiedProducts: UnifiedProduct[],
-): PriceMatch | null {
+): Omit<PriceMatch, "source"> | null {
   const MIN_THRESHOLD = 0.5;
   const aTokens = tokenize(itemName);
   const aNorm = aTokens.join("");
@@ -151,19 +185,7 @@ function findBestPriceMatch(
   if (bestScore < MIN_THRESHOLD) return null;
 
   if (bestUnifiedId) {
-    const byUnified = vendorProducts.filter((p) => p.unified_product_id === bestUnifiedId);
-    const unified = unifiedProducts.find((u) => u.id === bestUnifiedId);
-    const prices = vendors.map((v) => {
-      const vp = byUnified.find((p) => p.vendor_id === v.id);
-      return { vendorName: v.name, price: vp?.unit_price ?? null, productName: vp?.product_name ?? "-" };
-    });
-    const validPrices = prices.filter((p) => p.price !== null).map((p) => p.price!);
-    return {
-      productName: byUnified[0]?.product_name ?? "",
-      remarks: unified?.remarks ?? "",
-      prices,
-      minPrice: validPrices.length > 0 ? Math.min(...validPrices) : null,
-    };
+    return buildUnifiedMatch(bestUnifiedId, vendors, vendorProducts, unifiedProducts);
   }
 
   if (bestDirectProduct) {
@@ -178,9 +200,23 @@ function findBestPriceMatch(
       remarks: "",
       prices,
       minPrice: validPrices.length > 0 ? Math.min(...validPrices) : null,
+      unifiedProductId: null,
     };
   }
 
+  return null;
+}
+
+/** 별칭 우선 → 없으면 퍼지 매칭 */
+function resolveMatch(itemName: string, data: PriceData): PriceMatch | null {
+  const key = normalizeItemName(itemName);
+  const alias = data.aliases.find((a) => a.item_name === key);
+  if (alias) {
+    const m = buildUnifiedMatch(alias.unified_product_id, data.vendors, data.products, data.unified);
+    if (m) return { ...m, source: "alias" };
+  }
+  const fuzzy = findFuzzyMatch(itemName, data.vendors, data.products, data.unified);
+  if (fuzzy) return { ...fuzzy, source: "fuzzy" };
   return null;
 }
 
@@ -207,11 +243,10 @@ interface VendorPricePopoverProps {
 export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSelectVendor }: VendorPricePopoverProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<{
-    vendors: Vendor[];
-    products: VendorProduct[];
-    unified: UnifiedProduct[];
-  } | null>(null);
+  const [data, setData] = useState<PriceData | null>(null);
+  const [editingMatch, setEditingMatch] = useState(false);
+  const [matchSearch, setMatchSearch] = useState("");
+  const [savingAlias, setSavingAlias] = useState(false);
 
   // 마운트 시 백그라운드 프리페치 — 첫 번째 인스턴스가 fetch를 시작하고
   // 나머지는 동일한 Promise를 공유하므로 실제 요청은 한 번만 발생
@@ -221,7 +256,12 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
 
   const handleOpen = async (isOpen: boolean) => {
     setOpen(isOpen);
-    if (isOpen && !data) {
+    if (!isOpen) {
+      setEditingMatch(false);
+      setMatchSearch("");
+      return;
+    }
+    if (!data) {
       setLoading(true);
       try {
         const result = await getPriceData();
@@ -236,12 +276,58 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
 
   const priceMatch = useMemo(() => {
     if (!data) return null;
-    return findBestPriceMatch(itemName, data.vendors, data.products, data.unified);
+    return resolveMatch(itemName, data);
   }, [itemName, data]);
+
+  const filteredUnified = useMemo(() => {
+    if (!data) return [];
+    const q = matchSearch.trim().toLowerCase();
+    const list = q ? data.unified.filter((u) => u.name.toLowerCase().includes(q)) : data.unified;
+    return list.slice(0, 50);
+  }, [data, matchSearch]);
 
   const handleSelect = (vendorName: string) => {
     onSelectVendor(vendorName);
     setOpen(false);
+  };
+
+  const applyAlias = async (unifiedId: string) => {
+    if (!data || savingAlias) return;
+    setSavingAlias(true);
+    try {
+      await setItemAlias(itemName, unifiedId);
+      const key = normalizeItemName(itemName);
+      const next: ItemNameAlias[] = [
+        ...data.aliases.filter((a) => a.item_name !== key),
+        { id: crypto.randomUUID(), item_name: key, unified_product_id: unifiedId, created_by: null, created_at: new Date().toISOString() },
+      ];
+      setCachedAliases(next);
+      setData({ ...data, aliases: next });
+      setEditingMatch(false);
+      setMatchSearch("");
+    } catch {
+      // silently fail
+    } finally {
+      setSavingAlias(false);
+    }
+  };
+
+  const clearAlias = async () => {
+    if (!data || savingAlias) return;
+    setSavingAlias(true);
+    try {
+      await removeItemAlias(itemName);
+      const key = normalizeItemName(itemName);
+      const next = data.aliases.filter((a) => a.item_name !== key);
+      setCachedAliases(next);
+      setData({ ...data, aliases: next });
+      setEditingMatch(false);
+      setMatchSearch("");
+    } catch {
+      // silently fail
+    } finally {
+      setSavingAlias(false);
+    }
   };
 
   return (
@@ -272,42 +358,88 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
           <div className="flex items-center justify-center py-6">
             <Spinner text="가격 데이터 로딩 중..." />
           </div>
-        ) : !priceMatch ? (
-          data?.vendors && data.vendors.length > 0 ? (
-            <div className="py-1">
-              <div className="px-1 pb-1 border-b mb-1">
-                <button
-                  type="button"
-                  className={`flex w-full items-center rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${!selectedVendor ? "bg-accent" : ""}`}
-                  onClick={() => handleSelect("")}
-                >
-                  <span className="text-muted-foreground">선택없음</span>
-                </button>
-              </div>
-              <div className="px-3 pt-2 pb-1 text-xs text-muted-foreground">가격 데이터 없음</div>
-              <div className="px-1 pb-1">
-                {data.vendors.map((v) => {
-                  const isSelected = selectedVendor === v.name;
+        ) : editingMatch ? (
+          /* ─── 매칭 수정 모드 ─── */
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 border-b px-3 py-2">
+              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <input
+                autoFocus
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                placeholder="통합제품 검색…"
+                value={matchSearch}
+                onChange={(e) => setMatchSearch(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => { setEditingMatch(false); setMatchSearch(""); }}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="닫기"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto py-1">
+              {filteredUnified.length === 0 ? (
+                <p className="px-3 py-4 text-center text-sm text-muted-foreground">검색 결과 없음</p>
+              ) : (
+                filteredUnified.map((u) => {
+                  const isCurrent = priceMatch?.unifiedProductId === u.id;
                   return (
                     <button
-                      key={v.id}
+                      key={u.id}
                       type="button"
-                      className={`flex w-full items-center rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${isSelected ? "bg-accent" : ""}`}
-                      onClick={() => handleSelect(v.name)}
+                      disabled={savingAlias}
+                      onClick={() => applyAlias(u.id)}
+                      className={`flex w-full flex-col items-start rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent disabled:opacity-50 ${isCurrent ? "bg-accent" : ""}`}
                     >
-                      <span className="font-medium">{v.name}</span>
+                      <span className="font-medium">{u.name}</span>
+                      {u.notes && <span className="text-xs text-muted-foreground">{u.notes}</span>}
                     </button>
                   );
-                })}
+                })
+              )}
+            </div>
+            {priceMatch?.source === "alias" && (
+              <div className="border-t px-3 py-2">
+                <button
+                  type="button"
+                  disabled={savingAlias}
+                  onClick={clearAlias}
+                  className="text-xs text-destructive hover:underline disabled:opacity-50"
+                >
+                  매칭 해제 (자동 매칭으로 되돌리기)
+                </button>
               </div>
-            </div>
-          ) : (
-            <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-              일치하는 가격 데이터 없음
-            </div>
-          )
+            )}
+          </div>
         ) : (
+          /* ─── 일반 모드 ─── */
           <div className="py-1">
+            {/* 매칭 상태 + 수정 버튼 */}
+            <div className="flex items-center gap-2 border-b px-3 py-2 text-xs">
+              {priceMatch ? (
+                priceMatch.source === "alias" ? (
+                  <span className="flex min-w-0 items-center gap-1 text-blue-700">
+                    <span className="shrink-0 rounded bg-blue-50 px-1 py-0.5 font-medium">학습됨</span>
+                    <span className="truncate">{priceMatch.productName}</span>
+                  </span>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">추정: {priceMatch.productName}</span>
+                )
+              ) : (
+                <span className="flex-1 text-muted-foreground">매칭된 가격 없음</span>
+              )}
+              <button
+                type="button"
+                onClick={() => setEditingMatch(true)}
+                className="ml-auto flex shrink-0 items-center gap-0.5 text-primary hover:underline"
+              >
+                <Pencil className="h-3 w-3" /> 매칭 수정
+              </button>
+            </div>
+
+            {/* 선택없음 */}
             <div className="px-1 pb-1 border-b mb-1">
               <button
                 type="button"
@@ -317,43 +449,71 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, onSe
                 <span className="text-muted-foreground">선택없음</span>
               </button>
             </div>
-            {priceMatch.remarks && (
-              <div className="mx-3 mb-1 mt-2 rounded-md bg-yellow-50 px-2 py-1 text-xs text-yellow-700">
-                비고: {priceMatch.remarks}
+
+            {priceMatch ? (
+              <>
+                {priceMatch.remarks && (
+                  <div className="mx-3 mb-1 mt-2 rounded-md bg-yellow-50 px-2 py-1 text-xs text-yellow-700">
+                    비고: {priceMatch.remarks}
+                  </div>
+                )}
+                <div className="px-1 py-1">
+                  {priceMatch.prices.map((p) => {
+                    const isMin = p.price !== null && p.price === priceMatch.minPrice;
+                    const isSelected = selectedVendor === p.vendorName;
+                    return (
+                      <button
+                        key={p.vendorName}
+                        type="button"
+                        className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${
+                          isSelected ? "bg-accent" : ""
+                        }`}
+                        onClick={() => handleSelect(p.vendorName)}
+                      >
+                        <div className="min-w-0 flex-1 text-left">
+                          <span className="font-medium">{p.vendorName}</span>
+                          <p className="truncate text-xs text-muted-foreground">{p.productName}</p>
+                        </div>
+                        <span
+                          className={`shrink-0 text-sm tabular-nums ${
+                            isMin
+                              ? "font-semibold text-green-700"
+                              : p.price !== null
+                                ? "text-foreground"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {p.price !== null ? `${p.price.toLocaleString()}원` : "-"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : data?.vendors && data.vendors.length > 0 ? (
+              <>
+                <div className="px-3 pt-2 pb-1 text-xs text-muted-foreground">가격 데이터 없음 — 업체 직접 선택</div>
+                <div className="px-1 pb-1">
+                  {data.vendors.map((v) => {
+                    const isSelected = selectedVendor === v.name;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        className={`flex w-full items-center rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${isSelected ? "bg-accent" : ""}`}
+                        onClick={() => handleSelect(v.name)}
+                      >
+                        <span className="font-medium">{v.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                업체 데이터 없음
               </div>
             )}
-            <div className="px-1 py-1">
-              {priceMatch.prices.map((p) => {
-                const isMin = p.price !== null && p.price === priceMatch.minPrice;
-                const isSelected = selectedVendor === p.vendorName;
-                return (
-                  <button
-                    key={p.vendorName}
-                    type="button"
-                    className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${
-                      isSelected ? "bg-accent" : ""
-                    }`}
-                    onClick={() => handleSelect(p.vendorName)}
-                  >
-                    <div className="min-w-0 flex-1 text-left">
-                      <span className="font-medium">{p.vendorName}</span>
-                      <p className="truncate text-xs text-muted-foreground">{p.productName}</p>
-                    </div>
-                    <span
-                      className={`shrink-0 text-sm tabular-nums ${
-                        isMin
-                          ? "font-semibold text-green-700"
-                          : p.price !== null
-                            ? "text-foreground"
-                            : "text-muted-foreground"
-                      }`}
-                    >
-                      {p.price !== null ? `${p.price.toLocaleString()}원` : "-"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         )}
       </PopoverContent>
