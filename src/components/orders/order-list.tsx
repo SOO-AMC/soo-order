@@ -77,14 +77,20 @@ export function OrderList({
   const router = useRouter();
 
   const fetchOrders = useCallback(async () => {
-    const [ordersRes, lastVendorRes] = await Promise.all([
+    const [ordersRes, historyRes] = await Promise.all([
       supabase
         .from("orders")
         .select("*, requester:profiles!requester_id(full_name)")
         .eq("type", "order")
         .eq("status", "pending")
         .order("created_at", { ascending: false }),
-      supabase.rpc("get_last_vendor_by_item"),
+      supabase
+        .from("orders")
+        .select("item_name, vendor_name, created_at")
+        .eq("type", "order")
+        .neq("vendor_name", "")
+        .order("created_at", { ascending: false })
+        .limit(1500),
     ]);
 
     if (ordersRes.error) {
@@ -95,20 +101,8 @@ export function OrderList({
 
     setOrders((ordersRes.data as OrderWithRequester[]) ?? []);
 
-    // RPC 결과 사용 — RPC가 없으면(마이그레이션 미적용) 일반 쿼리로 폴백
-    let lastVendorRows = (lastVendorRes.data ?? []) as { item_name: string; vendor_name: string }[];
-    if (lastVendorRes.error) {
-      const fb = await supabase
-        .from("orders")
-        .select("item_name, vendor_name, created_at")
-        .eq("type", "order")
-        .neq("vendor_name", "")
-        .order("created_at", { ascending: false })
-        .limit(1000);
-      lastVendorRows = (fb.data ?? []) as { item_name: string; vendor_name: string }[];
-    }
     const historyMap = new Map<string, string>();
-    for (const row of lastVendorRows) {
+    for (const row of (historyRes.data ?? []) as { item_name: string; vendor_name: string }[]) {
       const key = normalizeItemName(row.item_name);
       if (key && !historyMap.has(key)) historyMap.set(key, row.vendor_name);
     }
