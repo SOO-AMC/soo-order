@@ -5,6 +5,12 @@ import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+interface Suggestion {
+  name: string;
+  isUnified: boolean;
+  notes?: string;
+}
+
 interface ItemNameAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
@@ -14,7 +20,7 @@ export function ItemNameAutocomplete({
   value,
   onChange,
 }: ItemNameAutocompleteProps) {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -23,33 +29,63 @@ export function ItemNameAutocomplete({
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    if (!value.trim()) {
-      setSuggestions([]);
-      setOpen(false);
-      return;
+    const q = value.trim();
+    if (!q) {
+      // effect 본문에서 동기 setState를 피하려 다음 틱으로 미룸
+      timerRef.current = setTimeout(() => {
+        setSuggestions([]);
+        setOpen(false);
+      }, 0);
+      return () => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+      };
     }
 
     timerRef.current = setTimeout(async () => {
-      const [ordersRes, unifiedRes] = await Promise.all([
+      const [unifiedRes, ordersRes] = await Promise.all([
+        supabase
+          .from("unified_products")
+          .select("name, notes")
+          .ilike("name", `%${q}%`)
+          .order("name")
+          .limit(25),
         supabase
           .from("orders")
           .select("item_name")
-          .ilike("item_name", `%${value}%`)
+          .ilike("item_name", `%${q}%`)
           .order("item_name")
-          .limit(20),
-        supabase
-          .from("unified_products")
-          .select("name")
-          .ilike("name", `%${value}%`)
-          .order("name")
-          .limit(20),
+          .limit(25),
       ]);
 
-      const orderNames = (ordersRes.data ?? []).map((d) => d.item_name);
-      const unifiedNames = (unifiedRes.data ?? []).map((d) => d.name);
-      const unique = [...new Set([...unifiedNames, ...orderNames])].slice(0, 20);
-      setSuggestions(unique);
-      setOpen(unique.length > 0);
+      const ql = q.toLowerCase();
+      // 접두사 일치를 부분 일치보다 위로, 그다음 짧은 이름, 그다음 가나다순
+      const byRelevance = (a: Suggestion, b: Suggestion) => {
+        const ra = a.name.toLowerCase().startsWith(ql) ? 0 : 1;
+        const rb = b.name.toLowerCase().startsWith(ql) ? 0 : 1;
+        return ra - rb || a.name.length - b.name.length || a.name.localeCompare(b.name);
+      };
+
+      const unifiedMap = new Map<string, Suggestion>();
+      for (const d of unifiedRes.data ?? []) {
+        if (!unifiedMap.has(d.name)) {
+          unifiedMap.set(d.name, { name: d.name, isUnified: true, notes: (d.notes as string) || undefined });
+        }
+      }
+      const unified = [...unifiedMap.values()].sort(byRelevance);
+
+      const seen = new Set(unified.map((u) => u.name));
+      const orderNames: Suggestion[] = [];
+      for (const d of ordersRes.data ?? []) {
+        if (!d.item_name || seen.has(d.item_name)) continue;
+        seen.add(d.item_name);
+        orderNames.push({ name: d.item_name, isUnified: false });
+      }
+      orderNames.sort(byRelevance);
+
+      // 통합제품(표준 품목) 우선 노출 → 그다음 과거 주문명
+      const merged = [...unified, ...orderNames].slice(0, 20);
+      setSuggestions(merged);
+      setOpen(merged.length > 0);
     }, 300);
 
     return () => {
@@ -81,21 +117,27 @@ export function ItemNameAutocomplete({
         }}
       />
       {open && suggestions.length > 0 && (
-        <ul className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
-          {suggestions.map((name) => (
+        <ul className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+          {suggestions.map((s) => (
             <li
-              key={name}
+              key={(s.isUnified ? "u:" : "o:") + s.name}
               className={cn(
-                "cursor-pointer rounded-sm px-2 py-1.5 text-sm",
+                "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
                 "hover:bg-accent hover:text-accent-foreground"
               )}
               onMouseDown={(e) => {
                 e.preventDefault();
-                onChange(name);
+                onChange(s.name);
                 setOpen(false);
               }}
             >
-              {name}
+              {s.isUnified && (
+                <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary">표준</span>
+              )}
+              <span className="min-w-0 flex-1 truncate">{s.name}</span>
+              {s.isUnified && s.notes && (
+                <span className="shrink-0 text-[11px] text-muted-foreground">{s.notes}</span>
+              )}
             </li>
           ))}
         </ul>
