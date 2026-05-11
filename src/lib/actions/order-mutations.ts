@@ -275,6 +275,35 @@ export async function adminCreateDirectReturn(
   if (error) throw new Error("반품 신청에 실패했습니다.");
 }
 
+/** 관리자 직접 품절 등록 — 새 레코드 INSERT */
+export async function adminCreateDirectOutOfStock(
+  orderId: string,
+  itemName: string,
+  quantity: number,
+  unit: string,
+  reason: string,
+  photoUrls: string[],
+) {
+  const { supabase, userId } = await requireAdmin();
+
+  const { error } = await supabase.from("orders").insert({
+    id: orderId,
+    type: "order",
+    status: "out_of_stock",
+    item_name: itemName.trim(),
+    quantity,
+    unit: unit.trim(),
+    requester_id: userId,
+    photo_urls: photoUrls,
+    vendor_name: "",
+    notes: "",
+    order_notes: reason.trim() || null,
+    inspection_notes: "",
+  });
+
+  if (error) throw new Error("품절 등록에 실패했습니다.");
+}
+
 /** 검수 메모 저장 */
 export async function updateInspectionMemo(orderId: string, memo: string) {
   const { supabase } = await requireUser();
