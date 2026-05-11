@@ -95,14 +95,24 @@ export function OrderList({
 
     setOrders((ordersRes.data as OrderWithRequester[]) ?? []);
 
-    if (!lastVendorRes.error) {
-      const historyMap = new Map<string, string>();
-      for (const row of (lastVendorRes.data ?? []) as { item_name: string; vendor_name: string }[]) {
-        const key = normalizeItemName(row.item_name);
-        if (key && !historyMap.has(key)) historyMap.set(key, row.vendor_name);
-      }
-      setLastVendorByItem(historyMap);
+    // RPC 결과 사용 — RPC가 없으면(마이그레이션 미적용) 일반 쿼리로 폴백
+    let lastVendorRows = (lastVendorRes.data ?? []) as { item_name: string; vendor_name: string }[];
+    if (lastVendorRes.error) {
+      const fb = await supabase
+        .from("orders")
+        .select("item_name, vendor_name, created_at")
+        .eq("type", "order")
+        .neq("vendor_name", "")
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      lastVendorRows = (fb.data ?? []) as { item_name: string; vendor_name: string }[];
     }
+    const historyMap = new Map<string, string>();
+    for (const row of lastVendorRows) {
+      const key = normalizeItemName(row.item_name);
+      if (key && !historyMap.has(key)) historyMap.set(key, row.vendor_name);
+    }
+    setLastVendorByItem(historyMap);
 
     setIsLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps

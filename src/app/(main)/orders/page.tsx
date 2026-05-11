@@ -15,7 +15,7 @@ export default async function OrdersPage() {
   const supabase = await createClient();
   // 가격비교 데이터는 무겁고 팝업 열 때만 필요하므로 페이지 렌더를 막지 않음
   // (vendor-price-popover 모듈이 클라이언트 마운트 시 백그라운드로 프리페치함)
-  const [ordersRes, lastVendorRes] = await Promise.all([
+  const [ordersRes, lastVendorRpc] = await Promise.all([
     supabase
       .from("orders")
       .select("*, requester:profiles!requester_id(full_name)")
@@ -25,9 +25,22 @@ export default async function OrdersPage() {
     supabase.rpc("get_last_vendor_by_item"),
   ]);
 
+  // RPC 결과 — RPC가 없으면(마이그레이션 미적용) 일반 쿼리로 폴백
+  let lastVendorRows = (lastVendorRpc.data as { item_name: string; vendor_name: string }[] | null) ?? [];
+  if (lastVendorRpc.error) {
+    const fb = await supabase
+      .from("orders")
+      .select("item_name, vendor_name, created_at")
+      .eq("type", "order")
+      .neq("vendor_name", "")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    lastVendorRows = (fb.data as { item_name: string; vendor_name: string }[] | null) ?? [];
+  }
+
   const initialOrders = (ordersRes.data as OrderWithRequester[] | null) ?? [];
   const initialLastVendors: Record<string, string> = {};
-  for (const row of (lastVendorRes.data as { item_name: string; vendor_name: string }[] | null) ?? []) {
+  for (const row of lastVendorRows) {
     const key = normalizeItemName(row.item_name);
     if (key && !(key in initialLastVendors)) initialLastVendors[key] = row.vendor_name;
   }
