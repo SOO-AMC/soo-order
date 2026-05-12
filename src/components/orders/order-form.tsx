@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ItemNameAutocomplete } from "./item-name-autocomplete";
 import { PhotoPicker, photoItemsFromPaths } from "./photo-picker";
 import type { PhotoItem } from "./photo-picker";
+import { itemNamesLooselyMatch } from "@/lib/utils/normalize-item-name";
+import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/types/order";
 
 interface OrderFormData {
   item_name: string;
@@ -23,14 +25,26 @@ export interface OrderFormResult extends Omit<OrderFormData, "vendor_name"> {
   photos: PhotoItem[];
 }
 
+/** 진행 중(주문신청/검수대기) 주문 — 중복 주문 경고용 */
+export interface ActiveOrderRef {
+  id: string;
+  item_name: string;
+  quantity: number;
+  unit: string;
+  status: OrderStatus;
+  requester: { full_name: string | null } | null;
+}
+
 interface OrderFormProps {
   defaultValues?: OrderFormData;
   existingPhotoUrls?: string[];
   showVendorField?: boolean;
+  /** 제공되면 입력 중인 품목명과 겹치는 진행 중 주문을 경고로 표시 */
+  activeOrders?: ActiveOrderRef[];
   onSubmit: (data: OrderFormResult) => Promise<void>;
 }
 
-export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, onSubmit }: OrderFormProps) {
+export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, activeOrders, onSubmit }: OrderFormProps) {
   const [itemName, setItemName] = useState(defaultValues?.item_name ?? "");
   const [quantity, setQuantity] = useState(
     defaultValues?.quantity?.toString() ?? ""
@@ -46,6 +60,12 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, o
   const [error, setError] = useState("");
 
   const isEdit = !!defaultValues;
+
+  const duplicateMatches = useMemo(() => {
+    const name = itemName.trim();
+    if (!activeOrders || name.length < 2) return [];
+    return activeOrders.filter((o) => itemNamesLooselyMatch(o.item_name, name));
+  }, [activeOrders, itemName]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,6 +119,20 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, o
           </label>
         </div>
         <ItemNameAutocomplete value={itemName} onChange={setItemName} />
+        {duplicateMatches.length > 0 && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p className="font-medium">⚠️ 이미 진행 중인 주문이 있어요</p>
+            <ul className="mt-1 space-y-0.5">
+              {duplicateMatches.slice(0, 5).map((o) => (
+                <li key={o.id}>
+                  {o.item_name}
+                  {o.quantity > 0 ? ` ${o.quantity}${o.unit ? ` ${o.unit}` : ""}` : ""} — {o.requester?.full_name ?? "?"} ({ORDER_STATUS_LABEL[o.status]})
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-amber-700">이미 충분하면 중복으로 넣지 마세요. 추가가 필요하면 등록 시 &quot;기존 주문에 합치기&quot;를 쓰면 됩니다.</p>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
