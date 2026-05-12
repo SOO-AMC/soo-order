@@ -55,14 +55,14 @@ export function DashboardPage({ initialData }: { initialData?: DashboardData }) 
         <div className="space-y-4 p-4">
           <StatCards summary={data.summary} spend={data.spend} />
 
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
             <div className="lg:col-span-2">
               <OrderTrendChart daily={data.dailyTrend} weekly={data.weeklyTrend} monthly={data.monthlyTrend} />
             </div>
             <StatusDonut data={data.summary} />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
             {data.recentOrders && <RecentOrders data={data.recentOrders} />}
             {data.alerts && <AlertPanel data={data.alerts} />}
           </div>
