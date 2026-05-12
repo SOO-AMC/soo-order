@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "수오더",
     short_name: "수오더",
     description: "의약품 주문 및 검수 관리",
-    start_url: "/orders",
+    start_url: "/",
     display: "standalone",
     background_color: "#ffffff",
     theme_color: "#2563EB",
