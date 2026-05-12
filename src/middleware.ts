@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
 
   if (session && isPublicPath) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/"; // 루트에서 역할에 따라 대시보드/내 주문 현황으로 분기
     return NextResponse.redirect(url);
   }
 
