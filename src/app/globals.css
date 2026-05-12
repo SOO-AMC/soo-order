@@ -50,8 +50,8 @@
 
 :root {
   --radius: 0.75rem;
-  /* 배경: 흰색 카드가 떠 보이도록 연한 블루-그레이 (카드 대비 + 부드러운 톤의 밸런스) */
-  --background: oklch(0.965 0.008 252);
+  /* 배경: 흰색 카드가 떠 보이도록 연한 블루-그레이 */
+  --background: oklch(0.955 0.01 252);
   --foreground: oklch(0.20 0.02 260);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.20 0.02 260);
@@ -59,11 +59,11 @@
   --popover-foreground: oklch(0.20 0.02 260);
   --primary: oklch(0.55 0.25 264);
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.955 0.011 252);
+  --secondary: oklch(0.945 0.013 252);
   --secondary-foreground: oklch(0.30 0.03 260);
-  --muted: oklch(0.96 0.009 252);
+  --muted: oklch(0.95 0.011 252);
   --muted-foreground: oklch(0.55 0.02 260);
-  --accent: oklch(0.955 0.014 252);
+  --accent: oklch(0.945 0.016 252);
   --accent-foreground: oklch(0.30 0.03 260);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.92 0.005 252);
@@ -159,12 +159,12 @@
 
 @layer utilities {
   .shadow-card {
-    box-shadow: 0 1px 2px 0 oklch(0.30 0.04 260 / 0.06),
-                0 6px 18px -6px oklch(0.30 0.04 260 / 0.10);
+    box-shadow: 0 1px 2px 0 oklch(0.30 0.05 260 / 0.07),
+                0 9px 26px -8px oklch(0.30 0.05 260 / 0.18);
   }
   .shadow-card-hover {
-    box-shadow: 0 1px 2px 0 oklch(0.30 0.04 260 / 0.07),
-                0 12px 28px -8px oklch(0.30 0.04 260 / 0.16);
+    box-shadow: 0 1px 2px 0 oklch(0.30 0.05 260 / 0.08),
+                0 14px 34px -10px oklch(0.30 0.05 260 / 0.24);
   }
   .shadow-header {
     box-shadow: 0 1px 3px 0 oklch(0.30 0.04 260 / 0.07);
