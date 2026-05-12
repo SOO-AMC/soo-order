@@ -76,9 +76,8 @@ export function AdminOutOfStockCreateDialog() {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button size="icon">
-          <Plus className="h-5 w-5" />
-          <span className="sr-only">품절 직접 등록</span>
+        <Button>
+          <Plus className="h-4 w-4" /> 품절 등록
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">

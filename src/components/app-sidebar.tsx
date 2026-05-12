@@ -15,12 +15,13 @@ import {
   Users,
   UserCog,
   BarChart3,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useTabCounts } from "@/hooks/use-tab-counts";
 import { useNotifications } from "@/hooks/use-notifications";
-import { useIsAdmin } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { NotificationBell } from "@/components/notification-bell";
@@ -50,7 +51,7 @@ export function AppSidebar() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const supabase = createClient();
-  const isAdmin = useIsAdmin();
+  const { isAdmin, userName } = useAuth();
   const counts = useTabCounts();
   const { unreadCount } = useNotifications();
   const fromDashboard = searchParams.get("from") === "dashboard";
@@ -112,16 +113,19 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 hidden w-60 flex-col bg-sidebar shadow-[1px_0_3px_0_oklch(0.2_0.02_260/0.06)] lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-50 hidden w-60 flex-col bg-sidebar shadow-[1px_0_3px_0_oklch(0.3_0.04_260/0.07)] lg:flex">
       <div className="flex items-center gap-3 px-5 py-5">
         <Image
           src="/icons/icon-192x192.png"
           alt="수오더"
-          width={32}
-          height={32}
-          className="rounded-lg"
+          width={36}
+          height={36}
+          className="rounded-xl"
         />
-        <span className="flex-1 text-lg font-bold text-foreground">수오더</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-bold leading-tight text-foreground">수오더</p>
+          <p className="text-[11px] text-muted-foreground">동물병원 약품 관리</p>
+        </div>
         <NotificationBell />
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
@@ -144,7 +148,20 @@ export function AppSidebar() {
 
         {renderLink(accountTab)}
       </nav>
-      <div className="border-t border-border/40 px-3 py-4">
+      <div className="space-y-1 border-t border-border/60 p-3">
+        <Link
+          href="/account"
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-sidebar-accent"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+            {(userName || "?").slice(0, 1)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-sidebar-foreground">{userName || "사용자"}</p>
+            <p className="text-[11px] text-muted-foreground">{isAdmin ? "관리자" : "일반"}</p>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Link>
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-accent"

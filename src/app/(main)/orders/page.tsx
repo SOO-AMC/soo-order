@@ -42,9 +42,9 @@ export default async function OrdersPage() {
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
         <h1 className="text-lg font-bold">주문</h1>
-        <Button size="icon" asChild>
+        <Button asChild>
           <Link href="/orders/new">
-            <Plus />
+            <Plus className="h-4 w-4" /> 주문 등록
           </Link>
         </Button>
       </header>

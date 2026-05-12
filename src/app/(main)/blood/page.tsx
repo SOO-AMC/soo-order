@@ -30,9 +30,9 @@ export default async function BloodPage() {
           </div>
           <h1 className="text-lg font-bold">혈액 대장</h1>
         </div>
-        <Button size="icon" asChild>
+        <Button asChild>
           <Link href="/blood/new">
-            <Plus />
+            <Plus className="h-4 w-4" /> 혈액 등록
           </Link>
         </Button>
       </header>
