@@ -6,6 +6,9 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { SummaryCards } from "./summary-cards";
+import { AlertPanel } from "./alert-panel";
+import { LeadTimeCard } from "./lead-time-card";
+import { SpendChart } from "./spend-chart";
 import { OrderTrendChart } from "./order-trend-chart";
 import { TopItemsChart } from "./top-items-chart";
 import { VendorStatusChart } from "./vendor-status-chart";
@@ -47,7 +50,12 @@ export function DashboardPage({ initialData }: { initialData?: DashboardData }) 
         </div>
       ) : (
         <div className="space-y-4 p-4">
+          {data.alerts && <AlertPanel data={data.alerts} />}
+
           <SummaryCards data={data.summary} />
+
+          {data.leadTime && <LeadTimeCard data={data.leadTime} />}
+          {data.spend && <SpendChart data={data.spend} />}
 
           <OrderTrendChart
             daily={data.dailyTrend}

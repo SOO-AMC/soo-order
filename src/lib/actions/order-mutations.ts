@@ -17,6 +17,7 @@ export async function dispatchOrder(
       updated_by: userId,
       vendor_name: vendorName,
       order_notes: orderNotes.trim(),
+      dispatched_at: new Date().toISOString(),
     })
     .eq("id", orderId);
 
@@ -38,6 +39,7 @@ export async function bulkDispatchAll(
       vendor_name: vendorName.trim(),
       order_notes: orderNotes.trim(),
       updated_by: userId,
+      dispatched_at: new Date().toISOString(),
     })
     .in("id", orderIds);
 
@@ -50,6 +52,7 @@ export async function bulkDispatchIndividual(
 ) {
   const { supabase, userId } = await requireAdmin();
 
+  const dispatchedAt = new Date().toISOString();
   const results = await Promise.all(
     items.map((item) =>
       supabase
@@ -59,6 +62,7 @@ export async function bulkDispatchIndividual(
           vendor_name: item.vendorName.trim(),
           order_notes: item.orderNotes.trim(),
           updated_by: userId,
+          dispatched_at: dispatchedAt,
         })
         .eq("id", item.id),
     ),

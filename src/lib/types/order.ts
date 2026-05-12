@@ -10,6 +10,7 @@ export interface Order {
   status: OrderStatus;
   requester_id: string;
   updated_by: string | null;
+  dispatched_at: string | null;
   vendor_name: string;
   confirmed_quantity: number | null;
   invoice_received: boolean | null;
