@@ -20,7 +20,10 @@ export default async function OutOfStockPage() {
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
-        <h1 className="text-lg font-bold">품절</h1>
+        <div>
+          <h1 className="text-lg font-bold leading-tight">품절</h1>
+          <p className="hidden text-xs text-muted-foreground sm:block">품절 처리된 품목 목록</p>
+        </div>
         <AdminOutOfStockCreateDialog />
       </header>
       <div className="p-4">

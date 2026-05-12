@@ -268,7 +268,7 @@ function Section({
       ) : (
         <>
           {/* PC 테이블 뷰 */}
-          <div className="hidden lg:block">
+          <div className="hidden lg:block rounded-xl bg-card shadow-card overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>

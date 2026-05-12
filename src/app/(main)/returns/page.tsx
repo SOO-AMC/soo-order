@@ -26,7 +26,10 @@ export default async function ReturnsPage() {
         <div className="lg:hidden">
           <BackButton fallbackHref="/more" />
         </div>
-        <h1 className="text-lg font-bold">반품</h1>
+        <div>
+          <h1 className="text-lg font-bold leading-tight">반품</h1>
+          <p className="hidden text-xs text-muted-foreground sm:block">반품 신청·접수 처리 대기</p>
+        </div>
         <div className="ml-auto">
           <AdminReturnCreateDialog />
         </div>
