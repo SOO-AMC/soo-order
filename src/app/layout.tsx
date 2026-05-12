@@ -38,6 +38,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+      <head>
+        {/* Pretendard 폰트: @import 대신 head의 link로 — 즉시 발견 + 병렬 다운로드 + 연결 미리 열기 */}
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendard-dynamic-subset.css"
+        />
+      </head>
       <body
         className={`${geistSans.variable} antialiased`}
       >
