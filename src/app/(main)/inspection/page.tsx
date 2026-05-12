@@ -18,7 +18,7 @@ export default async function InspectionPage() {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
         <div>
           <h1 className="text-lg font-bold leading-tight">검수</h1>
           <p className="hidden text-xs text-muted-foreground sm:block">입고 후 검수 대기 중인 품목</p>

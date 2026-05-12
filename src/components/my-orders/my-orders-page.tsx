@@ -20,7 +20,7 @@ export function MyOrdersPage({ initialData }: { initialData?: MyOrdersData }) {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 bg-card px-4 py-3 shadow-header">
+      <header className="sticky top-0 z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
         <h1 className="flex-1 text-lg font-bold">내 주문 현황</h1>
         {/* PC는 사이드바에 종 아이콘이 있으므로 모바일/태블릿에서만 노출 */}
         <div className="lg:hidden">

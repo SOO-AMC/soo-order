@@ -22,7 +22,7 @@ export default async function ReturnsPage() {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 bg-card px-4 py-3 shadow-header">
+      <header className="sticky top-0 z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
         <div className="lg:hidden">
           <BackButton fallbackHref="/more" />
         </div>
