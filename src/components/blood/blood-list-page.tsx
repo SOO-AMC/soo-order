@@ -2,8 +2,15 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BloodList } from "@/components/blood/blood-list";
+import type { BloodRecordWithCreator } from "@/lib/types/blood";
 
-export function BloodListPage() {
+export function BloodListPage({
+  initialReceived,
+  initialSent,
+}: {
+  initialReceived?: BloodRecordWithCreator[];
+  initialSent?: BloodRecordWithCreator[];
+}) {
   return (
     <div className="relative p-4">
       <Tabs defaultValue="received" className="space-y-4">
@@ -13,11 +20,11 @@ export function BloodListPage() {
         </TabsList>
 
         <TabsContent value="received" forceMount className="data-[state=inactive]:hidden pb-24">
-          <BloodList type="received" />
+          <BloodList type="received" initialRecords={initialReceived} />
         </TabsContent>
 
         <TabsContent value="sent" forceMount className="data-[state=inactive]:hidden pb-24">
-          <BloodList type="sent" />
+          <BloodList type="sent" initialRecords={initialSent} />
         </TabsContent>
       </Tabs>
 

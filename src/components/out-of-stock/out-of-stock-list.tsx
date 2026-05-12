@@ -31,10 +31,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 
-export function OutOfStockList() {
+export function OutOfStockList({ initialOrders }: { initialOrders?: OrderWithRequester[] }) {
   const { isAdmin } = useAuth();
-  const [orders, setOrders] = useState<OrderWithRequester[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [orders, setOrders] = useState<OrderWithRequester[]>(initialOrders ?? []);
+  const [isLoading, setIsLoading] = useState(!initialOrders);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);

@@ -1,12 +1,22 @@
 import type { Metadata } from "next";
 import { OutOfStockList } from "@/components/out-of-stock/out-of-stock-list";
 import { AdminOutOfStockCreateDialog } from "@/components/out-of-stock/admin-out-of-stock-create-dialog";
+import { createClient } from "@/lib/supabase/server";
+import type { OrderWithRequester } from "@/lib/types/order";
 
 export const metadata: Metadata = {
   title: "품절",
 };
 
-export default function OutOfStockPage() {
+export default async function OutOfStockPage() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("orders")
+    .select("*, requester:profiles!requester_id(full_name)")
+    .eq("status", "out_of_stock")
+    .order("created_at", { ascending: false });
+  const initialOrders = (data as OrderWithRequester[] | null) ?? [];
+
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
@@ -14,7 +24,7 @@ export default function OutOfStockPage() {
         <AdminOutOfStockCreateDialog />
       </header>
       <div className="p-4">
-        <OutOfStockList />
+        <OutOfStockList initialOrders={initialOrders} />
       </div>
     </div>
   );

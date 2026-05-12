@@ -4,12 +4,23 @@ import { Plus } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import { Button } from "@/components/ui/button";
 import { BloodListPage } from "@/components/blood/blood-list-page";
+import { createClient } from "@/lib/supabase/server";
+import type { BloodRecordWithCreator } from "@/lib/types/blood";
 
 export const metadata: Metadata = {
   title: "혈액 대장",
 };
 
-export default function BloodPage() {
+export default async function BloodPage() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("blood_records")
+    .select("*, creator:profiles!created_by(full_name), confirmer:profiles!confirmed_by(full_name)")
+    .order("record_date", { ascending: false });
+  const all = (data as BloodRecordWithCreator[] | null) ?? [];
+  const initialReceived = all.filter((r) => r.type === "received");
+  const initialSent = all.filter((r) => r.type === "sent");
+
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
       <header className="sticky top-0 z-40 flex items-center justify-between bg-card px-4 py-3 shadow-header">
@@ -25,7 +36,7 @@ export default function BloodPage() {
           </Link>
         </Button>
       </header>
-      <BloodListPage />
+      <BloodListPage initialReceived={initialReceived} initialSent={initialSent} />
     </div>
   );
 }

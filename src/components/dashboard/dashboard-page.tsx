@@ -13,8 +13,8 @@ import { ReturnAnalysisChart } from "./return-analysis-chart";
 import { fetchDashboardData } from "@/lib/actions/dashboard-action";
 import type { DashboardData } from "@/lib/types/dashboard";
 
-export function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
+export function DashboardPage({ initialData }: { initialData?: DashboardData }) {
+  const [data, setData] = useState<DashboardData | null>(initialData ?? null);
   const [error, setError] = useState("");
 
   useEffect(() => {

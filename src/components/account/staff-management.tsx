@@ -40,9 +40,9 @@ const ROLE_LABEL: Record<string, string> = {
   user: "일반",
 };
 
-export function StaffManagement() {
-  const [members, setMembers] = useState<MemberData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export function StaffManagement({ initialMembers }: { initialMembers?: MemberData[] }) {
+  const [members, setMembers] = useState<MemberData[]>(initialMembers ?? []);
+  const [isLoading, setIsLoading] = useState(!initialMembers);
 
   useEffect(() => {
     fetchMembers()

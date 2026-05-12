@@ -8,9 +8,9 @@ import { StatusSummary } from "./status-summary";
 import { ActiveOrderList } from "./active-order-list";
 import { RecentCompleted } from "./recent-completed";
 
-export function MyOrdersPage() {
-  const [data, setData] = useState<MyOrdersData | null>(null);
-  const [loading, setLoading] = useState(true);
+export function MyOrdersPage({ initialData }: { initialData?: MyOrdersData }) {
+  const [data, setData] = useState<MyOrdersData | null>(initialData ?? null);
+  const [loading, setLoading] = useState(!initialData);
 
   useEffect(() => {
     fetchMyOrdersStatus()

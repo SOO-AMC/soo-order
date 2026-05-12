@@ -25,9 +25,9 @@ import {
   bulkCompleteReturn,
 } from "@/lib/actions/order-mutations";
 
-export function ReturnList() {
-  const [orders, setOrders] = useState<OrderWithRequester[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export function ReturnList({ initialOrders }: { initialOrders?: OrderWithRequester[] }) {
+  const [orders, setOrders] = useState<OrderWithRequester[]>(initialOrders ?? []);
+  const [isLoading, setIsLoading] = useState(!initialOrders);
   const [error, setError] = useState("");
   const [selectedRequestedIds, setSelectedRequestedIds] = useState<Set<string>>(new Set());
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());

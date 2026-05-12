@@ -21,11 +21,12 @@ import { ANIMAL_TYPE_LABEL, SETTLEMENT_TYPE_LABEL } from "@/lib/types/blood";
 
 interface BloodListProps {
   type: BloodType;
+  initialRecords?: BloodRecordWithCreator[];
 }
 
-export function BloodList({ type }: BloodListProps) {
-  const [records, setRecords] = useState<BloodRecordWithCreator[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export function BloodList({ type, initialRecords }: BloodListProps) {
+  const [records, setRecords] = useState<BloodRecordWithCreator[]>(initialRecords ?? []);
+  const [isLoading, setIsLoading] = useState(!initialRecords);
   const [error, setError] = useState("");
   const supabase = createClient();
   const router = useRouter();
