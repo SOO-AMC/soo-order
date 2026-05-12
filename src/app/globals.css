@@ -51,7 +51,7 @@
 :root {
   --radius: 0.75rem;
   /* 배경: 흰색 카드가 떠 보이도록 연한 블루-그레이 */
-  --background: oklch(0.955 0.01 252);
+  --background: oklch(0.945 0.012 252);
   --foreground: oklch(0.20 0.02 260);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.20 0.02 260);
@@ -59,15 +59,15 @@
   --popover-foreground: oklch(0.20 0.02 260);
   --primary: oklch(0.55 0.25 264);
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.945 0.013 252);
+  --secondary: oklch(0.935 0.015 252);
   --secondary-foreground: oklch(0.30 0.03 260);
-  --muted: oklch(0.95 0.011 252);
-  --muted-foreground: oklch(0.55 0.02 260);
-  --accent: oklch(0.945 0.016 252);
+  --muted: oklch(0.94 0.013 252);
+  --muted-foreground: oklch(0.52 0.02 260);
+  --accent: oklch(0.935 0.018 252);
   --accent-foreground: oklch(0.30 0.03 260);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.005 252);
-  --input: oklch(0.91 0.007 252);
+  --border: oklch(0.905 0.007 252);
+  --input: oklch(0.895 0.008 252);
   --ring: oklch(0.55 0.25 264);
   --chart-1: oklch(0.55 0.25 264);
   --chart-2: oklch(0.50 0.15 250);
