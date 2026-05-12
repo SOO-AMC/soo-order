@@ -54,7 +54,13 @@ export function OrderList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
     try {
       const saved = sessionStorage.getItem("order-selected-ids");
-      return saved ? new Set(JSON.parse(saved) as string[]) : new Set();
+      const ids = saved ? new Set(JSON.parse(saved) as string[]) : new Set<string>();
+      // 더 이상 목록에 없는(이미 발주됐거나 삭제된) 항목은 제외
+      if (initialOrders) {
+        const valid = new Set(initialOrders.map((o) => o.id));
+        for (const id of [...ids]) if (!valid.has(id)) ids.delete(id);
+      }
+      return ids;
     } catch {
       return new Set();
     }
@@ -99,7 +105,24 @@ export function OrderList({
       return;
     }
 
-    setOrders((ordersRes.data as OrderWithRequester[]) ?? []);
+    const fetched = (ordersRes.data as OrderWithRequester[]) ?? [];
+    setOrders(fetched);
+
+    // 목록에 없는 선택 항목은 제거 (다른 사람이 발주했거나 삭제된 경우)
+    const validIds = new Set(fetched.map((o) => o.id));
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => validIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    setVendorSelections((prev) => {
+      let changed = false;
+      const next = new Map<string, string>();
+      for (const [id, v] of prev) {
+        if (validIds.has(id)) next.set(id, v);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
 
     const historyMap = new Map<string, string>();
     for (const row of (historyRes.data ?? []) as { item_name: string; vendor_name: string }[]) {
