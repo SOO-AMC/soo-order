@@ -430,7 +430,11 @@ export function OrderList({
                   </TableCell>
                   <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
                   <TableCell>{formatDate(order.created_at)}</TableCell>
-                  <TableCell className="text-muted-foreground">{order.notes || "-"}</TableCell>
+                  <TableCell>
+                    <div className="max-w-[14rem] truncate text-muted-foreground" title={order.notes || undefined}>
+                      {order.notes || "-"}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     {order.photo_urls?.length > 0 && (
                       <span className="flex items-center gap-1 text-muted-foreground">
@@ -495,7 +499,7 @@ export function OrderList({
                       )}
                     </div>
                     {order.notes && (
-                      <div className="mt-1 truncate text-sm text-muted-foreground">
+                      <div className="mt-1 truncate text-sm text-muted-foreground" title={order.notes}>
                         비고: {order.notes}
                       </div>
                     )}
