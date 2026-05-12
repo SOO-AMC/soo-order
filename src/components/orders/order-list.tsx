@@ -431,7 +431,7 @@ export function OrderList({
                   <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
                   <TableCell>{formatDate(order.created_at)}</TableCell>
                   <TableCell>
-                    <div className="max-w-[14rem] truncate text-muted-foreground" title={order.notes || undefined}>
+                    <div className="max-w-[24rem] truncate text-muted-foreground" title={order.notes || undefined}>
                       {order.notes || "-"}
                     </div>
                   </TableCell>
