@@ -108,6 +108,16 @@ export interface SpendData {
   lastMonthAmount: number;
 }
 
+export interface RecentOrderRow {
+  id: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  status: string;
+  requester: string;
+  createdAt: string;
+}
+
 export interface DashboardData {
   summary: SummaryData;
   dailyTrend: TrendDataPoint[];
@@ -120,4 +130,5 @@ export interface DashboardData {
   alerts?: AlertsData;
   leadTime?: LeadTimeData;
   spend?: SpendData;
+  recentOrders?: RecentOrderRow[];
 }

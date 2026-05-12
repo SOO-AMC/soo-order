@@ -13,7 +13,17 @@ import {
   type VendorProductMini,
   type AliasMini,
 } from "@/lib/utils/dashboard-extras";
-import type { DashboardData } from "@/lib/types/dashboard";
+import type { DashboardData, RecentOrderRow } from "@/lib/types/dashboard";
+
+interface RecentOrderQueryRow {
+  id: string;
+  item_name: string;
+  quantity: number;
+  unit: string | null;
+  status: string;
+  created_at: string;
+  requester: { full_name: string | null } | null;
+}
 
 const SPEND_MONTHS = 6;
 
@@ -32,7 +42,7 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     const leadTimeSince = new Date(now.getTime() - 130 * 86400000).toISOString();
     const spendSince = new Date(now.getFullYear(), now.getMonth() - (SPEND_MONTHS - 1), 1).toISOString();
 
-    const [activeRes, inspectedRes, spendRes, vendorsRes, vpRes, aliasRes] = await Promise.all([
+    const [activeRes, inspectedRes, spendRes, vendorsRes, vpRes, aliasRes, recentRes] = await Promise.all([
       supabase
         .from("orders")
         .select(
@@ -53,6 +63,12 @@ export async function fetchDashboardData(): Promise<DashboardData> {
       supabase.from("vendors").select("id, name"),
       supabase.from("vendor_products").select("vendor_id, product_name, unit_price, unified_product_id"),
       supabase.from("item_name_aliases").select("item_name, unified_product_id"),
+      supabase
+        .from("orders")
+        .select("id, item_name, quantity, unit, status, created_at, requester:profiles!requester_id(full_name)")
+        .eq("type", "order")
+        .order("created_at", { ascending: false })
+        .limit(8),
     ]);
 
     const alerts = computeAlerts((activeRes.data ?? []) as unknown as AlertOrderRow[]);
@@ -64,8 +80,17 @@ export async function fetchDashboardData(): Promise<DashboardData> {
       (aliasRes.data ?? []) as unknown as AliasMini[],
       SPEND_MONTHS,
     );
+    const recentOrders: RecentOrderRow[] = ((recentRes.data ?? []) as unknown as RecentOrderQueryRow[]).map((o) => ({
+      id: o.id,
+      itemName: o.item_name,
+      quantity: o.quantity,
+      unit: o.unit ?? "",
+      status: o.status,
+      requester: o.requester?.full_name ?? "",
+      createdAt: o.created_at,
+    }));
 
-    return { ...core, alerts, leadTime, spend };
+    return { ...core, alerts, leadTime, spend, recentOrders };
   } catch {
     return core;
   }
