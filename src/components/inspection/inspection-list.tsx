@@ -243,7 +243,7 @@ export function InspectionList({ initialOrders }: { initialOrders?: OrderWithReq
       </div>
 
       {/* PC 테이블 뷰 */}
-      <div className="hidden lg:block rounded-xl bg-card shadow-card overflow-hidden">
+      <div className="hidden lg:block">
         <Table>
           <TableHeader>
             <TableRow>
