@@ -46,3 +46,7 @@ public/swe-worker*
 
 # claude code (personal files)
 .claude/settings.local.json
+
+# local dev-only assets (invoice sample scans, OCR test scripts)
+/scans
+/scripts
