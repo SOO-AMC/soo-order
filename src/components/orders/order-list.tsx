@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Camera, ChevronRight, CircleAlert, ClipboardCopy, Check, ShoppingCart } from "lucide-react";
+import { Camera, ChevronRight, CircleAlert, ClipboardCopy, Check, ShoppingCart, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,6 +32,9 @@ import { OrderStatusBadge, StatusLegend } from "./order-status-badge";
 import { VendorPricePopover, VENDOR_COLORS, initPriceCache, type VendorColor, type PriceData } from "./vendor-price-popover";
 import { formatDate } from "@/lib/utils/format";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
+import { applyRealtimeChange, pruneSet, pruneMap } from "@/lib/utils/realtime-list";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { copyText } from "@/lib/utils/clipboard";
 import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
@@ -72,64 +75,51 @@ export function OrderList({
   const [bulkOrderNotes, setBulkOrderNotes] = useState("");
   const [individualVendors, setIndividualVendors] = useState<Map<string, string>>(new Map());
   const [individualNotes, setIndividualNotes] = useState<Map<string, string>>(new Map());
-  const [vendorSelections, setVendorSelections] = useState<Map<string, string>>(new Map());
+  const [vendorSelections, setVendorSelections] = useState<Map<string, string>>(() => {
+    try {
+      const saved = sessionStorage.getItem("order-vendor-selections");
+      const entries = saved ? (JSON.parse(saved) as [string, string][]) : [];
+      const m = new Map<string, string>(entries);
+      // 더 이상 pending에 없는(이미 발주됐거나 삭제된) 항목 정리
+      if (initialOrders) {
+        const valid = new Set(initialOrders.map((o) => o.id));
+        for (const id of [...m.keys()]) if (!valid.has(id)) m.delete(id);
+      }
+      return m;
+    } catch {
+      return new Map();
+    }
+  });
   const [copiedVendor, setCopiedVendor] = useState("");
   const [bulkSource, setBulkSource] = useState<"checkbox" | "vendor">("checkbox");
-  // 품목명(정규화) → 가장 최근에 발주했던 업체명
-  const [lastVendorByItem, setLastVendorByItem] = useState<Map<string, string>>(
+  // 품목명(정규화) → 가장 최근에 발주했던 업체명 (서버 초기값. 세션 중 갱신 안 함 — 힌트 용도)
+  const [lastVendorByItem] = useState<Map<string, string>>(
     () => new Map(Object.entries(initialLastVendors ?? {}))
   );
   const supabase = createClient();
   const router = useRouter();
 
   const fetchOrders = useCallback(async () => {
-    const [ordersRes, historyRes] = await Promise.all([
-      supabase
-        .from("orders")
-        .select("*, requester:profiles!requester_id(full_name)")
-        .eq("type", "order")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("orders")
-        .select("item_name, vendor_name, created_at")
-        .eq("type", "order")
-        .neq("vendor_name", "")
-        .order("created_at", { ascending: false })
-        .limit(1500),
-    ]);
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*, requester:profiles!requester_id(full_name)")
+      .eq("type", "order")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
 
-    if (ordersRes.error) {
-      setError(ordersRes.error.message);
+    if (error) {
+      setError(error.message);
       setIsLoading(false);
       return;
     }
 
-    const fetched = (ordersRes.data as OrderWithRequester[]) ?? [];
+    const fetched = (data as OrderWithRequester[]) ?? [];
     setOrders(fetched);
 
     // 목록에 없는 선택 항목은 제거 (다른 사람이 발주했거나 삭제된 경우)
     const validIds = new Set(fetched.map((o) => o.id));
-    setSelectedIds((prev) => {
-      const next = new Set([...prev].filter((id) => validIds.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-    setVendorSelections((prev) => {
-      let changed = false;
-      const next = new Map<string, string>();
-      for (const [id, v] of prev) {
-        if (validIds.has(id)) next.set(id, v);
-        else changed = true;
-      }
-      return changed ? next : prev;
-    });
-
-    const historyMap = new Map<string, string>();
-    for (const row of (historyRes.data ?? []) as { item_name: string; vendor_name: string }[]) {
-      const key = normalizeItemName(row.item_name);
-      if (key && !historyMap.has(key)) historyMap.set(key, row.vendor_name);
-    }
-    setLastVendorByItem(historyMap);
+    setSelectedIds((prev) => pruneSet(prev, validIds));
+    setVendorSelections((prev) => pruneMap(prev, validIds));
 
     setIsLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,29 +132,59 @@ export function OrderList({
     } catch {}
   }, [selectedIds]);
 
-  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // vendorSelections도 동일하게 sessionStorage 동기화 (상세→뒤로가기·탭이동에도 유지)
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("order-vendor-selections", JSON.stringify([...vendorSelections]));
+    } catch {}
+  }, [vendorSelections]);
+
+  const ordersRef = useRef(orders);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+  const handleRealtime = useCallback(
+    async (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+      const next = await applyRealtimeChange<OrderWithRequester>(ordersRef.current, payload, {
+        matchesFilter: (r) => r.type === "order" && r.status === "pending",
+        fetchOne: async (id) => {
+          const { data } = await supabase
+            .from("orders")
+            .select("*, requester:profiles!requester_id(full_name)")
+            .eq("id", id)
+            .maybeSingle();
+          return (data as OrderWithRequester) ?? null;
+        },
+      });
+      if (next === ordersRef.current) return;
+      ordersRef.current = next;
+      setOrders(next);
+      const validIds = new Set(next.map((o) => o.id));
+      setSelectedIds((prev) => pruneSet(prev, validIds));
+      setVendorSelections((prev) => pruneMap(prev, validIds));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   useEffect(() => {
     fetchOrders();
 
+    let firstSub = true;
     const channel = supabase
       .channel("order-list")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-        () => {
-          if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
-          realtimeTimer.current = setTimeout(fetchOrders, 200);
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, handleRealtime)
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          if (firstSub) { firstSub = false; return; }
+          fetchOrders(); // 재연결 시 전체 동기화 (드리프트 보정)
         }
-      )
-      .subscribe();
+      });
 
     return () => {
-      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchOrders]);
+  }, [fetchOrders, handleRealtime]);
 
   const sortedOrders = useMemo(
     () => [...orders].sort((a, b) => {
@@ -272,7 +292,8 @@ export function OrderList({
 
   const handleCopyVendorMessage = async (vendorName: string, vendorOrders: OrderWithRequester[]) => {
     const message = generateVendorMessage(vendorOrders);
-    await navigator.clipboard.writeText(message);
+    const ok = await copyText(message);
+    if (!ok) return;
     setCopiedVendor(vendorName);
     setTimeout(() => setCopiedVendor(""), 2000);
   };
@@ -348,7 +369,7 @@ export function OrderList({
 
   return (
     <div className={cn("space-y-2", showActionBar && "pb-24 lg:pb-20")}>
-      <div className="flex items-center justify-between px-1 py-2">
+      <div className="flex items-center justify-between gap-2 px-1 py-2">
         {isAdmin && pendingOrders.length > 0 ? (
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
             <Checkbox
@@ -361,7 +382,18 @@ export function OrderList({
         ) : (
           <div />
         )}
-        <StatusLegend />
+        <div className="flex items-center gap-2">
+          {isAdmin && vendorSelectedIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setVendorSelections(new Map())}
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              업체 선택 해제 ({vendorSelectedIds.length}건)
+            </button>
+          )}
+          <StatusLegend />
+        </div>
       </div>
 
       {/* PC 테이블 뷰 */}
@@ -488,6 +520,12 @@ export function OrderList({
                       </span>
                       <span>·</span>
                       <span>{formatDate(order.created_at)}</span>
+                      {order.requester?.full_name && (
+                        <>
+                          <span>·</span>
+                          <span>요청자: {order.requester.full_name}</span>
+                        </>
+                      )}
                       {order.photo_urls?.length > 0 && (
                         <>
                           <span>·</span>
@@ -525,13 +563,25 @@ export function OrderList({
       {showActionBar && (
         <div className="fixed bottom-20 left-0 right-0 z-50 flex items-center justify-center gap-2 px-4 lg:left-60 lg:bottom-4">
           {vendorSelectedIds.length > 0 && (
-            <Button
-              className="flex-1 max-w-md shadow-lg"
-              onClick={() => openBulkDialog("vendor")}
-            >
-              <ShoppingCart className="h-4 w-4" />
-              {`업체 선택 주문 (${vendorSelectedIds.length}건)`}
-            </Button>
+            <div className="flex flex-1 max-w-md items-center gap-1">
+              <Button
+                className="flex-1 shadow-lg"
+                onClick={() => openBulkDialog("vendor")}
+              >
+                <ShoppingCart className="h-4 w-4" />
+                {`업체 선택 주문 (${vendorSelectedIds.length}건)`}
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 bg-card shadow-lg"
+                onClick={() => setVendorSelections(new Map())}
+                aria-label="업체 선택 해제"
+                title="업체 선택 해제"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           )}
           {selectedIds.size > 0 && (
             <Button

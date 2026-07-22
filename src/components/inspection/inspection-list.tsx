@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { Fragment, memo, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -22,11 +22,211 @@ import { OrderStatusBadge, StatusLegend } from "@/components/orders/order-status
 import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { applyRealtimeChange, pruneSet } from "@/lib/utils/realtime-list";
 import { bulkInspectOrders, bulkMarkOutOfStock, updateInspectionMemo } from "@/lib/actions/order-mutations";
 
 interface InspectionData {
   inspection_notes: string;
 }
+
+interface DesktopRowProps {
+  order: OrderWithRequester;
+  isSelected: boolean;
+  memoValue: string;
+  inspectionNotes: string;
+  colCount: number;
+  onToggle: (id: string) => void;
+  onMemoChange: (id: string, value: string) => void;
+  onNotesChange: (id: string, value: string) => void;
+  onRowClick: (id: string) => void;
+}
+
+const DesktopRow = memo(function DesktopRow({
+  order,
+  isSelected,
+  memoValue,
+  inspectionNotes,
+  colCount,
+  onToggle,
+  onMemoChange,
+  onNotesChange,
+  onRowClick,
+}: DesktopRowProps) {
+  return (
+    <Fragment>
+      <TableRow
+        className="cursor-pointer"
+        onClick={() => onRowClick(order.id)}
+      >
+        <TableCell onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            className="h-5 w-5"
+            checked={isSelected}
+            onCheckedChange={() => onToggle(order.id)}
+          />
+        </TableCell>
+        <TableCell>
+          <OrderStatusBadge status={order.status} />
+        </TableCell>
+        <TableCell className="font-medium">
+          <span className="flex items-center gap-1.5">
+            {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
+            {order.item_name}
+          </span>
+        </TableCell>
+        <TableCell onClick={(e) => e.stopPropagation()}>
+          <Input
+            type="text"
+            placeholder="메모"
+            value={memoValue}
+            onChange={(e) => onMemoChange(order.id, e.target.value)}
+            className="h-7 w-44 text-sm"
+          />
+        </TableCell>
+        <TableCell>
+          {order.quantity > 0 ? (
+            <span>
+              {order.quantity}{order.unit ? ` ${order.unit}` : ""}
+              {(order.received_quantity ?? 0) > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground">
+                  ({order.received_quantity} 입고/{order.quantity - (order.received_quantity ?? 0)} 남음)
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">(사진 참고)</span>
+          )}
+        </TableCell>
+        <TableCell>{order.vendor_name || <span className="text-muted-foreground">-</span>}</TableCell>
+        <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
+        <TableCell>{formatDate(order.created_at)}</TableCell>
+        <TableCell>
+          {order.photo_urls?.length > 0 && (
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <Camera className="h-3.5 w-3.5" />
+              {order.photo_urls.length}
+            </span>
+          )}
+        </TableCell>
+      </TableRow>
+      {isSelected && (
+        <TableRow className="bg-muted/50 hover:bg-muted/50">
+          <TableCell colSpan={colCount}>
+            <div className="flex items-end gap-3 py-1 pl-6">
+              <div>
+                <label className="block text-xs text-muted-foreground">비고</label>
+                <Input
+                  type="text"
+                  placeholder="비고"
+                  value={inspectionNotes}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => onNotesChange(order.id, e.target.value)}
+                  className="mt-1 h-8 w-40"
+                />
+              </div>
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </Fragment>
+  );
+});
+
+interface MobileCardProps {
+  order: OrderWithRequester;
+  isSelected: boolean;
+  inspectionNotes: string;
+  onToggle: (id: string) => void;
+  onNotesChange: (id: string, value: string) => void;
+}
+
+const MobileCard = memo(function MobileCard({
+  order,
+  isSelected,
+  inspectionNotes,
+  onToggle,
+  onNotesChange,
+}: MobileCardProps) {
+  return (
+    <div className="rounded-xl bg-card p-4 shadow-card transition-colors">
+      <div className="flex items-center gap-3">
+        <Checkbox
+          className="h-5 w-5"
+          checked={isSelected}
+          onCheckedChange={() => onToggle(order.id)}
+        />
+        <Link
+          href={`/inspection/${order.id}`}
+          className="flex flex-1 items-center gap-3 min-w-0 active:opacity-70"
+        >
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <OrderStatusBadge status={order.status} />
+              {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
+              <span className="truncate font-medium">
+                {order.item_name}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+              <span>
+                {order.quantity > 0 ? (
+                  <>
+                    수량: {order.quantity}{order.unit ? ` ${order.unit}` : ""}
+                    {(order.received_quantity ?? 0) > 0 && (
+                      <span className="ml-1 text-xs">
+                        ({order.received_quantity} 입고/{order.quantity - (order.received_quantity ?? 0)} 남음)
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  "(사진 참고)"
+                )}
+              </span>
+              {order.vendor_name && (
+                <>
+                  <span>·</span>
+                  <span>{order.vendor_name}</span>
+                </>
+              )}
+              <span>·</span>
+              <span>{formatDate(order.created_at)}</span>
+              {order.requester?.full_name && (
+                <>
+                  <span>·</span>
+                  <span>요청자: {order.requester.full_name}</span>
+                </>
+              )}
+              {order.photo_urls?.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="flex items-center gap-0.5">
+                    <Camera className="h-3 w-3" />
+                    {order.photo_urls.length}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Link>
+      </div>
+
+      {isSelected && (
+        <div className="mt-3 pl-8">
+          <label className="text-xs text-muted-foreground">비고</label>
+          <Input
+            type="text"
+            placeholder="비고 (선택)"
+            value={inspectionNotes}
+            onChange={(e) => onNotesChange(order.id, e.target.value)}
+            className="mt-0.5 h-8"
+          />
+        </div>
+      )}
+    </div>
+  );
+});
 
 export function InspectionList({ initialOrders }: { initialOrders?: OrderWithRequester[] }) {
   const { isAdmin, userId: currentUserId } = useAuth();
@@ -77,29 +277,61 @@ export function InspectionList({ initialOrders }: { initialOrders?: OrderWithReq
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ordersRef = useRef(orders);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+  const handleRealtime = useCallback(
+    async (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+      const next = await applyRealtimeChange<OrderWithRequester>(ordersRef.current, payload, {
+        matchesFilter: (r) => r.status === "ordered",
+        fetchOne: async (id) => {
+          const { data } = await supabase
+            .from("orders")
+            .select("*, requester:profiles!requester_id(full_name)")
+            .eq("id", id)
+            .maybeSingle();
+          return (data as OrderWithRequester) ?? null;
+        },
+      });
+      if (next === ordersRef.current) return;
+      ordersRef.current = next;
+      setOrders(next);
+      const validIds = new Set(next.map((o) => o.id));
+      setSelectedIds((prev) => pruneSet(prev, validIds));
+      setMemos((prev) => {
+        let changed = false;
+        const nm = { ...prev };
+        for (const o of next) {
+          if (dirtyMemos.current.has(o.id)) continue;
+          const v = o.inspection_memo ?? "";
+          if (nm[o.id] !== v) { nm[o.id] = v; changed = true; }
+        }
+        return changed ? nm : prev;
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   useEffect(() => {
     fetchOrders();
 
+    let firstSub = true;
     const channel = supabase
       .channel("inspection-list")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-        () => {
-          if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
-          realtimeTimer.current = setTimeout(fetchOrders, 200);
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, handleRealtime)
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          if (firstSub) { firstSub = false; return; }
+          fetchOrders(); // 재연결 시 전체 동기화 (드리프트 보정)
         }
-      )
-      .subscribe();
+      });
 
     return () => {
-      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchOrders]);
+  }, [fetchOrders, handleRealtime]);
 
   const sortedOrders = useMemo(
     () => [...orders].sort((a, b) => {
@@ -117,7 +349,7 @@ export function InspectionList({ initialOrders }: { initialOrders?: OrderWithReq
   const allSelected =
     sortedOrders.length > 0 && sortedOrders.every((o) => selectedIds.has(o.id));
 
-  const handleMemoChange = (orderId: string, value: string) => {
+  const handleMemoChange = useCallback((orderId: string, value: string) => {
     setMemos((prev) => ({ ...prev, [orderId]: value }));
     dirtyMemos.current.add(orderId);
     if (memoTimers.current[orderId]) clearTimeout(memoTimers.current[orderId]);
@@ -125,20 +357,16 @@ export function InspectionList({ initialOrders }: { initialOrders?: OrderWithReq
       await updateInspectionMemo(orderId, value);
       dirtyMemos.current.delete(orderId);
     }, 500);
-  };
+  }, []);
 
-  const getInspectionData = (order: OrderWithRequester): InspectionData => {
-    return inspectionData[order.id] ?? { inspection_notes: "" };
-  };
-
-  const updateInspectionData = (id: string, value: string) => {
+  const updateInspectionData = useCallback((id: string, value: string) => {
     setInspectionData((prev) => {
       const existing = prev[id] ?? { inspection_notes: "" };
       return { ...prev, [id]: { ...existing, inspection_notes: value } };
     });
-  };
+  }, []);
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -148,7 +376,11 @@ export function InspectionList({ initialOrders }: { initialOrders?: OrderWithReq
       }
       return next;
     });
-  };
+  }, []);
+
+  const handleRowClick = useCallback((id: string) => {
+    router.push(`/inspection/${id}`);
+  }, [router]);
 
   const toggleSelectAll = () => {
     if (allSelected) {
@@ -165,12 +397,12 @@ export function InspectionList({ initialOrders }: { initialOrders?: OrderWithReq
     try {
       const items = [...selectedIds].map((id) => {
         const order = orders.find((o) => o.id === id)!;
-        const data = getInspectionData(order);
+        const notes = inspectionData[id]?.inspection_notes ?? "";
         return {
           id,
           confirmedQuantity: order.quantity,
           invoiceReceived: true,
-          inspectionNotes: data.inspection_notes,
+          inspectionNotes: notes,
         };
       });
 
@@ -267,158 +499,36 @@ export function InspectionList({ initialOrders }: { initialOrders?: OrderWithReq
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedOrders.map((order) => {
-              const isSelected = selectedIds.has(order.id);
-              const data = getInspectionData(order);
-              const colCount = 9;
-
-              return (
-                <Fragment key={order.id}>
-                  <TableRow
-                    className="cursor-pointer"
-                    onClick={() => router.push(`/inspection/${order.id}`)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        className="h-5 w-5"
-                        checked={isSelected}
-                        onCheckedChange={() => toggleSelect(order.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <OrderStatusBadge status={order.status} />
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <span className="flex items-center gap-1.5">
-                        {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
-                        {order.item_name}
-                      </span>
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Input
-                        type="text"
-                        placeholder="메모"
-                        value={memos[order.id] ?? ""}
-                        onChange={(e) => handleMemoChange(order.id, e.target.value)}
-                        className="h-7 w-44 text-sm"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {order.quantity > 0
-                        ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
-                        : <span className="text-muted-foreground">(사진 참고)</span>}
-                    </TableCell>
-                    <TableCell>{order.vendor_name || <span className="text-muted-foreground">-</span>}</TableCell>
-                    <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
-                    <TableCell>{formatDate(order.created_at)}</TableCell>
-                    <TableCell>
-                      {order.photo_urls?.length > 0 && (
-                        <span className="flex items-center gap-1 text-muted-foreground">
-                          <Camera className="h-3.5 w-3.5" />
-                          {order.photo_urls.length}
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                  {isSelected && (
-                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableCell colSpan={colCount}>
-                        <div className="flex items-end gap-3 py-1 pl-6">
-                          <div>
-                            <label className="block text-xs text-muted-foreground">비고</label>
-                            <Input
-                              type="text"
-                              placeholder="비고"
-                              value={data.inspection_notes}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => updateInspectionData(order.id, e.target.value)}
-                              className="mt-1 h-8 w-40"
-                            />
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </Fragment>
-              );
-            })}
+            {sortedOrders.map((order) => (
+              <DesktopRow
+                key={order.id}
+                order={order}
+                isSelected={selectedIds.has(order.id)}
+                memoValue={memos[order.id] ?? ""}
+                inspectionNotes={inspectionData[order.id]?.inspection_notes ?? ""}
+                colCount={9}
+                onToggle={toggleSelect}
+                onMemoChange={handleMemoChange}
+                onNotesChange={updateInspectionData}
+                onRowClick={handleRowClick}
+              />
+            ))}
           </TableBody>
         </Table>
       </div>
 
       {/* 모바일/태블릿 카드 뷰 */}
       <div className="lg:hidden space-y-2">
-        {sortedOrders.map((order) => {
-          const isSelected = selectedIds.has(order.id);
-          const data = getInspectionData(order);
-
-          return (
-            <div
-              key={order.id}
-              className="rounded-xl bg-card p-4 shadow-card transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <Checkbox
-                  className="h-5 w-5"
-                  checked={isSelected}
-                  onCheckedChange={() => toggleSelect(order.id)}
-                />
-                <Link
-                  href={`/inspection/${order.id}`}
-                  className="flex flex-1 items-center gap-3 min-w-0 active:opacity-70"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <OrderStatusBadge status={order.status} />
-                      {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
-                      <span className="truncate font-medium">
-                        {order.item_name}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>
-                        {order.quantity > 0
-                          ? `수량: ${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
-                          : "(사진 참고)"}
-                      </span>
-                      {order.vendor_name && (
-                        <>
-                          <span>·</span>
-                          <span>{order.vendor_name}</span>
-                        </>
-                      )}
-                      <span>·</span>
-                      <span>{formatDate(order.created_at)}</span>
-                      {order.photo_urls?.length > 0 && (
-                        <>
-                          <span>·</span>
-                          <span className="flex items-center gap-0.5">
-                            <Camera className="h-3 w-3" />
-                            {order.photo_urls.length}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </Link>
-              </div>
-
-              {isSelected && (
-                <div className="mt-3 pl-8">
-                  <label className="text-xs text-muted-foreground">비고</label>
-                  <Input
-                    type="text"
-                    placeholder="비고 (선택)"
-                    value={data.inspection_notes}
-                    onChange={(e) => updateInspectionData(order.id, e.target.value)}
-                    className="mt-0.5 h-8"
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {sortedOrders.map((order) => (
+          <MobileCard
+            key={order.id}
+            order={order}
+            isSelected={selectedIds.has(order.id)}
+            inspectionNotes={inspectionData[order.id]?.inspection_notes ?? ""}
+            onToggle={toggleSelect}
+            onNotesChange={updateInspectionData}
+          />
+        ))}
       </div>
 
       {selectedIds.size > 0 && (
