@@ -69,7 +69,9 @@ export function ComparisonTable({
   onDataChange,
 }: ComparisonTableProps) {
   const { isAdmin } = useAuth();
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() =>
+    typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("q") ?? "",
+  );
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -79,6 +81,7 @@ export function ComparisonTable({
   const [newForm, setNewForm] = useState<EditForm | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [discountRates, setDiscountRates] = useState<Record<string, string>>({});
+  const [priceView, setPriceView] = useState<"after" | "before">("after");
 
   useEffect(() => {
     const rates: Record<string, string> = {};
@@ -143,7 +146,8 @@ export function ComparisonTable({
       result = result.filter(
         (r) =>
           r.unified.name.toLowerCase().includes(q) ||
-          r.unified.mg.toLowerCase().includes(q)
+          r.unified.mg.toLowerCase().includes(q) ||
+          (r.unified.remarks?.toLowerCase().includes(q) ?? false)
       );
     }
     return result;
@@ -706,6 +710,20 @@ export function ComparisonTable({
     URL.revokeObjectURL(url);
   };
 
+  // 표시 단가: 할인후(저장값) 또는 할인전(역산)
+  const cellValue = (price: number | null, rate: number) =>
+    priceView === "before" ? reverseDiscount(price, rate) : price;
+
+  // 행에서 현재 뷰 기준 최저가 (업체별 할인율이 달라 뷰마다 최저 업체가 다를 수 있음)
+  const rowDisplayMin = (row: ComparisonRow) => {
+    const vals: number[] = [];
+    for (const v of vendors) {
+      const val = cellValue(row.prices.get(v.id)?.price ?? null, v.discount_rate ?? 0);
+      if (val != null && val > 0) vals.push(val);
+    }
+    return vals.length ? Math.min(...vals) : null;
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -793,13 +811,29 @@ export function ComparisonTable({
         onSuccess={onDataChange}
       />
 
-      <Tabs value={categoryFilter} onValueChange={setCategoryFilter}>
-        <TabsList>
-          <TabsTrigger value="all">전체 ({rows.length})</TabsTrigger>
-          <TabsTrigger value="약품">약품 ({categoryCounts.약품})</TabsTrigger>
-          <TabsTrigger value="약국">약국 ({categoryCounts.약국})</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Tabs value={categoryFilter} onValueChange={setCategoryFilter}>
+          <TabsList>
+            <TabsTrigger value="all">전체 ({rows.length})</TabsTrigger>
+            <TabsTrigger value="약품">약품 ({categoryCounts.약품})</TabsTrigger>
+            <TabsTrigger value="약국">약국 ({categoryCounts.약국})</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="inline-flex rounded-md border bg-card p-0.5 text-xs">
+          {(["after", "before"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setPriceView(v)}
+              className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                priceView === v ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+              }`}
+            >
+              {v === "after" ? "할인후" : "할인전"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {vendors.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">
@@ -818,6 +852,7 @@ export function ComparisonTable({
             {isAdding && newForm && renderAddCardMobile()}
             {filtered.map((row) => {
               const isExpanded = expandedId === row.unified.id;
+              const dmin = rowDisplayMin(row);
               return (
                 <div key={row.unified.id} className="rounded-xl bg-card p-4 shadow-card space-y-2">
                   <div
@@ -847,8 +882,8 @@ export function ComparisonTable({
                   </div>
                   <div className="grid grid-cols-2 gap-1">
                     {vendors.map((vendor) => {
-                      const entry = row.prices.get(vendor.id);
-                      const isMin = row.minPrice != null && entry?.price === row.minPrice;
+                      const shown = cellValue(row.prices.get(vendor.id)?.price ?? null, vendor.discount_rate ?? 0);
+                      const isMin = dmin != null && shown === dmin;
                       return (
                         <div
                           key={vendor.id}
@@ -858,7 +893,7 @@ export function ComparisonTable({
                         >
                           <span className="text-muted-foreground text-xs">{vendor.name}</span>
                           <span className={isMin ? "font-bold text-green-600" : ""}>
-                            {entry?.price != null ? `${entry.price.toLocaleString()}원` : "-"}
+                            {shown != null ? `${shown.toLocaleString()}원` : "-"}
                           </span>
                         </div>
                       );
@@ -892,6 +927,7 @@ export function ComparisonTable({
                 {isAdding && newForm && renderAddRowPc()}
                 {filtered.map((row) => {
                   const isExpanded = expandedId === row.unified.id;
+                  const dmin = rowDisplayMin(row);
 
                   return (
                     <Fragment key={row.unified.id}>
@@ -916,7 +952,8 @@ export function ComparisonTable({
                           <TableCell className="font-medium">{row.unified.name}</TableCell>
                           {vendors.map((vendor) => {
                             const entry = row.prices.get(vendor.id);
-                            const isMin = row.minPrice != null && entry?.price === row.minPrice;
+                            const shown = cellValue(entry?.price ?? null, vendor.discount_rate ?? 0);
+                            const isMin = dmin != null && shown === dmin;
                             return (
                               <TableCell
                                 key={vendor.id}
@@ -927,7 +964,7 @@ export function ComparisonTable({
                                 }`}
                                 title={entry?.productName}
                               >
-                                {entry?.price != null ? entry.price.toLocaleString() : "-"}
+                                {shown != null ? shown.toLocaleString() : "-"}
                               </TableCell>
                             );
                           })}

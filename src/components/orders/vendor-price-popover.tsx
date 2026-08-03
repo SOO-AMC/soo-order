@@ -12,6 +12,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 import { setItemAlias, removeItemAlias } from "@/lib/actions/item-alias-actions";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
+import { tokenize, similarity } from "@/lib/utils/item-match";
+import { genId } from "@/lib/utils/uid";
 import type { Vendor, VendorProduct, UnifiedProduct, ItemNameAlias } from "@/lib/types/price-compare";
 
 interface PriceEntry {
@@ -78,49 +80,6 @@ function setCachedAliases(aliases: ItemNameAlias[]) {
 // 모듈 로드 시 즉시 프리페치 시작 (캐시 없을 때만)
 if (typeof window !== "undefined") {
   startFetch();
-}
-
-/** Tokenize: strip manufacturer prefix, split into meaningful tokens */
-function tokenize(s: string): string[] {
-  const stripped = s
-    .replace(/^[^()\s]{1,10}\)/, "")
-    .toLowerCase();
-  return stripped
-    .replace(/([가-힣])(\d)/g, "$1 $2")
-    .replace(/(\d)([가-힣])/g, "$1 $2")
-    .replace(/([a-z])(\d)/g, "$1 $2")
-    .replace(/(\d)([a-z])/g, "$1 $2")
-    .replace(/(\d)(mg|ml|g|l|mcg|iu|%|정|캡슐|앰플|바이알|프리필드|시린지|팩|매)/gi, "$1 $2")
-    .split(/[\s/·,_\-()[\]{}]+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0);
-}
-
-/** Token-based similarity with containment bonus */
-function similarity(aTokens: string[], aNorm: string, bTokens: string[], bNorm: string): number {
-  if (aNorm.length === 0 || bNorm.length === 0) return 0;
-  if (aNorm === bNorm) return 1;
-  if (bNorm.includes(aNorm)) return 0.95;
-  if (aNorm.includes(bNorm)) return 0.9;
-  if (aTokens.length === 0 || bTokens.length === 0) return 0;
-
-  let matchCount = 0;
-  const usedB = new Set<number>();
-  for (const at of aTokens) {
-    for (let i = 0; i < bTokens.length; i++) {
-      if (usedB.has(i)) continue;
-      if (at === bTokens[i] || (at.length >= 2 && bTokens[i].includes(at))) {
-        matchCount++;
-        usedB.add(i);
-        break;
-      }
-    }
-  }
-
-  const unionSize = new Set([...aTokens, ...bTokens]).size;
-  const jaccard = matchCount / unionSize;
-  const coverage = matchCount / aTokens.length;
-  return coverage * 0.7 + jaccard * 0.3;
 }
 
 /** 통합제품 1개 → 업체별 가격표 */
@@ -226,6 +185,26 @@ function resolveMatch(itemName: string, data: PriceData): PriceMatch | null {
   return null;
 }
 
+// 퍼지 매칭은 통합제품+업체제품 전체를 순회해 비싸다. 주문 목록의 행마다(같은 품목도)
+// 반복 계산되면 모바일에서 버벅임 → 정규화 품목명 키로 모듈 캐시(인스턴스 간 공유).
+// 같은 PriceData ref면 visibleVendors도 결정적으로 동일하므로 data ref로 무효화하면 충분
+// (별칭 편집·10분 갱신 시 setData가 새 ref를 만들어 자동 무효화).
+let matchCacheData: PriceData | null = null;
+const matchCache = new Map<string, PriceMatch | null>();
+
+function resolveMatchCached(itemName: string, data: PriceData, visibleVendors: Vendor[]): PriceMatch | null {
+  if (matchCacheData !== data) {
+    matchCache.clear();
+    matchCacheData = data;
+  }
+  const key = normalizeItemName(itemName);
+  const hit = matchCache.get(key);
+  if (hit !== undefined) return hit;
+  const result = resolveMatch(itemName, { ...data, vendors: visibleVendors });
+  matchCache.set(key, result);
+  return result;
+}
+
 export const VENDOR_COLORS = [
   { bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-700" },
   { bg: "bg-rose-50", border: "border-rose-300", text: "text-rose-700" },
@@ -282,10 +261,17 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, last
     }
   };
 
+  // 주문 탭 드롭다운엔 기존 주력 업체(show_in_compare !== false)만 노출.
+  // (명세서로 자동등록된 신규 업체는 제외)
+  const visibleVendors = useMemo(
+    () => (data ? data.vendors.filter((v) => v.show_in_compare !== false) : []),
+    [data],
+  );
+
   const priceMatch = useMemo(() => {
     if (!data) return null;
-    return resolveMatch(itemName, data);
-  }, [itemName, data]);
+    return resolveMatchCached(itemName, data, visibleVendors);
+  }, [itemName, data, visibleVendors]);
 
   const filteredUnified = useMemo(() => {
     if (!data) return [];
@@ -312,7 +298,7 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, last
     const unifiedId = priceMatch.unifiedProductId;
     const next: ItemNameAlias[] = [
       ...data.aliases,
-      { id: crypto.randomUUID(), item_name: key, unified_product_id: unifiedId, created_by: null, created_at: new Date().toISOString() },
+      { id: genId(), item_name: key, unified_product_id: unifiedId, created_by: null, created_at: new Date().toISOString() },
     ];
     setCachedAliases(next);
     setData({ ...data, aliases: next });
@@ -320,9 +306,14 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, last
   };
 
   const handleSelect = (vendorName: string) => {
-    autoLearnFromSelection(vendorName);
+    // 선택은 항상 먼저 반영 — 학습(부수효과)이 실패해도 선택을 막지 않도록
     onSelectVendor(vendorName);
     setOpen(false);
+    try {
+      autoLearnFromSelection(vendorName);
+    } catch {
+      // 학습 실패는 무시
+    }
   };
 
   const applyAlias = async (unifiedId: string) => {
@@ -333,7 +324,7 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, last
       const key = normalizeItemName(itemName);
       const next: ItemNameAlias[] = [
         ...data.aliases.filter((a) => a.item_name !== key),
-        { id: crypto.randomUUID(), item_name: key, unified_product_id: unifiedId, created_by: null, created_at: new Date().toISOString() },
+        { id: genId(), item_name: key, unified_product_id: unifiedId, created_by: null, created_at: new Date().toISOString() },
       ];
       setCachedAliases(next);
       setData({ ...data, aliases: next });
@@ -538,11 +529,11 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, last
                   })}
                 </div>
               </>
-            ) : data?.vendors && data.vendors.length > 0 ? (
+            ) : visibleVendors.length > 0 ? (
               <>
                 <div className="px-3 pt-2 pb-1 text-xs text-muted-foreground">가격 데이터 없음 — 업체 직접 선택</div>
                 <div className="px-1 pb-1">
-                  {data.vendors.map((v) => {
+                  {visibleVendors.map((v) => {
                     const isSelected = selectedVendor === v.name;
                     return (
                       <button

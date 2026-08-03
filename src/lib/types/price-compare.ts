@@ -2,6 +2,8 @@ export interface Vendor {
   id: string;
   name: string;
   discount_rate: number;
+  /** 가격비교 탭 표시 여부 (명세서로 자동등록된 신규 업체는 false) */
+  show_in_compare?: boolean;
   created_at: string;
   updated_at: string;
 }

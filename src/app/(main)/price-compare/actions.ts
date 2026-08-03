@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/supabase/server";
-import type { VendorProductRow } from "@/lib/types/price-compare";
+import type { Vendor, VendorProductRow } from "@/lib/types/price-compare";
 import { logActivity } from "@/lib/utils/activity-log";
 
 type ActionState = {
@@ -29,6 +29,45 @@ export async function createVendor(name: string): Promise<ActionState> {
   await logActivity({ userId, userName, category: "price", action: "create_vendor", description: `${trimmed} 업체 등록` });
   revalidatePath("/price-compare");
   return { success: true };
+}
+
+/**
+ * 명세서 스캔에서 신규 업체 등록 — 할인율 지정, 가격비교엔 숨김(show_in_compare=false).
+ * 동일 업체명이 이미 있으면 그 업체를 반환한다. 생성된 업체 행을 돌려준다.
+ */
+export async function createScanVendor(
+  name: string,
+  discountRate: number,
+): Promise<{ error?: string; vendor?: Vendor }> {
+  const { supabase, userId, userName } = await requireAdmin();
+
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "업체명을 입력해주세요." };
+  const clamped = Math.max(0, Math.min(100, discountRate || 0));
+
+  const { data: existing } = await supabase.from("vendors").select("*").eq("name", trimmed).maybeSingle();
+  if (existing) return { vendor: existing as Vendor };
+
+  const { data, error } = await supabase
+    .from("vendors")
+    .insert({ name: trimmed, discount_rate: clamped, show_in_compare: false })
+    .select("*")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      const { data: again } = await supabase.from("vendors").select("*").eq("name", trimmed).maybeSingle();
+      if (again) return { vendor: again as Vendor };
+    }
+    return { error: `업체 등록 실패: ${error.message}` };
+  }
+
+  await logActivity({
+    userId, userName, category: "price", action: "create_vendor",
+    description: `${trimmed} 업체 등록 (명세서 스캔, 할인 ${clamped}%)`,
+  });
+  revalidatePath("/price-compare");
+  return { vendor: data as Vendor };
 }
 
 export async function updateVendorDiscountRate(vendorId: string, rate: number): Promise<ActionState> {
