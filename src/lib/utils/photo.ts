@@ -1,5 +1,6 @@
 import imageCompression from "browser-image-compression";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { genId } from "@/lib/utils/uid";
 
 export const MAX_PHOTOS = 5;
 const BUCKET_NAME = "order-photos";
@@ -21,7 +22,7 @@ export async function uploadPhoto(
   file: File
 ): Promise<string> {
   const compressed = await compressImage(file);
-  const id = crypto.randomUUID();
+  const id = genId();
   const path = `${orderId}/${id}.webp`;
 
   const { error } = await supabase.storage

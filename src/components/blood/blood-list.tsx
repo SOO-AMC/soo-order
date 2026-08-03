@@ -17,6 +17,8 @@ import { formatDate } from "@/lib/utils/format";
 import { BloodStatusBadge } from "@/components/blood/blood-status-badge";
 import { Spinner } from "@/components/ui/spinner";
 import type { BloodRecordWithCreator, BloodType, BloodStatus } from "@/lib/types/blood";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { applyRealtimeChange } from "@/lib/utils/realtime-list";
 import { ANIMAL_TYPE_LABEL, SETTLEMENT_TYPE_LABEL } from "@/lib/types/blood";
 
 interface BloodListProps {
@@ -51,29 +53,49 @@ export function BloodList({ type, initialRecords }: BloodListProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
 
-  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordsRef = useRef(records);
+  useEffect(() => { recordsRef.current = records; }, [records]);
+
+  const handleRealtime = useCallback(
+    async (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+      const next = await applyRealtimeChange<BloodRecordWithCreator>(recordsRef.current, payload, {
+        matchesFilter: (r) => r.type === type,
+        fetchOne: async (id) => {
+          const { data } = await supabase
+            .from("blood_records")
+            .select("*, creator:profiles!created_by(full_name), confirmer:profiles!confirmed_by(full_name)")
+            .eq("id", id)
+            .maybeSingle();
+          return (data as BloodRecordWithCreator) ?? null;
+        },
+      });
+      if (next === recordsRef.current) return;
+      recordsRef.current = next;
+      setRecords(next);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [type],
+  );
 
   useEffect(() => {
     fetchRecords();
 
+    let firstSub = true;
     const channel = supabase
       .channel(`blood-list-${type}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "blood_records" },
-        () => {
-          if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
-          realtimeTimer.current = setTimeout(fetchRecords, 200);
+      .on("postgres_changes", { event: "*", schema: "public", table: "blood_records" }, handleRealtime)
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          if (firstSub) { firstSub = false; return; }
+          fetchRecords();
         }
-      )
-      .subscribe();
+      });
 
     return () => {
-      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchRecords]);
+  }, [fetchRecords, handleRealtime, type]);
 
   const pendingCount = records.filter((r) => r.status === "pending").length;
   const confirmedCount = records.filter((r) => r.status === "confirmed").length;

@@ -74,8 +74,10 @@ export function useTabCountsProvider() {
   }, []);
 
   const debouncedFetch = useCallback(() => {
+    // 100명 동시 사용 시 모든 클라이언트가 변경마다 카운트를 재조회하므로,
+    // 디바운스를 넉넉히 둬 버스트를 1회로 합친다(카운트는 최대 ~1.5s 지연 허용).
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(fetchCounts, 500);
+    timerRef.current = setTimeout(fetchCounts, 1500);
   }, [fetchCounts]);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadPhoto, deletePhotos } from "./photo";
+import { genId } from "./uid";
 
 type Listener = () => void;
 
@@ -40,7 +41,7 @@ export function enqueueNewOrderPhotos(
 ) {
   if (files.length === 0) return;
 
-  const jobId = crypto.randomUUID();
+  const jobId = genId();
   const job: UploadJob = {
     id: jobId,
     orderId,
@@ -91,7 +92,7 @@ export function enqueueEditOrderPhotos(
 ) {
   if (newFiles.length === 0 && deletedPaths.length === 0) return;
 
-  const jobId = crypto.randomUUID();
+  const jobId = genId();
   const job: UploadJob = {
     id: jobId,
     orderId,

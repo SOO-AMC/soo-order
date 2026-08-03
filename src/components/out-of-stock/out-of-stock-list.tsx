@@ -30,6 +30,8 @@ import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { Spinner } from "@/components/ui/spinner";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { applyRealtimeChange, pruneSet } from "@/lib/utils/realtime-list";
 
 export function OutOfStockList({ initialOrders }: { initialOrders?: OrderWithRequester[] }) {
   const { isAdmin } = useAuth();
@@ -60,29 +62,51 @@ export function OutOfStockList({ initialOrders }: { initialOrders?: OrderWithReq
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ordersRef = useRef(orders);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+  const handleRealtime = useCallback(
+    async (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+      const next = await applyRealtimeChange<OrderWithRequester>(ordersRef.current, payload, {
+        matchesFilter: (r) => r.status === "out_of_stock",
+        fetchOne: async (id) => {
+          const { data } = await supabase
+            .from("orders")
+            .select("*, requester:profiles!requester_id(full_name)")
+            .eq("id", id)
+            .maybeSingle();
+          return (data as OrderWithRequester) ?? null;
+        },
+      });
+      if (next === ordersRef.current) return;
+      ordersRef.current = next;
+      setOrders(next);
+      const validIds = new Set(next.map((o) => o.id));
+      setSelectedIds((prev) => pruneSet(prev, validIds));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   useEffect(() => {
     fetchOrders();
 
+    let firstSub = true;
     const channel = supabase
       .channel("out-of-stock-list")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-        () => {
-          if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
-          realtimeTimer.current = setTimeout(fetchOrders, 200);
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, handleRealtime)
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          if (firstSub) { firstSub = false; return; }
+          fetchOrders();
         }
-      )
-      .subscribe();
+      });
 
     return () => {
-      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchOrders]);
+  }, [fetchOrders, handleRealtime]);
 
   const allSelected =
     orders.length > 0 && orders.every((o) => selectedIds.has(o.id));
