@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Camera,
@@ -48,6 +48,7 @@ export function SearchList() {
   const { isAdmin } = useAuth();
   const [personNames, setPersonNames] = useState<string[]>([]);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showExportOverlay, setShowExportOverlay] = useState(false);
@@ -84,17 +85,21 @@ export function SearchList() {
     [fetchData]
   );
 
-  // 초기 로드 — URL에서 필터 파싱 후 fetch + personNames
+  // URL(searchParams) 변화마다 필터 재적용 — 같은 /search 안에서 다른 사람/검색으로 다시 진입해도 반영됨
+  const spString = searchParams.toString();
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
     const obj: Record<string, string> = {};
-    params.forEach((v, k) => { obj[k] = v; });
-    const initialFilters = parseSearchParams(obj);
-    setFilters(initialFilters);
-    setSearchInput(initialFilters.q);
-    fetchData(initialFilters);
-    fetchPersonNames().then(setPersonNames);
+    new URLSearchParams(spString).forEach((v, k) => { obj[k] = v; });
+    const next = parseSearchParams(obj);
+    setFilters(next);
+    setSearchInput(next.q);
+    fetchData(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spString]);
+
+  // 인원 이름 목록 (1회)
+  useEffect(() => {
+    fetchPersonNames().then(setPersonNames);
   }, []);
 
   // 검색어 디바운스
@@ -255,7 +260,7 @@ export function SearchList() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
+      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <div className="lg:hidden">
             <BackButton fallbackHref="/more" />
@@ -539,9 +544,12 @@ function ExportOverlay({
   // 완료 시 → 100%로 채우고 잠시 후 닫기
   useEffect(() => {
     if (!isDone) return;
-    setProgress(100);
+    const raf = requestAnimationFrame(() => setProgress(100));
     const timer = setTimeout(onClose, 800);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
   }, [isDone, onClose]);
 
   const formatElapsed = (s: number) => {

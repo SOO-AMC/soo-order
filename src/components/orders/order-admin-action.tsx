@@ -17,6 +17,7 @@ import {
 import { Check, ClipboardCopy, ShoppingCart } from "lucide-react";
 import { logClientAction } from "@/app/(main)/log-action";
 import { dispatchOrder } from "@/lib/actions/order-mutations";
+import { copyText } from "@/lib/utils/clipboard";
 
 interface OrderAdminActionProps {
   orderId: string;
@@ -51,7 +52,8 @@ export function OrderAdminAction({ orderId, itemName, quantity, unit }: OrderAdm
     const qty = quantity && quantity > 0 ? `${quantity}${unit ?? ""}` : "";
     const line = `${name}  ${qty}`.trimEnd();
     const message = `안녕하세요\n\n${line}\n\n주문하겠습니다.`;
-    await navigator.clipboard.writeText(message);
+    const ok = await copyText(message);
+    if (!ok) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

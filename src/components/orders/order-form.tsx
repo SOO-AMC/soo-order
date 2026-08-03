@@ -18,10 +18,12 @@ interface OrderFormData {
   is_urgent: boolean;
   notes: string;
   vendor_name?: string;
+  inspection_notes?: string;
 }
 
-export interface OrderFormResult extends Omit<OrderFormData, "vendor_name"> {
+export interface OrderFormResult extends Omit<OrderFormData, "vendor_name" | "inspection_notes"> {
   vendor_name: string;
+  inspection_notes: string;
   photos: PhotoItem[];
 }
 
@@ -39,12 +41,13 @@ interface OrderFormProps {
   defaultValues?: OrderFormData;
   existingPhotoUrls?: string[];
   showVendorField?: boolean;
+  showInspectionField?: boolean;
   /** 제공되면 입력 중인 품목명과 겹치는 진행 중 주문을 경고로 표시 */
   activeOrders?: ActiveOrderRef[];
   onSubmit: (data: OrderFormResult) => Promise<void>;
 }
 
-export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, activeOrders, onSubmit }: OrderFormProps) {
+export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, showInspectionField, activeOrders, onSubmit }: OrderFormProps) {
   const [itemName, setItemName] = useState(defaultValues?.item_name ?? "");
   const [quantity, setQuantity] = useState(
     defaultValues?.quantity?.toString() ?? ""
@@ -53,6 +56,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, a
   const [isUrgent, setIsUrgent] = useState(defaultValues?.is_urgent ?? false);
   const [notes, setNotes] = useState(defaultValues?.notes ?? "");
   const [vendorName, setVendorName] = useState(defaultValues?.vendor_name ?? "");
+  const [inspectionNotes, setInspectionNotes] = useState(defaultValues?.inspection_notes ?? "");
   const [photos, setPhotos] = useState<PhotoItem[]>(
     existingPhotoUrls ? photoItemsFromPaths(existingPhotoUrls) : []
   );
@@ -91,6 +95,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, a
         is_urgent: isUrgent,
         notes: notes.trim(),
         vendor_name: vendorName.trim(),
+        inspection_notes: inspectionNotes.trim(),
         photos,
       });
     } catch {
@@ -182,6 +187,19 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, a
           onChange={(e) => setNotes(e.target.value)}
         />
       </div>
+
+      {showInspectionField && (
+        <div className="space-y-2">
+          <Label htmlFor="inspection_notes">검수비고</Label>
+          <Input
+            id="inspection_notes"
+            type="text"
+            placeholder="검수비고 (선택)"
+            value={inspectionNotes}
+            onChange={(e) => setInspectionNotes(e.target.value)}
+          />
+        </div>
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { ClipboardCheck, PackageX, Pencil, X } from "lucide-react";
+import { ClipboardCheck, PackageX, Pencil, Undo2, X } from "lucide-react";
 import { logClientAction } from "@/app/(main)/log-action";
 import {
   inspectOrder,
@@ -61,6 +61,7 @@ export function InspectionActions({
   const [isOutOfStocking, setIsOutOfStocking] = useState(false);
 
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [revertOpen, setRevertOpen] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
 
   const router = useRouter();
@@ -117,6 +118,7 @@ export function InspectionActions({
     } catch {
       setIsCanceling(false);
       setCancelOpen(false);
+      setRevertOpen(false);
     }
   };
 
@@ -223,6 +225,37 @@ export function InspectionActions({
       {(isAdmin || canCancel) && (
         <>
           <Separator />
+          {canCancel && (
+            <Dialog open={revertOpen} onOpenChange={setRevertOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full">
+                  <Undo2 className="h-4 w-4" />
+                  주문신청으로 되돌리기
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>주문신청으로 되돌리기</DialogTitle>
+                  <DialogDescription>
+                    이 품목을 검수대기에서 이전 단계인 주문신청으로 되돌립니다. 발주 내역(업체·발주 비고)이 해제되고 주문탭에서 다시 발주할 수 있습니다.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button" variant="outline">
+                      취소
+                    </Button>
+                  </DialogClose>
+                  <Button
+                    onClick={() => handleCancel("revert")}
+                    disabled={isCanceling}
+                  >
+                    {isCanceling ? "처리 중..." : "주문신청으로 되돌리기"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
           <div className="flex gap-2">
             {isAdmin && (
               <Button variant="outline" className="flex-1" asChild>
@@ -237,43 +270,31 @@ export function InspectionActions({
                 <DialogTrigger asChild>
                   <Button variant="destructive" className="flex-1">
                     <X className="h-4 w-4" />
-                    주문 취소
+                    주문 삭제
                   </Button>
                 </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>주문 취소</DialogTitle>
-                <DialogDescription>
-                  이 주문을 어떻게 처리하시겠습니까?
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter className="flex-col gap-2 sm:flex-col">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleCancel("revert")}
-                  disabled={isCanceling}
-                >
-                  주문신청으로 되돌리기
-                </Button>
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => handleCancel("delete")}
-                  disabled={isCanceling}
-                >
-                  완전 삭제
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="w-full"
-                  onClick={() => setCancelOpen(false)}
-                  disabled={isCanceling}
-                >
-                  취소
-                </Button>
-              </DialogFooter>
-            </DialogContent>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>주문 삭제</DialogTitle>
+                    <DialogDescription>
+                      이 주문을 완전히 삭제합니다. 되돌릴 수 없습니다.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline">
+                        취소
+                      </Button>
+                    </DialogClose>
+                    <Button
+                      variant="destructive"
+                      onClick={() => handleCancel("delete")}
+                      disabled={isCanceling}
+                    >
+                      {isCanceling ? "처리 중..." : "완전 삭제"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
               </Dialog>
             )}
           </div>

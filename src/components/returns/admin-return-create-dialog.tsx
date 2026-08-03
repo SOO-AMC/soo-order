@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { PhotoPicker, type PhotoItem } from "@/components/orders/photo-picker";
 import { uploadPhoto } from "@/lib/utils/photo";
+import { genId } from "@/lib/utils/uid";
 import { logClientAction } from "@/app/(main)/log-action";
 import { adminCreateDirectReturn } from "@/lib/actions/order-mutations";
 
@@ -36,7 +37,7 @@ export function AdminReturnCreateDialog() {
     setIsSubmitting(true);
 
     try {
-      const newId = crypto.randomUUID();
+      const newId = genId();
 
       const uploadedPaths: string[] = [];
       for (const photo of photos) {

@@ -15,32 +15,48 @@ export default async function OrdersPage() {
   const supabase = await createClient();
   // 가격비교 데이터는 무겁고 팝업 열 때만 필요하므로 페이지 렌더를 막지 않음
   // (vendor-price-popover 모듈이 클라이언트 마운트 시 백그라운드로 프리페치함)
-  const [ordersRes, historyRes] = await Promise.all([
+  // "품목별 최근 업체"는 서버 집계 RPC로 품목당 1행만 받음(이력 1500행 전송 제거).
+  const [ordersRes, rpcRes] = await Promise.all([
     supabase
       .from("orders")
       .select("*, requester:profiles!requester_id(full_name)")
       .eq("type", "order")
       .eq("status", "pending")
       .order("created_at", { ascending: false }),
-    supabase
+    supabase.rpc("latest_vendor_by_item"),
+  ]);
+
+  const initialOrders = (ordersRes.data as OrderWithRequester[] | null) ?? [];
+  let initialLastVendors: Record<string, string> = {};
+  if (!rpcRes.error && rpcRes.data) {
+    // 신버전 RPC는 { item_key: vendor_name } jsonb 객체 1개를 반환(행 상한 우회).
+    // 구버전(행 반환) 함수가 아직 떠 있을 수 있어 두 형태 모두 처리.
+    const d = rpcRes.data as unknown;
+    if (Array.isArray(d)) {
+      for (const row of d as { item_key: string; vendor_name: string }[]) {
+        if (row?.item_key) initialLastVendors[row.item_key] = row.vendor_name;
+      }
+    } else {
+      initialLastVendors = (d as Record<string, string>) ?? {};
+    }
+  } else {
+    // 폴백: RPC 미적용(마이그레이션 전)이면 기존 방식으로 집계
+    const { data } = await supabase
       .from("orders")
       .select("item_name, vendor_name, created_at")
       .eq("type", "order")
       .neq("vendor_name", "")
       .order("created_at", { ascending: false })
-      .limit(1500),
-  ]);
-
-  const initialOrders = (ordersRes.data as OrderWithRequester[] | null) ?? [];
-  const initialLastVendors: Record<string, string> = {};
-  for (const row of (historyRes.data as { item_name: string; vendor_name: string }[] | null) ?? []) {
-    const key = normalizeItemName(row.item_name);
-    if (key && !(key in initialLastVendors)) initialLastVendors[key] = row.vendor_name;
+      .limit(1500);
+    for (const row of (data as { item_name: string; vendor_name: string }[] | null) ?? []) {
+      const key = normalizeItemName(row.item_name);
+      if (key && !(key in initialLastVendors)) initialLastVendors[key] = row.vendor_name;
+    }
   }
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
+      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
         <div>
           <h1 className="text-lg font-bold leading-tight">주문</h1>
           <p className="hidden text-xs text-muted-foreground sm:block">발주 대기 중인 주문 목록</p>

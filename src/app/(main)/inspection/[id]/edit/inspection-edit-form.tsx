@@ -40,6 +40,7 @@ export function InspectionEditForm({ order }: { order: Order }) {
         is_urgent: data.is_urgent,
         notes: data.notes,
         vendor_name: data.vendor_name,
+        inspection_notes: data.inspection_notes,
         updated_by: user?.id,
         photo_urls: keptPaths,
       })
@@ -67,6 +68,7 @@ export function InspectionEditForm({ order }: { order: Order }) {
           notes: order.notes ?? "",
           vendor_name: order.vendor_name ?? "",
           photoCount: order.photo_urls?.length ?? 0,
+          inspection_notes: order.inspection_notes ?? "",
         },
         {
           item_name: data.item_name,
@@ -76,6 +78,7 @@ export function InspectionEditForm({ order }: { order: Order }) {
           notes: data.notes ?? "",
           vendor_name: data.vendor_name ?? "",
           photoCount: data.photos.length,
+          inspection_notes: data.inspection_notes ?? "",
         }
       );
       notifyOrderEdited(id, order.requester_id, data.item_name, `/inspection/${id}`, changes).catch(() => {});
@@ -88,7 +91,7 @@ export function InspectionEditForm({ order }: { order: Order }) {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
+      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
         <Button variant="ghost" size="icon" asChild>
           <Link href={`/inspection/${id}`}>
             <ChevronLeft />
@@ -106,9 +109,11 @@ export function InspectionEditForm({ order }: { order: Order }) {
               is_urgent: order.is_urgent,
               notes: order.notes ?? "",
               vendor_name: order.vendor_name ?? "",
+              inspection_notes: order.inspection_notes ?? "",
             }}
             existingPhotoUrls={order.photo_urls}
             showVendorField
+            showInspectionField
             onSubmit={handleSubmit}
           />
         </div>

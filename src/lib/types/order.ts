@@ -13,6 +13,7 @@ export interface Order {
   dispatched_at: string | null;
   vendor_name: string;
   confirmed_quantity: number | null;
+  received_quantity: number | null;
   invoice_received: boolean | null;
   inspected_by: string | null;
   inspected_at: string | null;

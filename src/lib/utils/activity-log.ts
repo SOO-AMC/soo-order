@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 interface LogParams {
   userId: string;
   userName: string;
-  category: "auth" | "order" | "dispatch" | "inspection" | "return" | "account" | "price" | "blood";
+  category: "auth" | "order" | "dispatch" | "inspection" | "return" | "account" | "price" | "blood" | "leave";
   action: string;
   description: string;
   metadata?: Record<string, unknown>;

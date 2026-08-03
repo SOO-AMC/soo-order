@@ -80,20 +80,35 @@ export async function inspectOrder(
 ) {
   const { supabase, userId } = await requireAdmin();
 
-  const { error } = await supabase
+  const trimmedNotes = inspectionNotes.trim();
+
+  const { data: updated, error } = await supabase
     .from("orders")
     .update({
       status: "inspecting",
       confirmed_quantity: confirmedQuantity,
       invoice_received: invoiceReceived,
-      inspection_notes: inspectionNotes.trim(),
+      inspection_notes: trimmedNotes,
       inspection_memo: null,
       inspected_by: userId,
       inspected_at: new Date().toISOString(),
     })
-    .eq("id", orderId);
+    .eq("id", orderId)
+    .select("requester_id, item_name")
+    .single();
 
   if (error) throw new Error("검수 처리에 실패했습니다.");
+
+  if (trimmedNotes && updated?.requester_id && updated.requester_id !== userId) {
+    await supabase.from("notifications").insert({
+      user_id: updated.requester_id,
+      order_id: orderId,
+      type: "inspection_completed",
+      title: `'${updated.item_name}' 검수가 완료되었습니다`,
+      body: `검수비고: ${trimmedNotes}`,
+      link: `/inspection/${orderId}`,
+    });
+  }
 }
 
 /** 일괄 검수 완료 */
@@ -122,11 +137,33 @@ export async function bulkInspectOrders(
           inspected_by: userId,
           inspected_at: now,
         })
-        .eq("id", item.id),
+        .eq("id", item.id)
+        .select("requester_id, item_name")
+        .single(),
     ),
   );
 
   if (results.some((r) => r.error)) throw new Error("일부 검수 처리에 실패했습니다.");
+
+  // 검수비고가 입력된 항목은 요청자에게 알림 (본인이 요청자인 경우 제외)
+  const notifications = results
+    .map((r, i) => ({ data: r.data, item: items[i] }))
+    .filter(({ data, item }) => {
+      const trimmed = item.inspectionNotes.trim();
+      return trimmed && data?.requester_id && data.requester_id !== userId;
+    })
+    .map(({ data, item }) => ({
+      user_id: data!.requester_id,
+      order_id: item.id,
+      type: "inspection_completed",
+      title: `'${data!.item_name}' 검수가 완료되었습니다`,
+      body: `검수비고: ${item.inspectionNotes.trim()}`,
+      link: `/inspection/${item.id}`,
+    }));
+
+  if (notifications.length > 0) {
+    await supabase.from("notifications").insert(notifications);
+  }
 }
 
 /** 품절 처리 (status → out_of_stock) */

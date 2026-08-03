@@ -6,6 +6,7 @@ export interface OrderSnapshot {
   notes: string;
   vendor_name: string;
   photoCount: number;
+  inspection_notes?: string;
 }
 
 const formatQty = (q: number, u: string) => (q > 0 ? `${q}${u ? ` ${u}` : ""}` : "(미입력)");
@@ -31,6 +32,9 @@ export function describeOrderChanges(prev: OrderSnapshot, next: OrderSnapshot): 
   }
   if (prev.photoCount !== next.photoCount) {
     changes.push("사진 변경");
+  }
+  if ((prev.inspection_notes ?? "") !== (next.inspection_notes ?? "")) {
+    changes.push(next.inspection_notes ? `검수비고: ${next.inspection_notes}` : "검수비고 삭제");
   }
 
   return changes;
