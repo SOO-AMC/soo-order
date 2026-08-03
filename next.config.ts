@@ -7,6 +7,8 @@ const withSerwist = withSerwistInit({
 });
 
 const nextConfig = {
+  // mupdf(WASM)는 번들링하지 말고 런타임에 node_modules에서 로드
+  serverExternalPackages: ["mupdf"],
   experimental: {
     staleTimes: {
       dynamic: 60, // 동적 페이지 60초간 캐시 유지
