@@ -16,7 +16,7 @@ const tabs = [
 ];
 
 // 탭바를 표시할 루트 경로들
-const TAB_ROUTES = ["/orders", "/out-of-stock", "/returns", "/inspection", "/search", "/blood", "/more", "/account", "/price-compare", "/dashboard", "/members", "/logs"];
+const TAB_ROUTES = ["/orders", "/out-of-stock", "/returns", "/inspection", "/search", "/blood", "/more", "/account", "/price-compare", "/dashboard", "/members", "/logs", "/leave", "/schedule", "/invoice-scan", "/vendor-ledger", "/price-analysis"];
 
 export function useShowBottomNav() {
   const pathname = usePathname();
@@ -37,7 +37,7 @@ export function BottomNav() {
         {tabs.map(({ href, label, icon: Icon, countKey }) => {
           const isActive =
             href === "/more"
-              ? pathname.startsWith("/more") || pathname.startsWith("/account") || pathname.startsWith("/out-of-stock") || pathname.startsWith("/returns") || pathname.startsWith("/blood")
+              ? pathname.startsWith("/more") || pathname.startsWith("/account") || pathname.startsWith("/out-of-stock") || pathname.startsWith("/returns") || pathname.startsWith("/blood") || pathname.startsWith("/leave") || pathname.startsWith("/schedule")
               : pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
           const info = countKey ? counts[countKey] : null;
           const isMyStatus = href === "/dashboard";

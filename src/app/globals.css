@@ -38,6 +38,10 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* 엑셀형 연차현황 표 — 기존 연차표 엑셀 색을 그대로 씀 */
+  --color-leave-cell: var(--leave-cell);
+  --color-leave-head: var(--leave-head);
+  --color-leave-special: var(--leave-special);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -49,10 +53,14 @@
 
 :root {
   --radius: 0.75rem;
+  --page-top: 0px; /* 페이지 sticky 헤더의 top 오프셋 (전체검색 상단바 높이만큼 (main)에서 덮어씀) */
   --background: oklch(0.965 0.003 260);
   --foreground: oklch(0.20 0.02 260);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.20 0.02 260);
+  --leave-cell: #b3a2c7; /* 엑셀 연차 칸 보라 */
+  --leave-head: #fdeadb; /* 엑셀 이름 행 */
+  --leave-special: #9ecfa8; /* 특별연차 칸 — 기본 연차(보라)와 구분 */
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.20 0.02 260);
   --primary: oklch(0.55 0.25 264);

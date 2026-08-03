@@ -16,6 +16,11 @@ import {
   UserCog,
   BarChart3,
   ChevronRight,
+  ScanLine,
+  BookText,
+  TrendingUp,
+  CalendarDays,
+  CalendarRange,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -35,12 +40,17 @@ const mainTabs = [
 ];
 
 const bloodTab = { href: "/blood", label: "혈액 대장", icon: Droplets, countKey: "blood" as const };
+const leaveTab = { href: "/leave", label: "연차", icon: CalendarDays, countKey: null };
+const scheduleTab = { href: "/schedule", label: "근무표", icon: CalendarRange, countKey: null };
 
 const myOrdersTab = { href: "/dashboard", label: "내 주문 현황", icon: BarChart3, countKey: null };
 const adminDashboardTab = { href: "/dashboard/admin", label: "대시보드", icon: BarChart3, countKey: null };
 
 const adminTabs = [
+  { href: "/invoice-scan", label: "명세서 스캔", icon: ScanLine },
   { href: "/price-compare", label: "가격 비교", icon: Scale },
+  { href: "/vendor-ledger", label: "거래처원장", icon: BookText },
+  { href: "/price-analysis", label: "단가 분석", icon: TrendingUp },
   { href: "/members", label: "직원 관리", icon: Users },
 ];
 
@@ -134,6 +144,11 @@ export function AppSidebar() {
 
         <Separator className="my-3 bg-border/40" />
         {renderLink(bloodTab)}
+
+        <Separator className="my-3 bg-border/40" />
+        <p className="px-3 pb-1 pt-2 text-xs font-semibold text-muted-foreground">인사</p>
+        {renderLink(leaveTab)}
+        {renderLink(scheduleTab)}
 
         {isAdmin && (
           <>

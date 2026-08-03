@@ -1,6 +1,7 @@
 "use client";
 
 import { useShowBottomNav } from "@/components/bottom-nav";
+import { GlobalSearch } from "@/components/global-search";
 import { cn } from "@/lib/utils";
 
 export function MainContent({ children }: { children: React.ReactNode }) {
@@ -8,11 +9,13 @@ export function MainContent({ children }: { children: React.ReactNode }) {
 
   return (
     <main
+      style={{ ["--page-top" as string]: "3rem" }}
       className={cn(
         "flex-1 lg:pl-60 lg:pb-0",
         showNav && "pb-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)]"
       )}
     >
+      <GlobalSearch />
       <div className={showNav ? "animate-page-enter" : "animate-page-slide-in"}>
         {children}
       </div>

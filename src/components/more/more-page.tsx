@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BarChart3, ChevronRight, Droplets, LogOut, PackageX, Scale, Undo2, UserCog, Users } from "lucide-react";
+import { BarChart3, BookText, CalendarDays, CalendarRange, ChevronRight, Droplets, LogOut, PackageX, Scale, ScanLine, TrendingUp, Undo2, UserCog, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ export function MorePage() {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
+      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
         <h1 className="text-lg font-bold">더보기</h1>
       </header>
 
@@ -56,7 +56,35 @@ export function MorePage() {
             </CardContent>
           </Card>
 
-          {/* 메뉴 */}
+          {/* 인사 */}
+          <p className="px-1 text-xs font-semibold text-muted-foreground/70">인사</p>
+          <Card className="py-0 gap-0">
+            <CardContent className="divide-y p-0">
+              <Link
+                href="/leave"
+                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
+              >
+                <div className="flex items-center gap-3">
+                  <CalendarDays className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">연차</span>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Link>
+              <Link
+                href="/schedule"
+                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
+              >
+                <div className="flex items-center gap-3">
+                  <CalendarRange className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">근무표</span>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* 업무 */}
+          <p className="px-1 text-xs font-semibold text-muted-foreground/70">업무</p>
           <Card className="py-0 gap-0">
             <CardContent className="divide-y p-0">
               <Link
@@ -116,12 +144,42 @@ export function MorePage() {
                     <ChevronRight className="h-5 w-5 text-muted-foreground" />
                   </Link>
                   <Link
+                    href="/invoice-scan"
+                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ScanLine className="h-5 w-5 text-muted-foreground" />
+                      <span className="font-medium">명세서 스캔</span>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </Link>
+                  <Link
                     href="/price-compare"
                     className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
                   >
                     <div className="flex items-center gap-3">
                       <Scale className="h-5 w-5 text-muted-foreground" />
                       <span className="font-medium">가격 비교</span>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </Link>
+                  <Link
+                    href="/vendor-ledger"
+                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <BookText className="h-5 w-5 text-muted-foreground" />
+                      <span className="font-medium">거래처원장</span>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </Link>
+                  <Link
+                    href="/price-analysis"
+                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                      <span className="font-medium">단가 분석</span>
                     </div>
                     <ChevronRight className="h-5 w-5 text-muted-foreground" />
                   </Link>
