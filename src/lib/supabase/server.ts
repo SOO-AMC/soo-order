@@ -34,11 +34,12 @@ export const getSessionProfile = cache(async () => {
     data: { session },
   } = await supabase.auth.getSession();
 
-  if (!session) return { session: null, userId: null, isAdmin: false, userName: null };
+  if (!session)
+    return { session: null, userId: null, isAdmin: false, userName: null, role: "user", position: null };
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, full_name")
+    .select("role, full_name, position")
     .eq("id", session.user.id)
     .single();
 
@@ -47,6 +48,8 @@ export const getSessionProfile = cache(async () => {
     userId: session.user.id,
     isAdmin: profile?.role === "admin",
     userName: profile?.full_name ?? null,
+    role: (profile?.role as string) ?? "user",
+    position: (profile?.position as string) ?? null,
   };
 });
 

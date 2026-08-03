@@ -56,11 +56,12 @@ export async function createStaff(
   }
 
   // profile 업데이트 (role, position)
-  if (data.user && (role === "admin" || position)) {
+  const roleToSet = role === "admin" || role === "team_manager" ? role : null;
+  if (data.user && (roleToSet || position)) {
     await adminClient
       .from("profiles")
       .update({
-        ...(role === "admin" ? { role: "admin" } : {}),
+        ...(roleToSet ? { role: roleToSet } : {}),
         ...(position ? { position } : {}),
       })
       .eq("id", data.user.id);
