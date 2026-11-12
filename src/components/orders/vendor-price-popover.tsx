@@ -206,14 +206,15 @@ function resolveMatchCached(itemName: string, data: PriceData, visibleVendors: V
 }
 
 export const VENDOR_COLORS = [
-  { bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-700" },
-  { bg: "bg-rose-50", border: "border-rose-300", text: "text-rose-700" },
-  { bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-700" },
-  { bg: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-700" },
-  { bg: "bg-violet-50", border: "border-violet-300", text: "text-violet-700" },
-  { bg: "bg-cyan-50", border: "border-cyan-300", text: "text-cyan-700" },
-  { bg: "bg-orange-50", border: "border-orange-300", text: "text-orange-700" },
-  { bg: "bg-pink-50", border: "border-pink-300", text: "text-pink-700" },
+  // row: 업체가 지정된 주문 행 바탕(같은 업체 = 같은 색). bg보다 옅게 해서 버튼과 구분
+  { bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-700", row: "bg-blue-50/60" },
+  { bg: "bg-rose-50", border: "border-rose-300", text: "text-rose-700", row: "bg-rose-50/60" },
+  { bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-700", row: "bg-amber-50/60" },
+  { bg: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-700", row: "bg-emerald-50/60" },
+  { bg: "bg-violet-50", border: "border-violet-300", text: "text-violet-700", row: "bg-violet-50/60" },
+  { bg: "bg-cyan-50", border: "border-cyan-300", text: "text-cyan-700", row: "bg-cyan-50/60" },
+  { bg: "bg-orange-50", border: "border-orange-300", text: "text-orange-700", row: "bg-orange-50/60" },
+  { bg: "bg-pink-50", border: "border-pink-300", text: "text-pink-700", row: "bg-pink-50/60" },
 ] as const;
 
 export type VendorColor = (typeof VENDOR_COLORS)[number];

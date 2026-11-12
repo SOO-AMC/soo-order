@@ -1,22 +1,12 @@
 import { BLOOD_STATUS_LABEL, type BloodStatus } from "@/lib/types/blood";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 
-const STATUS_COLORS: Record<BloodStatus, string> = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  confirmed: "bg-green-100 text-green-800 border-green-300",
-};
-
-const STATUS_DOT_COLORS: Record<BloodStatus, string> = {
-  pending: "bg-yellow-500",
-  confirmed: "bg-green-500",
+/** 혈액 상태 → 공용 상태 톤. 대기 = 관리자 확인 필요(ask), 확인 = 완료(done). */
+const BLOOD_STATUS_TONE: Record<BloodStatus, StatusTone> = {
+  pending: "ask",
+  confirmed: "done",
 };
 
 export function BloodStatusBadge({ status }: { status: BloodStatus }) {
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[status]}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_COLORS[status]}`} />
-      {BLOOD_STATUS_LABEL[status]}
-    </span>
-  );
+  return <StatusBadge tone={BLOOD_STATUS_TONE[status]}>{BLOOD_STATUS_LABEL[status]}</StatusBadge>;
 }

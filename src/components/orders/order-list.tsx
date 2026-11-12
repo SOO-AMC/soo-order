@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, type ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Camera, ChevronRight, CircleAlert, ClipboardCopy, Check, ShoppingCart, X } from "lucide-react";
+import { Camera, ChevronRight, ClipboardCopy, Check, ShoppingCart, X } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
+import { FloatingActionBar, ListEmpty, ListSection, Tag, UnderlineTabs } from "@/components/list-parts";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,9 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { OrderStatusBadge, StatusLegend } from "./order-status-badge";
 import { VendorPricePopover, VENDOR_COLORS, initPriceCache, type VendorColor, type PriceData } from "./vendor-price-popover";
-import { formatDate } from "@/lib/utils/format";
+import { toKSTDateString } from "@/lib/utils/format";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import { applyRealtimeChange, pruneSet, pruneMap } from "@/lib/utils/realtime-list";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
@@ -40,14 +41,46 @@ import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 import { bulkDispatchAll, bulkDispatchIndividual } from "@/lib/actions/order-mutations";
 
+type OrderTab = "all" | "urgent" | "mine";
+
+const KST = "Asia/Seoul";
+
+/** 목록용 짧은 시각 (KST). 날짜 묶음 안에서는 "14:05", 긴급 묶음(날짜 섞임)에서는 "11. 10. 14:05" */
+function formatShort(iso: string, withDate: boolean): string {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString("ko-KR", { timeZone: KST, hour: "2-digit", minute: "2-digit", hour12: false });
+  if (!withDate) return time;
+  return `${d.toLocaleDateString("ko-KR", { timeZone: KST, month: "2-digit", day: "2-digit" })} ${time}`;
+}
+
+/** 날짜 구분 행 제목: "11월 11일 (화)" (KST) */
+function formatDayLabel(iso: string): string {
+  const d = new Date(iso);
+  const md = d.toLocaleDateString("ko-KR", { timeZone: KST, month: "long", day: "numeric" });
+  const wd = d.toLocaleDateString("ko-KR", { timeZone: KST, weekday: "short" });
+  return `${md} (${wd})`;
+}
+
+type OrderGroup = {
+  key: string;
+  label: string;
+  /** 오늘/어제 같은 보조 표시 */
+  hint?: string;
+  urgent?: boolean;
+  orders: OrderWithRequester[];
+};
+
 export function OrderList({
   initialPriceData,
   initialOrders,
   initialLastVendors,
+  headerAction,
 }: {
   initialPriceData?: PriceData;
   initialOrders?: OrderWithRequester[];
   initialLastVendors?: Record<string, string>;
+  /** 상단바 오른쪽 버튼 (주문 등록) — 서버 페이지에서 넘긴다 */
+  headerAction?: ReactNode;
 }) {
   if (initialPriceData) initPriceCache(initialPriceData);
   const { isAdmin, userId: currentUserId } = useAuth();
@@ -96,6 +129,9 @@ export function OrderList({
   const [lastVendorByItem] = useState<Map<string, string>>(
     () => new Map(Object.entries(initialLastVendors ?? {}))
   );
+  const [tab, setTab] = useState<OrderTab>("all");
+  // 오늘(KST) — "오늘 요청 / 이전 요청" 묶음 기준. 렌더 중 new Date() 금지라 지연 초기화
+  const [todayKST] = useState(() => toKSTDateString(new Date().toISOString()));
   const supabase = createClient();
   const router = useRouter();
 
@@ -213,7 +249,52 @@ export function OrderList({
     return map;
   }, [vendorSelections]);
 
-  const pendingOrders = sortedOrders.filter((o) => o.status === "pending");
+  const urgentCount = sortedOrders.filter((o) => o.is_urgent).length;
+  const mineCount = sortedOrders.filter((o) => o.requester_id === currentUserId).length;
+  const visibleOrders = useMemo(
+    () =>
+      tab === "urgent"
+        ? sortedOrders.filter((o) => o.is_urgent)
+        : tab === "mine"
+          ? sortedOrders.filter((o) => o.requester_id === currentUserId)
+          : sortedOrders,
+    [sortedOrders, tab, currentUserId]
+  );
+  // 묶음: 긴급(맨 위 고정) → 날짜별(최신순). sortedOrders는 created_at 내림차순이라 순서대로 모으면 된다
+  const groups = useMemo<OrderGroup[]>(() => {
+    const result: OrderGroup[] = [];
+    const urgent = visibleOrders.filter((o) => o.is_urgent);
+    if (urgent.length > 0) result.push({ key: "urgent", label: "긴급", urgent: true, orders: urgent });
+    const yesterdayKST = toKSTDateString(new Date(new Date(`${todayKST}T12:00:00+09:00`).getTime() - 86400000).toISOString());
+    const byDay = new Map<string, OrderGroup>();
+    for (const o of visibleOrders) {
+      if (o.is_urgent) continue;
+      const key = toKSTDateString(o.created_at);
+      let g = byDay.get(key);
+      if (!g) {
+        g = {
+          key,
+          label: formatDayLabel(o.created_at),
+          hint: key === todayKST ? "오늘" : key === yesterdayKST ? "어제" : undefined,
+          orders: [],
+        };
+        byDay.set(key, g);
+        result.push(g);
+      }
+      g.orders.push(o);
+    }
+    return result;
+  }, [visibleOrders, todayKST]);
+
+  /** 업체가 지정된 행은 업체 색 바탕(같은 업체 = 같은 색), 아니면 체크된 행만 옅은 파랑 */
+  const rowTint = (orderId: string) => {
+    const color = vendorColorMap.get(vendorSelections.get(orderId) ?? "");
+    if (color) return color.row;
+    return selectedIds.has(orderId) ? "bg-primary/[0.04]" : "";
+  };
+
+  // 전체선택은 지금 보이는 탭의 항목 기준
+  const pendingOrders = visibleOrders.filter((o) => o.status === "pending");
   const allPendingSelected =
     pendingOrders.length > 0 &&
     pendingOrders.every((o) => selectedIds.has(o.id));
@@ -335,265 +416,293 @@ export function OrderList({
     }
   };
 
+  const header = (
+    <PageHeader
+      title="주문"
+      description={`발주 대기 ${sortedOrders.length}건`}
+      action={headerAction}
+      tabs={
+        <UnderlineTabs<OrderTab>
+          ariaLabel="주문 보기"
+          value={tab}
+          onValueChange={setTab}
+          items={[
+            { value: "all", label: "전체", count: sortedOrders.length },
+            { value: "urgent", label: "긴급", count: urgentCount },
+            { value: "mine", label: "내 요청", count: mineCount },
+          ]}
+        />
+      }
+    />
+  );
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Spinner text="불러오는 중..." />
-      </div>
+      <>
+        {header}
+        <div className="flex items-center justify-center py-16">
+          <Spinner text="불러오는 중..." />
+        </div>
+      </>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-destructive">데이터를 불러올 수 없습니다.</p>
-        <p className="mt-1 text-sm text-muted-foreground">{error}</p>
-      </div>
-    );
-  }
-
-  if (sortedOrders.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-muted-foreground">
-          등록된 주문이 없습니다.
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          새 주문을 등록하세요.
-        </p>
-      </div>
+      <>
+        {header}
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <p className="text-destructive">데이터를 불러올 수 없어요.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+        </div>
+      </>
     );
   }
 
   const showActionBar = selectedIds.size > 0 || vendorSelectedIds.length > 0;
+  const emptyText =
+    tab === "urgent" ? "긴급 주문이 없어요." : tab === "mine" ? "내가 요청한 대기 주문이 없어요." : "발주 대기 중인 주문이 없어요.";
+
+  /** 모바일 한 줄: [체크] 품목명+긴급 / 수량·요청자·시각·사진 / 비고 → 상세. 관리자는 아래에 업체 선택 */
+  const renderMobileRow = (order: OrderWithRequester, withDate: boolean) => {
+    const showCheckbox = isAdmin && order.status === "pending";
+    const isSelected = selectedIds.has(order.id);
+    return (
+      <div key={order.id} className={cn("border-t border-border transition-colors", rowTint(order.id))}>
+        <div className="flex items-center gap-3 px-4 py-3">
+          {showCheckbox && (
+            <Checkbox
+              className="size-[18px]"
+              checked={isSelected}
+              onCheckedChange={() => toggleSelect(order.id)}
+              aria-label={`${order.item_name} 선택`}
+            />
+          )}
+          <Link href={`/orders/${order.id}`} className="flex min-w-0 flex-1 items-center gap-3 active:opacity-70">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-[15px] font-semibold">{order.item_name}</span>
+                {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+              </div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                <span>
+                  {order.quantity > 0 ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}` : "사진 참고"}
+                </span>
+                {order.requester?.full_name && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="truncate">{order.requester.full_name}</span>
+                  </>
+                )}
+                <span aria-hidden="true">·</span>
+                <span className="shrink-0 tabular-nums">{formatShort(order.created_at, withDate)}</span>
+                {order.photo_urls?.length > 0 && (
+                  <span className="flex shrink-0 items-center gap-0.5">
+                    <Camera className="h-3 w-3" aria-label="사진" />
+                    {order.photo_urls.length}
+                  </span>
+                )}
+              </div>
+              {order.notes && (
+                <div className="mt-0.5 truncate text-[13px] text-subtle-foreground" title={order.notes}>
+                  {order.notes}
+                </div>
+              )}
+            </div>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </Link>
+        </div>
+        {isAdmin && (
+          <div className={cn("pb-3 pr-4", showCheckbox ? "pl-[46px]" : "pl-4")}>
+            <VendorPricePopover
+              itemName={order.item_name}
+              selectedVendor={vendorSelections.get(order.id) ?? ""}
+              vendorColor={vendorColorMap.get(vendorSelections.get(order.id) ?? "")}
+              lastOrderedVendor={lastVendorByItem.get(normalizeItemName(order.item_name))}
+              onSelectVendor={(v) => handleVendorSelect(order.id, v)}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div className={cn("space-y-2", showActionBar && "pb-24 lg:pb-20")}>
-      <div className="flex items-center justify-between gap-2 px-1 py-2">
-        {isAdmin && pendingOrders.length > 0 ? (
-          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-            <Checkbox
-              className="h-5 w-5"
-              checked={allPendingSelected}
-              onCheckedChange={toggleSelectAll}
-            />
-            전체선택 ({pendingOrders.length}건)
+    <>
+      {header}
+      <div className={cn("space-y-3 p-4 lg:px-6", showActionBar && "pb-28 lg:pb-24")}>
+      {isAdmin && pendingOrders.length > 0 && (
+        <div className="flex min-h-9 items-center justify-between gap-2 px-1">
+          <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-subtle-foreground">
+            <Checkbox className="size-[18px]" checked={allPendingSelected} onCheckedChange={toggleSelectAll} />
+            전체 선택 ({pendingOrders.length}건)
           </label>
-        ) : (
-          <div />
-        )}
-        <div className="flex items-center gap-2">
-          {isAdmin && vendorSelectedIds.length > 0 && (
+          {vendorSelectedIds.length > 0 && (
             <button
               type="button"
               onClick={() => setVendorSelections(new Map())}
-              className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="rounded-md px-2 py-1 text-[13px] font-medium text-subtle-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               업체 선택 해제 ({vendorSelectedIds.length}건)
             </button>
           )}
-          <StatusLegend />
         </div>
-      </div>
+      )}
 
-      {/* PC 테이블 뷰 */}
-      <div className="hidden lg:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {isAdmin && <TableHead className="w-10" />}
-              <TableHead>상태</TableHead>
-              {isAdmin && <TableHead>업체</TableHead>}
-              <TableHead>품목명</TableHead>
-              <TableHead>수량</TableHead>
-              <TableHead>요청자</TableHead>
-              <TableHead>요청일</TableHead>
-              <TableHead>비고</TableHead>
-              <TableHead className="w-12">사진</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sortedOrders.map((order) => {
-              const isPending = order.status === "pending";
-              const showCheckbox = isAdmin && isPending;
-              const isSelected = selectedIds.has(order.id);
-
-              return (
-                <TableRow
-                  key={order.id}
-                  className="cursor-pointer"
-                  onClick={() => router.push(`/orders/${order.id}`)}
-                >
-                  {isAdmin && (
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      {showCheckbox && (
-                        <Checkbox
-                          className="h-5 w-5"
-                          checked={isSelected}
-                          onCheckedChange={() => toggleSelect(order.id)}
-                        />
-                      )}
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    <OrderStatusBadge status={order.status} />
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <VendorPricePopover
-                        itemName={order.item_name}
-                        selectedVendor={vendorSelections.get(order.id) ?? ""}
-                        vendorColor={vendorColorMap.get(vendorSelections.get(order.id) ?? "")}
-                        lastOrderedVendor={lastVendorByItem.get(normalizeItemName(order.item_name))}
-                        onSelectVendor={(v) => handleVendorSelect(order.id, v)}
-                      />
-                    </TableCell>
-                  )}
-                  <TableCell className="font-medium">
-                    <span className="flex items-center gap-1.5">
-                      {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
-                      {order.item_name}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {order.quantity > 0
-                      ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
-                      : <span className="text-muted-foreground">(사진 참고)</span>}
-                  </TableCell>
-                  <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
-                  <TableCell>{formatDate(order.created_at)}</TableCell>
-                  <TableCell>
-                    <div className="max-w-[24rem] truncate text-muted-foreground" title={order.notes || undefined}>
-                      {order.notes || "-"}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {order.photo_urls?.length > 0 && (
-                      <span className="flex items-center gap-1 text-muted-foreground">
-                        <Camera className="h-3.5 w-3.5" />
-                        {order.photo_urls.length}
-                      </span>
-                    )}
-                  </TableCell>
+      {visibleOrders.length === 0 ? (
+        <ListSection>
+          <ListEmpty>{emptyText}</ListEmpty>
+        </ListSection>
+      ) : (
+        <>
+          {/* PC 표 */}
+          <ListSection className="hidden lg:flex">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  {isAdmin && <TableHead className="w-10 pl-4" />}
+                  {isAdmin && <TableHead className="text-xs font-semibold text-muted-foreground">업체</TableHead>}
+                  <TableHead className={cn("text-xs font-semibold text-muted-foreground", !isAdmin && "pl-4")}>품목명</TableHead>
+                  <TableHead className="text-right text-xs font-semibold text-muted-foreground">수량</TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground">요청자</TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground">시각</TableHead>
+                  <TableHead className="text-xs font-semibold text-muted-foreground">비고</TableHead>
+                  <TableHead className="w-12 pr-4 text-xs font-semibold text-muted-foreground">사진</TableHead>
                 </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* 모바일/태블릿 카드 뷰 */}
-      <div className="lg:hidden space-y-2">
-        {sortedOrders.map((order) => {
-          const isPending = order.status === "pending";
-          const showCheckbox = isAdmin && isPending;
-          const isSelected = selectedIds.has(order.id);
-
-          return (
-            <div
-              key={order.id}
-              className="rounded-xl bg-card shadow-card overflow-hidden"
-            >
-              <div className="flex items-center gap-3 p-4 transition-colors">
-                {showCheckbox && (
-                  <Checkbox
-                    className="h-5 w-5"
-                    checked={isSelected}
-                    onCheckedChange={() => toggleSelect(order.id)}
-                  />
-                )}
-                <Link
-                  href={`/orders/${order.id}`}
-                  className="flex flex-1 items-center gap-3 min-w-0 active:opacity-70"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <OrderStatusBadge status={order.status} />
-                      {order.is_urgent && <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />}
-                      <span className="truncate font-medium">{order.item_name}</span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>
-                        {order.quantity > 0
-                          ? `수량: ${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
-                          : <span className="text-muted-foreground">(사진 참고)</span>}
+              </TableHeader>
+              <TableBody>
+                {groups.map((g) => [
+                  // 날짜(또는 긴급) 구분 행
+                  <TableRow key={`g-${g.key}`} className="bg-muted hover:bg-muted">
+                    <TableCell colSpan={isAdmin ? 8 : 6} className="py-2 pl-4">
+                      <span className="flex items-center gap-2 text-xs font-semibold">
+                        <span className={g.urgent ? "text-status-late" : "text-subtle-foreground"}>{g.label}</span>
+                        <span className="font-medium tabular-nums text-muted-foreground">{g.orders.length}건</span>
+                        {g.hint && <Tag className="h-[18px]">{g.hint}</Tag>}
                       </span>
-                      <span>·</span>
-                      <span>{formatDate(order.created_at)}</span>
-                      {order.requester?.full_name && (
-                        <>
-                          <span>·</span>
-                          <span>요청자: {order.requester.full_name}</span>
-                        </>
+                    </TableCell>
+                  </TableRow>,
+                  ...g.orders.map((order) => {
+                  const showCheckbox = isAdmin && order.status === "pending";
+                  const isSelected = selectedIds.has(order.id);
+                  return (
+                    <TableRow
+                      key={order.id}
+                      className={cn("cursor-pointer hover:bg-muted/60", rowTint(order.id))}
+                      onClick={() => router.push(`/orders/${order.id}`)}
+                    >
+                      {isAdmin && (
+                        <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
+                          {showCheckbox && (
+                            <Checkbox
+                              className="size-[18px]"
+                              checked={isSelected}
+                              onCheckedChange={() => toggleSelect(order.id)}
+                              aria-label={`${order.item_name} 선택`}
+                            />
+                          )}
+                        </TableCell>
                       )}
-                      {order.photo_urls?.length > 0 && (
-                        <>
-                          <span>·</span>
-                          <span className="flex items-center gap-0.5">
-                            <Camera className="h-3 w-3" />
+                      {isAdmin && (
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <VendorPricePopover
+                            itemName={order.item_name}
+                            selectedVendor={vendorSelections.get(order.id) ?? ""}
+                            vendorColor={vendorColorMap.get(vendorSelections.get(order.id) ?? "")}
+                            lastOrderedVendor={lastVendorByItem.get(normalizeItemName(order.item_name))}
+                            onSelectVendor={(v) => handleVendorSelect(order.id, v)}
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell className={cn("font-semibold", !isAdmin && "pl-4")}>
+                        <span className="flex items-center gap-1.5">
+                          {order.item_name}
+                          {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {order.quantity > 0
+                          ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
+                          : <span className="text-muted-foreground">사진 참고</span>}
+                      </TableCell>
+                      <TableCell>{order.requester?.full_name ?? "-"}</TableCell>
+                      <TableCell className="tabular-nums text-subtle-foreground">{formatShort(order.created_at, !!g.urgent)}</TableCell>
+                      <TableCell>
+                        <div className="max-w-[24rem] truncate text-muted-foreground" title={order.notes || undefined}>
+                          {order.notes || "-"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="pr-4">
+                        {order.photo_urls?.length > 0 && (
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Camera className="h-3.5 w-3.5" aria-label="사진" />
                             {order.photo_urls.length}
                           </span>
-                        </>
-                      )}
-                    </div>
-                    {order.notes && (
-                      <div className="mt-1 truncate text-sm text-muted-foreground" title={order.notes}>
-                        비고: {order.notes}
-                      </div>
-                    )}
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </Link>
-              </div>
-              {isAdmin && (
-                <div className="border-t border-border px-4 py-2">
-                  <VendorPricePopover
-                    itemName={order.item_name}
-                    selectedVendor={vendorSelections.get(order.id) ?? ""}
-                    lastOrderedVendor={lastVendorByItem.get(normalizeItemName(order.item_name))}
-                    onSelectVendor={(v) => handleVendorSelect(order.id, v)}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                  }),
+                ])}
+              </TableBody>
+            </Table>
+          </ListSection>
+
+          {/* 모바일/태블릿: 오늘 / 이전 묶음 */}
+          <div className="space-y-3 lg:hidden">
+            {groups.map((g) => (
+              <ListSection
+                key={g.key}
+                title={g.label}
+                count={g.orders.length}
+                className={g.urgent ? "ring-status-late/40" : undefined}
+                actions={g.hint ? <Tag>{g.hint}</Tag> : undefined}
+              >
+                {g.orders.map((o) => renderMobileRow(o, !!g.urgent))}
+              </ListSection>
+            ))}
+          </div>
+        </>
+      )}
 
       {showActionBar && (
-        <div className="fixed bottom-20 left-0 right-0 z-50 flex items-center justify-center gap-2 px-4 lg:left-60 lg:bottom-4">
+        <FloatingActionBar
+          label={[
+            selectedIds.size > 0 && `${selectedIds.size}건 선택`,
+            vendorSelectedIds.length > 0 && `업체 지정 ${vendorSelectedIds.length}건`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        >
           {vendorSelectedIds.length > 0 && (
-            <div className="flex flex-1 max-w-md items-center gap-1">
-              <Button
-                className="flex-1 shadow-lg"
-                onClick={() => openBulkDialog("vendor")}
-              >
-                <ShoppingCart className="h-4 w-4" />
-                {`업체 선택 주문 (${vendorSelectedIds.length}건)`}
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="shrink-0 bg-card shadow-lg"
-                onClick={() => setVendorSelections(new Map())}
-                aria-label="업체 선택 해제"
-                title="업체 선택 해제"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-          {selectedIds.size > 0 && (
             <Button
-              variant="default"
-              className="flex-1 max-w-md shadow-lg"
-              onClick={() => openBulkDialog("checkbox")}
+              size="sm"
+              className="h-9 bg-white/15 text-white hover:bg-white/25"
+              onClick={() => openBulkDialog("vendor")}
             >
-              <ShoppingCart className="h-4 w-4" />
-              {`선택 항목 주문 (${selectedIds.size}건)`}
+              업체별 주문
             </Button>
           )}
-        </div>
+          {selectedIds.size > 0 && (
+            <Button size="sm" className="h-9" onClick={() => openBulkDialog("checkbox")}>
+              <ShoppingCart className="h-4 w-4" />
+              선택 주문
+            </Button>
+          )}
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="text-white/80 hover:bg-white/10 hover:text-white"
+            onClick={() => {
+              setSelectedIds(new Set());
+              setVendorSelections(new Map());
+            }}
+            aria-label="선택 모두 해제"
+            title="선택 모두 해제"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </FloatingActionBar>
       )}
 
       <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
@@ -737,6 +846,7 @@ export function OrderList({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </>
   );
 }
