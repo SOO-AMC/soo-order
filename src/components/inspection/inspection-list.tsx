@@ -22,6 +22,7 @@ import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { PhotoGallery } from "@/components/orders/photo-gallery";
 import { toKSTDateString } from "@/lib/utils/format";
 import { logClientAction } from "@/app/(main)/log-action";
+import { useAuth } from "@/hooks/use-auth";
 import type { OrderWithRequester } from "@/lib/types/order";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { applyRealtimeChange, pruneSet } from "@/lib/utils/realtime-list";
@@ -74,6 +75,11 @@ function groupByVendor(orders: OrderWithRequester[]): OrderGroup[] {
     }));
 }
 
+/** 선택 상자 — 여러 건을 골라 처리할 수 있는 사람(관리자)에게만 그린다 */
+function SelectBox({ show, ...props }: { show: boolean } & React.ComponentProps<typeof Checkbox>) {
+  return show ? <Checkbox {...props} /> : null;
+}
+
 /**
  * 받은 수량 칸 (PC): "1 / 2 박스". 누르면 그 자리에서 숫자 입력 → Enter 저장, Esc 취소.
  * 주문보다 적으면 부분입고로 남고, 다 받으면 검수완료가 된다.
@@ -81,9 +87,12 @@ function groupByVendor(orders: OrderWithRequester[]): OrderGroup[] {
 const QtyCell = memo(function QtyCell({
   order,
   onCommit,
+  editable,
 }: {
   order: OrderWithRequester;
   onCommit: (order: OrderWithRequester, received: number) => Promise<void>;
+  /** 받은 수량을 고칠 수 있는가 (관리자) */
+  editable: boolean;
 }) {
   const received = order.received_quantity ?? 0;
   const [editing, setEditing] = useState(false);
@@ -131,6 +140,7 @@ const QtyCell = memo(function QtyCell({
   return (
     <button
       type="button"
+      disabled={!editable}
       onClick={(e) => {
         e.stopPropagation();
         setValue(String(received > 0 ? received : order.quantity));
@@ -163,6 +173,9 @@ export function InspectionList({
   const [inspectionNotes, setInspectionNotes] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionError, setActionError] = useState("");
+  // 검수·품절 처리는 관리자만 할 수 있다(서버도 막는다). 직원에게는 목록만 보여 주고
+  // 누르면 실패만 하는 버튼·선택 상자·관리자끼리 보는 메모는 내보이지 않는다.
+  const { isAdmin } = useAuth();
   /** 여러 건 품절 처리 창 */
   const [oosOpen, setOosOpen] = useState(false);
   const [oosReason, setOosReason] = useState("");
@@ -469,13 +482,15 @@ export function InspectionList({
       title="검수"
       description={`검수 대기 ${orders.length}건${viewCounts.late > 0 ? ` · ${LATE_DAYS}일 넘은 것 ${viewCounts.late}` : ""}`}
       action={
-        <Button asChild variant="outline" className="h-10 rounded-lg px-3 text-[13px] lg:h-9">
-          <Link href="/invoice-scan">
-            <ScanLine className="size-4" />
-            <span className="hidden sm:inline">명세서로 검수</span>
-            <span className="sm:hidden">명세서</span>
-          </Link>
-        </Button>
+        isAdmin && (
+          <Button asChild variant="outline" className="h-10 rounded-lg px-3 text-[13px] lg:h-9">
+            <Link href="/invoice-scan">
+              <ScanLine className="size-4" />
+              <span className="hidden sm:inline">명세서로 검수</span>
+              <span className="sm:hidden">명세서</span>
+            </Link>
+          </Button>
+        )
       }
     />
   );
@@ -562,7 +577,7 @@ export function InspectionList({
     const lateInGroup = g.orders.some(isLate);
     return (
       <span className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-1">
-        <Checkbox
+        <SelectBox show={isAdmin}
           className="size-[18px]"
           checked={groupAll ? true : groupSome ? "indeterminate" : false}
           onCheckedChange={() => toggleGroup(g)}
@@ -585,7 +600,7 @@ export function InspectionList({
             {LATE_DAYS}일 지남
           </span>
         )}
-        {groupMode === "vendor" &&
+        {isAdmin && groupMode === "vendor" &&
           (confirmGroup === g.key ? (
             // 한 번 더 눌러야 실행 (실수로 묶음 전체가 검수완료되지 않도록)
             <span className="ml-auto flex items-center gap-1">
@@ -684,7 +699,7 @@ export function InspectionList({
           <WorkspaceSplit>
             <div className="min-w-0 flex-1 space-y-3">
               <label className="flex min-h-8 cursor-pointer items-center gap-2 px-1 text-[13px] font-medium text-subtle-foreground lg:hidden">
-                <Checkbox
+                <SelectBox show={isAdmin}
                   className="size-[18px]"
                   checked={allSelected ? true : someSelected ? "indeterminate" : false}
                   onCheckedChange={toggleSelectAll}
@@ -698,7 +713,7 @@ export function InspectionList({
                   <thead>
                     <tr className="text-left text-xs font-semibold text-muted-foreground">
                       <th className="w-11 border-b border-border bg-muted py-2 pl-4">
-                        <Checkbox
+                        <SelectBox show={isAdmin}
                           className="size-[18px]"
                           checked={allSelected ? true : someSelected ? "indeterminate" : false}
                           onCheckedChange={toggleSelectAll}
@@ -733,7 +748,7 @@ export function InspectionList({
                             )}
                           >
                             <td className="border-t border-border py-2.5 pl-4" onClick={(e) => e.stopPropagation()}>
-                              <Checkbox
+                              <SelectBox show={isAdmin}
                                 className="size-[18px]"
                                 checked={isSelected}
                                 onCheckedChange={() => toggleSelect(order.id)}
@@ -745,15 +760,16 @@ export function InspectionList({
                               {metaLine(order, false)}
                             </td>
                             <td className="border-t border-border px-3 py-2 text-right align-middle">
-                              <QtyCell order={order} onCommit={commitReceived} />
+                              <QtyCell order={order} onCommit={commitReceived} editable={isAdmin} />
                               {partialBadge(order) && <div>{partialBadge(order)}</div>}
                             </td>
                             <td className="border-t border-border px-3 py-2 pr-4" onClick={(e) => e.stopPropagation()}>
                               {/* 메모는 입력 즉시 자동 저장. 비어 있을 땐 상자 없이 옅게 */}
                               <Input
                                 type="text"
-                                placeholder="+ 메모"
-                                value={memoValue}
+                                placeholder={isAdmin ? "+ 메모" : ""}
+                                disabled={!isAdmin}
+                                value={isAdmin ? memoValue : ""}
                                 onChange={(e) => handleMemoChange(order.id, e.target.value)}
                                 aria-label={`${order.item_name} 메모`}
                                 className={cn(
@@ -796,7 +812,7 @@ export function InspectionList({
                             isSelected && "bg-row-selected"
                           )}
                         >
-                          <Checkbox
+                          <SelectBox show={isAdmin}
                             className="mt-0.5 size-[22px] rounded-md"
                             checked={isSelected}
                             onCheckedChange={() => toggleSelect(order.id)}
@@ -814,7 +830,7 @@ export function InspectionList({
                               </span>
                               {metaLine(order, true)}
                               {partialBadge(order)}
-                              {memos[order.id] && (
+                              {isAdmin && memos[order.id] && (
                                 <span className="mt-0.5 block truncate text-[13px] text-subtle-foreground">메모: {memos[order.id]}</span>
                               )}
                             </span>
@@ -822,6 +838,7 @@ export function InspectionList({
                           {order.quantity > 0 ? (
                             <button
                               type="button"
+                              disabled={!isAdmin}
                               onClick={() => setQtySheetId(order.id)}
                               aria-label={`${order.item_name} 받은 수량·메모`}
                               className={cn(
@@ -856,6 +873,7 @@ export function InspectionList({
                 onPrev={detailIndex > 0 ? () => setDetailId(flatOrders[detailIndex - 1].id) : undefined}
                 onNext={detailIndex >= 0 && detailIndex < flatOrders.length - 1 ? () => setDetailId(flatOrders[detailIndex + 1].id) : undefined}
                 onInspect={() => inspectIds([detailOrder.id], detailOrder.item_name)}
+                canAct={isAdmin}
                 processing={isProcessing}
               />
             )}
@@ -937,6 +955,7 @@ function InspectionDetail({
   onNext,
   onInspect,
   processing,
+  canAct,
 }: {
   order: OrderWithRequester;
   late: boolean;
@@ -949,6 +968,8 @@ function InspectionDetail({
   onNext?: () => void;
   onInspect: () => void;
   processing: boolean;
+  /** 검수 완료·메모를 쓸 수 있는가 (관리자) */
+  canAct: boolean;
 }) {
   const received = order.received_quantity ?? 0;
   const at = (iso: string | null) =>
@@ -977,10 +998,12 @@ function InspectionDetail({
               전체 보기
             </Link>
           </Button>
-          <Button className="h-10 flex-[1.6] rounded-lg lg:h-9" disabled={processing} onClick={onInspect}>
-            <ClipboardCheck className="size-4" />
-            {processing ? "처리하는 중…" : "검수 완료"}
-          </Button>
+          {canAct && (
+            <Button className="h-10 flex-[1.6] rounded-lg lg:h-9" disabled={processing} onClick={onInspect}>
+              <ClipboardCheck className="size-4" />
+              {processing ? "처리하는 중…" : "검수 완료"}
+            </Button>
+          )}
         </div>
       }
     >
@@ -1009,6 +1032,8 @@ function InspectionDetail({
           ]}
         />
 
+        {canAct && (
+        <>
         <section className="flex flex-col gap-1.5">
           <label htmlFor={`memo-${order.id}`} className="text-[13px] font-semibold text-subtle-foreground">
             메모 <span className="font-normal text-muted-foreground">· 관리자끼리 보는 메모, 바로 저장돼요</span>
@@ -1034,6 +1059,8 @@ function InspectionDetail({
             className="h-10 text-sm lg:h-9"
           />
         </section>
+        </>
+        )}
 
         {order.photo_urls?.length > 0 && (
           <section className="flex flex-col gap-2">

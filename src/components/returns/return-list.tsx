@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import Link from "next/link";
 import { Camera, CheckCheck, ChevronRight, ExternalLink, Undo2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -37,6 +38,11 @@ const at = (iso: string | null) =>
     ? new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })
     : undefined;
 
+/** 선택 상자 — 여러 건을 골라 처리할 수 있는 사람(관리자)에게만 그린다 */
+function SelectBox({ show, ...props }: { show: boolean } & React.ComponentProps<typeof Checkbox>) {
+  return show ? <Checkbox {...props} /> : null;
+}
+
 export function ReturnList({
   initialOrders,
   headerAction,
@@ -53,6 +59,8 @@ export function ReturnList({
   const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionError, setActionError] = useState("");
+  // 반품 접수·완료 처리는 관리자만 할 수 있다(서버도 막는다). 직원에게는 목록만 보여 준다.
+  const { isAdmin } = useAuth();
   const [view, setView] = useState<ViewKey>("all");
   const [query, setQuery] = useState("");
   const [vendorFilter, setVendorFilter] = useState<string | null>(null);
@@ -346,6 +354,7 @@ export function ReturnList({
                 onClose={() => setDetailId(null)}
                 onPrev={detailIndex > 0 ? () => setDetailId(flatOrders[detailIndex - 1].id) : undefined}
                 onNext={detailIndex >= 0 && detailIndex < flatOrders.length - 1 ? () => setDetailId(flatOrders[detailIndex + 1].id) : undefined}
+                canAct={isAdmin}
                 onDispatch={() => dispatch([detailOrder.id])}
                 onComplete={() => complete([detailOrder.id])}
                 processing={isProcessing}
@@ -355,7 +364,7 @@ export function ReturnList({
         )}
       </div>
 
-      {showBar && (
+      {isAdmin && showBar && (
         <FloatingActionBar
           label={[
             selectedRequestedIds.size > 0 && `신청 ${selectedRequestedIds.size}건`,
@@ -474,6 +483,7 @@ function ReturnSection({
   onToggleAll,
   onRowClick,
 }: SectionProps) {
+  const { isAdmin } = useAuth();
   const count = orders.length;
   const allSelected = count > 0 && orders.every((o) => selectedIds.has(o.id));
   const someSelected = !allSelected && orders.some((o) => selectedIds.has(o.id));
@@ -483,7 +493,7 @@ function ReturnSection({
     <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border lg:rounded-xl">
       {/* 단계 머리글: 전체 선택 + 단계 번호 + 상태 + 건수 + 설명 */}
       <div className="flex min-h-12 items-center gap-2.5 bg-muted px-4 py-2">
-        <Checkbox
+        <SelectBox show={isAdmin}
           className="size-[18px]"
           checked={allSelected ? true : someSelected ? "indeterminate" : false}
           onCheckedChange={onToggleAll}
@@ -528,7 +538,7 @@ function ReturnSection({
                     )}
                   >
                     <td className={cn("py-2.5 pl-4", i > 0 && "border-t border-border")} onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
+                      <SelectBox show={isAdmin}
                         className="size-[18px]"
                         checked={isSelected}
                         onCheckedChange={() => onToggle(order.id)}
@@ -567,7 +577,7 @@ function ReturnSection({
                   key={order.id}
                   className={cn("flex items-start gap-3 border-t border-border px-4 py-3 transition-colors", isSelected && "bg-row-selected")}
                 >
-                  <Checkbox
+                  <SelectBox show={isAdmin}
                     className="mt-0.5 size-[22px] rounded-md"
                     checked={isSelected}
                     onCheckedChange={() => onToggle(order.id)}
@@ -601,6 +611,7 @@ function ReturnDetail({
   onNext,
   onDispatch,
   onComplete,
+  canAct,
   processing,
 }: {
   order: OrderWithRequester;
@@ -609,6 +620,8 @@ function ReturnDetail({
   onNext?: () => void;
   onDispatch: () => void;
   onComplete: () => void;
+  /** 반품 접수·완료를 누를 수 있는가 (관리자) */
+  canAct: boolean;
   processing: boolean;
 }) {
   const isRequested = order.status === "return_requested";
@@ -633,7 +646,7 @@ function ReturnDetail({
               전체 보기
             </Link>
           </Button>
-          {isRequested ? (
+          {!canAct ? null : isRequested ? (
             <Button className="h-10 flex-[1.6] rounded-lg lg:h-9" disabled={processing} onClick={onDispatch}>
               <Undo2 className="size-4" />
               {processing ? "처리하는 중…" : "반품 접수"}
