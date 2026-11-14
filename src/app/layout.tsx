@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 // Pretendard를 앱에 직접 포함(수링크와 동일). 이전 CDN 주소(jsdelivr gh)는 404라 폰트가 한 번도 적용되지 않았다.
 const pretendard = localFont({
@@ -45,7 +46,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${pretendard.variable} antialiased`}>
+    // 다크 클래스는 아래 스크립트가 그리기 전에 붙이므로 서버 HTML과 다를 수 있다 → suppressHydrationWarning
+    <html lang="ko" className={`${pretendard.variable} antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>{children}</body>
     </html>
   );

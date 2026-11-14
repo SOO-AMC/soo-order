@@ -157,14 +157,14 @@ export function SearchFilterSheet({
                   type="date"
                   value={local.dateFrom}
                   onChange={(e) => setLocal((p) => ({ ...p, dateFrom: e.target.value }))}
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
+                  className="flex h-9 w-full min-w-0 rounded-lg border border-input bg-card px-2 py-1 text-sm tabular-nums"
                 />
                 <span className="shrink-0 text-muted-foreground">~</span>
                 <input
                   type="date"
                   value={local.dateTo}
                   onChange={(e) => setLocal((p) => ({ ...p, dateTo: e.target.value }))}
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
+                  className="flex h-9 w-full min-w-0 rounded-lg border border-input bg-card px-2 py-1 text-sm tabular-nums"
                 />
               </div>
             </div>
@@ -198,14 +198,14 @@ export function SearchFilterSheet({
                   type="date"
                   value={local.ordDateFrom}
                   onChange={(e) => setLocal((p) => ({ ...p, ordDateFrom: e.target.value }))}
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
+                  className="flex h-9 w-full min-w-0 rounded-lg border border-input bg-card px-2 py-1 text-sm tabular-nums"
                 />
                 <span className="shrink-0 text-muted-foreground">~</span>
                 <input
                   type="date"
                   value={local.ordDateTo}
                   onChange={(e) => setLocal((p) => ({ ...p, ordDateTo: e.target.value }))}
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
+                  className="flex h-9 w-full min-w-0 rounded-lg border border-input bg-card px-2 py-1 text-sm tabular-nums"
                 />
               </div>
             </div>
@@ -239,14 +239,14 @@ export function SearchFilterSheet({
                   type="date"
                   value={local.inspDateFrom}
                   onChange={(e) => setLocal((p) => ({ ...p, inspDateFrom: e.target.value }))}
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
+                  className="flex h-9 w-full min-w-0 rounded-lg border border-input bg-card px-2 py-1 text-sm tabular-nums"
                 />
                 <span className="shrink-0 text-muted-foreground">~</span>
                 <input
                   type="date"
                   value={local.inspDateTo}
                   onChange={(e) => setLocal((p) => ({ ...p, inspDateTo: e.target.value }))}
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
+                  className="flex h-9 w-full min-w-0 rounded-lg border border-input bg-card px-2 py-1 text-sm tabular-nums"
                 />
               </div>
             </div>
@@ -304,14 +304,14 @@ export function SearchFilterSheet({
                   type="date"
                   value={local.retDateFrom}
                   onChange={(e) => setLocal((p) => ({ ...p, retDateFrom: e.target.value }))}
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
+                  className="flex h-9 w-full min-w-0 rounded-lg border border-input bg-card px-2 py-1 text-sm tabular-nums"
                 />
                 <span className="shrink-0 text-muted-foreground">~</span>
                 <input
                   type="date"
                   value={local.retDateTo}
                   onChange={(e) => setLocal((p) => ({ ...p, retDateTo: e.target.value }))}
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
+                  className="flex h-9 w-full min-w-0 rounded-lg border border-input bg-card px-2 py-1 text-sm tabular-nums"
                 />
               </div>
             </div>

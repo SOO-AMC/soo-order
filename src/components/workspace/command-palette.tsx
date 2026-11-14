@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { CornerDownLeft, Plus, Search } from "lucide-react";
+import { CornerDownLeft, Moon, Plus, Search, Sun } from "lucide-react";
+import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +17,7 @@ import { POSITION_LABEL, type Position } from "@/lib/types/member";
  * 비어 있으면 메뉴 바로가기와 자주 하는 동작, 입력하면 메뉴 + 직원·약품·업체·주문 검색(기존 전체검색과 같은 대상).
  */
 
-type Entry = { key: string; group: string; label: string; hint?: string; href: string; icon?: "plus" };
+type Entry = { key: string; group: string; label: string; hint?: string; href: string; icon?: "plus" | "theme"; run?: () => void };
 
 const CommandPaletteContext = createContext<{ open: () => void }>({ open: () => {} });
 
@@ -53,6 +54,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
 function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
   const { isAdmin } = useAuth();
+  const { dark, toggle: toggleTheme } = useTheme();
   const [q, setQ] = useState("");
   const [res, setRes] = useState<GlobalSearchResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -96,10 +98,22 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
     const menus: Entry[] = NAV_GROUPS.filter((g) => !g.adminOnly || isAdmin).flatMap((g) =>
       g.items.map((it) => ({ key: `m:${it.href}`, group: "메뉴로 이동", label: it.label, hint: g.label, href: it.href }))
     );
-    const actions: Entry[] = [{ key: "a:new-order", group: "동작", label: "새 주문 등록", href: "/orders/new", icon: "plus" }];
+    const actions: Entry[] = [
+      { key: "a:new-order", group: "동작", label: "새 주문 등록", href: "/orders/new", icon: "plus" },
+      {
+        key: "a:theme",
+        group: "동작",
+        label: dark ? "라이트 모드로 바꾸기" : "다크 모드로 바꾸기",
+        hint: "화면 모드",
+        href: "",
+        icon: "theme",
+        run: toggleTheme,
+      },
+    ];
     if (!term) return [...actions, ...menus];
+    const themeHit = actions.filter((a) => a.icon === "theme" && ("다크 라이트 화면 모드 테마".includes(term) || a.label.includes(term)));
 
-    const out: Entry[] = menus.filter((m) => m.label.toLowerCase().includes(term));
+    const out: Entry[] = [...themeHit, ...menus.filter((m) => m.label.toLowerCase().includes(term))];
     if (res) {
       for (const p of res.products)
         out.push({ key: `p:${p.name}`, group: "약품", label: p.name, hint: p.price != null ? `최저 ${won(p.price)}` : undefined, href: `/price-compare?q=${encodeURIComponent(p.name)}` });
@@ -117,12 +131,13 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
         });
     }
     return out;
-  }, [q, res, isAdmin]);
+  }, [q, res, isAdmin, dark, toggleTheme]);
 
   const go = (e: Entry) => {
     onOpenChange(false);
     reset();
-    router.push(e.href);
+    if (e.run) e.run();
+    else router.push(e.href);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -197,6 +212,7 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
                   )}
                 >
                   {e.icon === "plus" && <Plus className="size-4 shrink-0" aria-hidden="true" />}
+                  {e.icon === "theme" && (dark ? <Sun className="size-4 shrink-0" aria-hidden="true" /> : <Moon className="size-4 shrink-0" aria-hidden="true" />)}
                   <span className="min-w-0 truncate font-medium text-foreground">{e.label}</span>
                   {e.hint && <span className="min-w-0 truncate text-xs text-muted-foreground">{e.hint}</span>}
                   {i === active && <CornerDownLeft className="ml-auto size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}

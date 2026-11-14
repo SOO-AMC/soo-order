@@ -90,7 +90,7 @@ export function ReturnRequestButton({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="w-full border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800">
+        <Button variant="outline" className="w-full border-status-ask/40 bg-status-ask-bg text-status-ask hover:bg-status-ask-bg/80 hover:text-status-ask">
           <Undo2 className="h-4 w-4" />
           반품 신청
         </Button>
@@ -138,7 +138,6 @@ export function ReturnRequestButton({
             취소
           </Button>
           <Button
-            className="bg-orange-500 text-white hover:bg-orange-600"
             onClick={handleSubmit}
             disabled={isSubmitting || quantity < 1}
           >

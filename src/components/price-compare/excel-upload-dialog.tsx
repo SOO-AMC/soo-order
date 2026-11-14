@@ -351,13 +351,13 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
                 {comparison.overlappingProducts > 0 && (
                   <>
                     <span className="text-muted-foreground">겹치는 제품</span>
-                    <span className="font-medium text-amber-600">{comparison.overlappingProducts}개</span>
+                    <span className="font-medium text-status-ask">{comparison.overlappingProducts}개</span>
                   </>
                 )}
                 {comparison.newVendors.length > 0 && (
                   <>
                     <span className="text-muted-foreground">새 업체</span>
-                    <span className="font-medium text-blue-600">{comparison.newVendors.join(", ")}</span>
+                    <span className="font-medium text-status-doing">{comparison.newVendors.join(", ")}</span>
                   </>
                 )}
               </div>
@@ -393,7 +393,7 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
                                   <span>
                                     <span className="text-muted-foreground line-through">{before.toLocaleString()}</span>
                                     {" → "}
-                                    <span className="text-green-600 font-medium">{after?.toLocaleString() ?? "-"}</span>
+                                    <span className="font-medium text-status-done">{after?.toLocaleString() ?? "-"}</span>
                                   </span>
                                 ) : "-"}
                               </td>
@@ -412,9 +412,9 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
               <p className="text-sm font-medium">업로드 방식을 선택하세요</p>
 
               {comparison.existing.productCount > 0 && (
-                <div className="flex items-start gap-2 rounded-lg border border-yellow-200 bg-yellow-50 p-2.5">
-                  <AlertTriangle className="h-3.5 w-3.5 text-yellow-600 mt-0.5 shrink-0" />
-                  <p className="text-xs text-yellow-800">
+                <div className="flex items-start gap-2 rounded-lg bg-status-ask-bg p-2.5">
+                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-status-ask" />
+                  <p className="text-xs text-status-ask">
                     덮어쓰기를 선택하면 기존 {comparison.existing.productCount}개 제품과 업체별 단가가 모두 삭제됩니다.
                   </p>
                 </div>

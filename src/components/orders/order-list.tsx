@@ -29,6 +29,7 @@ import {
   VendorPricePopover,
   VENDOR_COLORS,
   initPriceCache,
+  prefetchPriceData,
   usePriceData,
   matchItemPrices,
   type VendorColor,
@@ -89,6 +90,10 @@ export function OrderList({
 }) {
   if (initialPriceData) initPriceCache(initialPriceData);
   const { isAdmin, userId: currentUserId } = useAuth();
+  // 가격표는 관리자만 미리 받는다(일반 직원 기기로 가격이 내려가지 않게)
+  useEffect(() => {
+    if (isAdmin) prefetchPriceData();
+  }, [isAdmin]);
   const [orders, setOrders] = useState<OrderWithRequester[]>(initialOrders ?? []);
   const [isLoading, setIsLoading] = useState(!initialOrders);
   const [error, setError] = useState("");
@@ -1029,7 +1034,8 @@ function OrderDetail({
   dispatching: boolean;
   error: string;
 }) {
-  const [data] = usePriceData();
+  // 일반 직원은 가격을 받지 않는다
+  const [data] = usePriceData(isAdmin);
   const match = useMemo(() => matchItemPrices(order.item_name, data), [order.item_name, data]);
   // 업체를 직접 고른 뒤에만 발주할 수 있다(최저가로 자동 발주하지 않음)
   const dispatchVendor = selectedVendor;

@@ -40,7 +40,7 @@ export function UploadIndicator() {
         </>
       ) : (
         <>
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <CheckCircle2 className="h-4 w-4 text-status-done" />
           <span>업로드 완료</span>
         </>
       )}

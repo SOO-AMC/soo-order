@@ -47,7 +47,7 @@ export default function AuthLayout({
         </div>
 
         {/* 오른쪽: 로그인 폼 */}
-        <div className="flex w-[480px] shrink-0 items-center justify-center bg-white p-10">
+        <div className="flex w-[480px] shrink-0 items-center justify-center bg-card p-10">
           <div className="w-full max-w-sm">{children}</div>
         </div>
       </div>

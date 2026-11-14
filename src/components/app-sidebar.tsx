@@ -13,6 +13,7 @@ import { useTabCounts } from "@/hooks/use-tab-counts";
 import { useAuth } from "@/hooks/use-auth";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { NotificationBell } from "@/components/notification-bell";
+import { ThemeModeSegmented, ThemeToggleButton } from "@/components/theme-toggle";
 import { ROLE_LABEL, type Role } from "@/lib/types/member";
 
 /**
@@ -74,6 +75,7 @@ export function AppSidebar() {
           <Image src="/sooorder-brand/logo-horizontal.webp" alt="수오더" width={1231} height={440} priority className="h-9 w-auto dark:hidden" />
           <Image src="/sooorder-brand/logo-horizontal-on-dark.webp" alt="수오더" width={1231} height={440} className="hidden h-9 w-auto dark:block" />
         </Link>
+        <ThemeToggleButton />
         <NotificationBell className="text-sidebar-muted hover:bg-secondary hover:text-foreground" />
       </div>
 
@@ -146,7 +148,12 @@ export function AppSidebar() {
               </span>
             </button>
           </PopoverTrigger>
-          <PopoverContent side="top" align="start" className="w-[calc(15rem-1.25rem)] p-1">
+          <PopoverContent side="top" align="start" className="w-[calc(15rem-1.25rem)] p-1" onOpenAutoFocus={(e) => e.preventDefault()}>
+            <div className="px-1.5 pb-2 pt-1.5">
+              <p className="mb-1.5 px-1 text-xs font-semibold text-muted-foreground">화면 모드</p>
+              <ThemeModeSegmented size="sm" />
+            </div>
+            <div className="my-1 h-px bg-border" />
             <Link
               href="/account"
               onClick={() => setAccountOpen(false)}

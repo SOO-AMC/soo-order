@@ -143,7 +143,6 @@ export function AdminReturnCreateDialog() {
             취소
           </Button>
           <Button
-            className="bg-orange-500 text-white hover:bg-orange-600"
             onClick={handleSubmit}
             disabled={isSubmitting || !form.itemName.trim() || form.quantity < 1}
           >

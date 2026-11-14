@@ -1,6 +1,6 @@
 "use server";
 
-import { requireUser } from "@/lib/supabase/server";
+import { requireAdmin, requireUser } from "@/lib/supabase/server";
 import type { Vendor, VendorProduct, UnifiedProduct, ItemNameAlias } from "@/lib/types/price-compare";
 
 const VENDOR_ORDER = ["우리엔팜", "화영", "VS팜", "서수약품"];
@@ -27,8 +27,9 @@ async function fetchAll<T>(
   return all;
 }
 
+/** 가격표 전체 — 일반 직원에게는 가격을 보여주지 않으므로 관리자만 */
 export async function fetchPriceCompareData() {
-  const { supabase } = await requireUser();
+  const { supabase } = await requireAdmin();
 
   const [vendors, vendorProductData, unifiedProducts, itemAliases] = await Promise.all([
     fetchAll<Vendor>(supabase, "vendors", "name"),

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { NotificationBell } from "@/components/notification-bell";
 import { NAV_GROUPS, type NavItem } from "@/components/nav-config";
+import { ThemeModeSegmented } from "@/components/theme-toggle";
 import { ROLE_LABEL, POSITION_LABEL, type Role, type Position } from "@/lib/types/member";
 import { logClientAction } from "@/app/(main)/log-action";
 
@@ -76,6 +77,11 @@ export function MorePage() {
         ))}
 
         <MenuGroup label="설정">
+          <li className="px-4 py-3.5">
+            <p className="mb-2 text-base font-semibold">화면 모드</p>
+            <ThemeModeSegmented />
+            <p className="mt-2 text-[13px] text-muted-foreground">시스템을 고르면 휴대폰 설정(다크 모드)을 따라가요.</p>
+          </li>
           <MenuRow item={{ href: "/account", label: "내 계정 · 비밀번호", icon: KeyRound }} count={0} urgent={false} />
         </MenuGroup>
 

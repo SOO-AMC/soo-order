@@ -14,7 +14,7 @@ function DiffBadge({ current, previous }: { current: number; previous: number })
   if (diff === 0) return null;
   const isUp = diff > 0;
   return (
-    <span className={cn("text-xs font-medium", isUp ? "text-destructive" : "text-green-600")}>
+    <span className={cn("text-xs font-medium", isUp ? "text-status-late" : "text-status-done")}>
       {isUp ? "↑" : "↓"} {Math.abs(diff)}
     </span>
   );
@@ -27,14 +27,14 @@ export function SummaryCards({ data }: SummaryCardsProps) {
       value: data.pending,
       yesterday: data.pendingYesterday,
       urgent: data.urgentPending,
-      color: "text-orange-600",
+      color: "text-status-ask",
     },
     {
       label: "검수 대기",
       value: data.ordered,
       yesterday: data.orderedYesterday,
       urgent: data.urgentOrdered,
-      color: "text-blue-600",
+      color: "text-status-doing",
     },
     {
       label: "반품신청",

@@ -188,7 +188,7 @@ export function InspectionActions({
 
       <Dialog open={outOfStockOpen} onOpenChange={setOutOfStockOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline" className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
+          <Button variant="outline" className="w-full border-status-late/30 text-status-late hover:bg-status-late-bg hover:text-status-late">
             <PackageX className="h-4 w-4" />
             품절
           </Button>

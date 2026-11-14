@@ -47,7 +47,7 @@ function LoginForm({ isPending, state }: { isPending: boolean; state: LoginState
       </div>
       <Button
         type="submit"
-        className="w-full h-11 mt-6 rounded-full text-white shadow-md"
+        className="w-full h-11 mt-6 rounded-full shadow-md"
         disabled={isPending}
       >
         {isPending ? "로그인 중..." : "로그인"}
@@ -96,7 +96,7 @@ export default function LoginPage() {
         </div>
 
         {/* 하단: 폼 영역 (흰색 라운드) */}
-        <div className="flex-1 rounded-t-3xl bg-white px-6 pt-8 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(0,0,0,0.15)]">
+        <div className="flex-1 rounded-t-3xl bg-card px-6 pt-8 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(0,0,0,0.15)]">
           <p className="text-sm text-muted-foreground mb-6">로그인하여 시작하세요</p>
           <form action={formAction}>
             <LoginForm isPending={isPending} state={state} />
@@ -113,7 +113,14 @@ export default function LoginPage() {
             width={1231}
             height={440}
             priority
-            className="mb-6 h-10 w-auto"
+            className="mb-6 h-10 w-auto dark:hidden"
+          />
+          <Image
+            src="/sooorder-brand/logo-horizontal-on-dark.webp"
+            alt="수오더"
+            width={1231}
+            height={440}
+            className="mb-6 hidden h-10 w-auto dark:block"
           />
           <h2 className="text-2xl font-bold text-foreground">환영합니다</h2>
           <p className="mt-1 text-sm text-muted-foreground">로그인하여 시작하세요</p>

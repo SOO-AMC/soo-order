@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
+import { ThemeModeSegmented } from "@/components/theme-toggle";
 import { BackButton } from "@/components/back-button";
 import { ROLE_LABEL, POSITION_LABEL, type Role, type Position } from "@/lib/types/member";
 import { changePassword, type ChangePasswordState } from "@/app/(main)/account/actions";
@@ -59,6 +60,13 @@ export function AccountPage() {
             </div>
           </dl>
           <p className="mt-4 text-[13px] text-muted-foreground">이름·권한·직책은 관리자가 직원 관리에서 바꿔요.</p>
+        </section>
+
+        {/* 화면 모드 */}
+        <section className="rounded-2xl bg-card p-5 ring-1 ring-border">
+          <h2 className="text-lg font-extrabold tracking-tight">화면 모드</h2>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">이 기기에서만 바뀌어요. 시스템은 휴대폰·PC 설정을 따라가요.</p>
+          <ThemeModeSegmented className="mt-4" />
         </section>
 
         {/* 비밀번호 바꾸기 */}

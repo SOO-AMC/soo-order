@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { History, Tag } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import { bestVendor, matchItemPrices, usePriceData } from "./vendor-price-popover";
 
@@ -20,7 +21,8 @@ const md = (iso: string) => {
 };
 
 /**
- * 주문 등록 "지난번엔" 줄: 같은 이름(띄어쓰기·대소문자 무시)의 가장 최근 주문 + 가격표 최저가 업체.
+ * 주문 등록 "지난번엔" 줄: 같은 이름(띄어쓰기·대소문자 무시)의 가장 최근 주문 + (관리자만) 가격표 최저가 업체.
+ * 일반 직원에게는 가격을 보여주지 않는다 — 가격표를 받지도 않음.
  * "같게 채우기"를 누르면 수량·단위를 지난번과 같게 채운다. 읽기만 한다.
  */
 export function LastOrderHint({
@@ -31,7 +33,8 @@ export function LastOrderHint({
   onFill: (quantity: number, unit: string) => void;
 }) {
   const [last, setLast] = useState<{ key: string; order: LastOrder | null } | null>(null);
-  const [priceData] = usePriceData();
+  const { isAdmin } = useAuth();
+  const [priceData] = usePriceData(isAdmin);
   const key = normalizeItemName(itemName.trim());
 
   useEffect(() => {
@@ -61,9 +64,9 @@ export function LastOrderHint({
   }, [key, itemName]);
 
   const best = useMemo(() => {
-    if (key.length < 2) return null;
+    if (!isAdmin || key.length < 2) return null;
     return bestVendor(matchItemPrices(itemName.trim(), priceData));
-  }, [key, itemName, priceData]);
+  }, [isAdmin, key, itemName, priceData]);
 
   // 지금 입력과 다른 이름의 결과는 버린다(타이핑 중 깜빡임 방지)
   const order = last && last.key === key ? last.order : null;

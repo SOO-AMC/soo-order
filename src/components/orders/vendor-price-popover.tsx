@@ -78,9 +78,13 @@ function setCachedAliases(aliases: ItemNameAlias[]) {
   if (cachedData) cachedData = { ...cachedData, aliases };
 }
 
-// 모듈 로드 시 즉시 프리페치 시작 (캐시 없을 때만)
-if (typeof window !== "undefined") {
-  startFetch();
+/**
+ * 가격표 미리 받기. 예전엔 모듈을 불러오기만 해도 받았지만(일반 직원 기기에도 가격이 내려감),
+ * 이제는 관리자 화면이 직접 부를 때만 받는다. 서버도 관리자만 허용.
+ */
+export function prefetchPriceData() {
+  if (typeof window === "undefined") return;
+  if (!cachedData) startFetch();
 }
 
 /** 통합제품 1개 → 업체별 가격표 */
@@ -220,10 +224,14 @@ export const VENDOR_COLORS = [
 
 export type VendorColor = (typeof VENDOR_COLORS)[number];
 
-/** 가격비교 데이터(모듈 캐시 공유). 처음 쓰는 컴포넌트가 백그라운드로 불러온다. */
-export function usePriceData() {
-  const [data, setData] = useState<PriceData | null>(cachedData);
+/**
+ * 가격비교 데이터(모듈 캐시 공유). 처음 쓰는 컴포넌트가 백그라운드로 불러온다.
+ * enabled=false면 아무것도 받지 않는다 — 일반 직원 화면에서는 꼭 false로(가격 비공개, 서버도 관리자만 허용).
+ */
+export function usePriceData(enabled = true) {
+  const [data, setData] = useState<PriceData | null>(enabled ? cachedData : null);
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     getPriceData()
       .then((result) => {
@@ -233,7 +241,7 @@ export function usePriceData() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [enabled]);
   return [data, setData] as const;
 }
 
