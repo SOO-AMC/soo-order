@@ -41,6 +41,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
 const CATEGORY_LABEL: Record<string, string> = {
   ...Object.fromEntries(CATEGORIES.filter((c) => c.value !== "all").map((c) => [c.value, c.label])),
   leave: "인사",
+  briefing: "논문 브리핑",
 };
 
 const PAGE = 50;

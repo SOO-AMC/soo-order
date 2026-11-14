@@ -1,0 +1,59 @@
+/*
+ * 논문 브리핑 전용 색 (브리핑 화면 안에서만 쓴다 — 다른 수오더 화면에는 영향 없음).
+ * 카드는 인쇄물처럼 고정 색이다: 앱이 라이트든 다크든 카드 모습은 같다.
+ * 네이비는 수오더 로고 남색(#082344) 계열, 골드·아이보리는 브리핑 전용 강조색.
+ */
+.bf {
+  --bf-navy-950: #051a33;
+  --bf-navy-900: #082344;
+  --bf-navy-800: #123a63;
+  --bf-navy-700: #1d4d7d;
+  --bf-teal-700: #0d6875;
+  --bf-teal-500: #268b90;
+  --bf-teal-100: #d9eeee;
+  --bf-gold-500: #c49a5c;
+  --bf-gold-400: #d8b47f;
+  --bf-gold-300: #edcea0;
+  --bf-gold-100: #f7ecd9;
+  --bf-ivory-50: #faf8f3;
+  --bf-ivory-100: #f3efe6;
+  --bf-line: #e4ddcf;
+  --bf-ink: #0e2740;
+  --bf-slate-700: #415569;
+  --bf-slate-500: #6b7c8d;
+}
+
+/* 한글·영문 약물명이 섞인 제목이 단어 중간에서 끊기지 않게 */
+.bf-text {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 네이비 면 위의 가는 금색 곡선 장식 (이미지 없이 CSS만) */
+.bf-navy-surface {
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgb(38 139 144 / 0.22) 0%, transparent 55%),
+    radial-gradient(90% 70% at 0% 100%, rgb(216 180 127 / 0.1) 0%, transparent 60%),
+    linear-gradient(160deg, var(--bf-navy-900) 0%, var(--bf-navy-950) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bf-fade {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@keyframes bf-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.6%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.bf-fade {
+  animation: bf-fade-in 500ms ease-out both;
+}
