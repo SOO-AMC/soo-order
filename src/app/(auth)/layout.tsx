@@ -1,10 +1,16 @@
-export default function AuthLayout({
+import { readLoginVideo } from "@/lib/settings/login-video";
+import { loginEmbedUrl } from "@/lib/utils/youtube";
+
+// 관리자가 앱 설정에서 영상을 바꾸면 바로 반영되도록 매번 읽는다
+export const dynamic = "force-dynamic";
+
+export default async function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // 로그인 화면(PC) 배경 영상 — 유튜브 영상 번호 (youtu.be/ 뒤의 글자). 퍼가기 허용된 영상이어야 한다
-  const videoId = "cjx0hcdmry8";
+  // 로그인 화면(PC) 배경 영상 — 관리자 > 앱 설정에서 유튜브 링크로 바꾼다 (없으면 기본 영상)
+  const { videoId } = await readLoginVideo();
 
   return (
     <>
@@ -20,7 +26,7 @@ export default function AuthLayout({
           {/* YouTube iframe - 화면 꽉 채움 */}
           <div className="absolute inset-0">
             <iframe
-              src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}&controls=0&showinfo=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&iv_load_policy=3`}
+              src={loginEmbedUrl(videoId)}
               className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[177.78vh] min-w-full min-h-full aspect-video"
               allow="autoplay; encrypted-media"
               frameBorder="0"
