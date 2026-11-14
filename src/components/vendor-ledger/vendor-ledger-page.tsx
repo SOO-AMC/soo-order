@@ -17,6 +17,7 @@ import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
 import { PeriodPicker } from "@/components/workspace/period-picker";
 import { kstToday, presetRange, rangeText, type DateRange } from "@/lib/utils/period";
 import type { LedgerRow, InvoiceDoc } from "@/lib/types/invoice";
+import { shareInflight } from "@/lib/utils/inflight";
 
 const won = (n: number) => `${Math.round(n).toLocaleString()}원`;
 const num = (n: number) => Math.round(n).toLocaleString();
@@ -67,7 +68,7 @@ export function VendorLedgerPage() {
     let active = true;
     const first = presetRange("thisMonth", kstToday());
     const opts = { vendorId: null, start: first.start || null, end: first.end || null };
-    Promise.all([fetchVendorLedger(opts), fetchInvoiceDocs(opts)])
+    shareInflight(`ledger:${opts.start}:${opts.end}`, () => Promise.all([fetchVendorLedger(opts), fetchInvoiceDocs(opts)]))
       .then(([lines, docList]) => {
         if (!active) return;
         setRows(lines);

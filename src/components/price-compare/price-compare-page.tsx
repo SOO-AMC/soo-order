@@ -10,6 +10,7 @@ import { AliasManagement } from "./alias-management";
 import { ItemCleanup } from "./item-cleanup";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 import { fetchLatestInvoicePrices } from "@/lib/actions/product-link-actions";
+import { shareInflight } from "@/lib/utils/inflight";
 import type {
   Vendor,
   VendorProduct,
@@ -32,14 +33,8 @@ export function PriceComparePage() {
   const [tab, setTab] = useState<Tab>("compare");
   /** 업체×품목별 최근 명세서 단가 — 표가 뜬 뒤에 따로 읽는다(없어도 표는 동작한다) */
   const [invoicePrices, setInvoicePrices] = useState<Record<string, { price: number; date: string }>>({});
-  useEffect(() => {
-    let active = true;
-    fetchLatestInvoicePrices()
-      .then((r) => { if (active) setInvoicePrices(r); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, []);
 
+  /** 추가·수정 뒤에 다시 읽기 (항상 새로 읽는다) */
   const loadData = useCallback(() => {
     fetchPriceCompareData()
       .then(setData)
@@ -47,8 +42,17 @@ export function PriceComparePage() {
   }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let active = true;
+    // 서버 호출은 보낸 순서대로 하나씩 처리된다 → 표 데이터를 먼저 보내고, 명세서 단가(참고 표시)는 그 뒤에 보낸다.
+    // (반대로 보내면 표가 명세서 단가를 기다리느라 1초쯤 늦게 뜬다)
+    shareInflight("price-compare-data", fetchPriceCompareData)
+      .then((d) => { if (active) setData(d); })
+      .catch((e) => { if (active) setError(e.message); });
+    shareInflight("latest-invoice-prices", fetchLatestInvoicePrices)
+      .then((r) => { if (active) setInvoicePrices(r); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">

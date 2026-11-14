@@ -17,6 +17,7 @@ import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
 import { PeriodChip, DateRangeInputs } from "@/components/workspace/period-picker";
 import { COMPARE_LABEL, compareRanges, kstToday, rangeText, type ComparePreset, type DateRange } from "@/lib/utils/period";
 import type { PriceAnalysisResult, PriceAnalysisRow, ItemTrendPoint } from "@/lib/types/invoice";
+import { shareInflight } from "@/lib/utils/inflight";
 
 const won = (n: number) => `${Math.round(n).toLocaleString()}원`;
 const pct = (n: number | null) => (n == null ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(1)}%`);
@@ -117,7 +118,9 @@ export function PriceAnalysisPage() {
   useEffect(() => {
     let active = true;
     const r = compareRanges("mom", today);
-    fetchPriceAnalysis({ aStart: r.a.start, aEnd: r.a.end, bStart: r.b.start, bEnd: r.b.end, vendorId: null })
+    shareInflight(`price-analysis:${r.a.start}:${r.a.end}:${r.b.start}:${r.b.end}`, () =>
+      fetchPriceAnalysis({ aStart: r.a.start, aEnd: r.a.end, bStart: r.b.start, bEnd: r.b.end, vendorId: null }),
+    )
       .then((res) => {
         if (!active) return;
         setResult(res);

@@ -31,6 +31,11 @@ import {
 import { PAGE_SIZE } from "@/lib/queries/search-orders";
 import { searchOrders, fetchPersonNames } from "@/lib/actions/search-action";
 import { exportFilteredOrders } from "@/lib/actions/export-orders";
+import { shareInflight } from "@/lib/utils/inflight";
+
+/** 직원 이름 목록 — 거의 안 바뀌므로 브라우저가 10분 기억한다 */
+let personNamesCache: { at: number; names: string[] } | null = null;
+const PERSON_NAMES_TTL_MS = 10 * 60 * 1000;
 import type ExcelJS from "exceljs";
 
 /** 상태 묶음 보기 — filters.status와 정확히 같을 때만 그 보기가 켜진다 */
@@ -65,7 +70,7 @@ const at = (iso: string | null | undefined) =>
 
 export function SearchList() {
   const { isAdmin } = useAuth();
-  const [personNames, setPersonNames] = useState<string[]>([]);
+  const [personNames, setPersonNames] = useState<string[]>(() => personNamesCache?.names ?? []);
   const searchParams = useSearchParams();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -123,7 +128,13 @@ export function SearchList() {
 
   // 인원 이름 목록 (1회)
   useEffect(() => {
-    fetchPersonNames().then(setPersonNames);
+    if (personNamesCache && Date.now() - personNamesCache.at < PERSON_NAMES_TTL_MS) return;
+    shareInflight("person-names", fetchPersonNames)
+      .then((names) => {
+        personNamesCache = { at: Date.now(), names };
+        setPersonNames(names);
+      })
+      .catch(() => {});
   }, []);
 
   // 검색어 디바운스

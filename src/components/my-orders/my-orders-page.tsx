@@ -14,6 +14,7 @@ import { ActiveOrderList } from "./active-order-list";
 import { RecentCompleted } from "./recent-completed";
 import { formatTimeAgo } from "./time-ago";
 import { TodayBriefingCard } from "@/components/briefing/reader/today-briefing-card";
+import { shareInflight } from "@/lib/utils/inflight";
 
 /**
  * 내 현황 (일반 직원 모바일 첫 탭, 디자인 시스템 "모바일 · 일반 직원").
@@ -26,9 +27,12 @@ export function MyOrdersPage({ initialData }: { initialData?: MyOrdersData }) {
   const [filter, setFilter] = useState<SummaryKey | null>(null);
 
   useEffect(() => {
-    fetchMyOrdersStatus()
-      .then(setData)
-      .finally(() => setLoading(false));
+    let active = true;
+    shareInflight("my-orders-status", fetchMyOrdersStatus)
+      .then((d) => { if (active) setData(d); })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   // 품절인데 아직 "확인했어요"를 누르지 않은 것

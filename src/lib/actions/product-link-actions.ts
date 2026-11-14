@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdmin } from "@/lib/supabase/server";
+import { serverMemo } from "@/lib/utils/server-memo";
 import { logActivity } from "@/lib/utils/activity-log";
 import { chunk, fetchAllPages } from "@/lib/supabase/paginate";
 import { fetchInvoiceLines } from "@/lib/invoices/lines";
@@ -371,12 +372,15 @@ export async function keepOnlyVendorPrice(vendorProductId: string): Promise<Prod
  */
 export async function fetchLatestInvoicePrices(): Promise<Record<string, { price: number; date: string }>> {
   const { supabase } = await requireAdmin();
-  const lines = await fetchInvoiceLines(supabase);
-  const out: Record<string, { price: number; date: string }> = {};
-  for (const l of lines) {
-    if (!l.vendorId || !l.unifiedProductId || !l.invoiceDate || !(l.unitPrice > 0)) continue;
-    const key = `${l.vendorId}|${l.unifiedProductId}`;
-    if (!out[key] || l.invoiceDate > out[key].date) out[key] = { price: l.unitPrice, date: l.invoiceDate };
-  }
-  return out;
+  // 참고 표시용이라 1분쯤 묵은 값이어도 된다. 명세서 줄 전체를 읽는 조회라 서버가 기억해 두고 재사용한다.
+  return serverMemo("latest-invoice-prices", 60_000, async () => {
+    const lines = await fetchInvoiceLines(supabase);
+    const out: Record<string, { price: number; date: string }> = {};
+    for (const l of lines) {
+      if (!l.vendorId || !l.unifiedProductId || !l.invoiceDate || !(l.unitPrice > 0)) continue;
+      const key = `${l.vendorId}|${l.unifiedProductId}`;
+      if (!out[key] || l.invoiceDate > out[key].date) out[key] = { price: l.unitPrice, date: l.invoiceDate };
+    }
+    return out;
+  });
 }

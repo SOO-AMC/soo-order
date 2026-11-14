@@ -12,6 +12,7 @@ import {
 } from "@/lib/utils/dashboard-extras";
 import { fetchInvoiceLines } from "@/lib/invoices/lines";
 import { fetchAllPages } from "@/lib/supabase/paginate";
+import { serverMemo } from "@/lib/utils/server-memo";
 import { kstToday } from "@/lib/utils/period";
 import type { DashboardData, RecentOrderRow } from "@/lib/types/dashboard";
 
@@ -29,6 +30,12 @@ const SPEND_MONTHS = 6;
 
 export async function fetchDashboardData(): Promise<DashboardData> {
   const { supabase } = await requireAdmin();
+  // 무거운 집계 여러 개라 서버가 30초 기억해 두고 재사용한다 (관리자 누구에게나 같은 값).
+  // 여러 명이 동시에 열거나 화면을 연달아 다시 열어도 DB 에는 한 번만 간다.
+  return serverMemo("dashboard-data", 30_000, () => loadDashboardData(supabase));
+}
+
+async function loadDashboardData(supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"]): Promise<DashboardData> {
 
   const { data: rpcData, error: rpcError } = await supabase.rpc("get_dashboard_stats");
   if (rpcError || !rpcData) {
@@ -59,6 +66,9 @@ export async function fetchDashboardData(): Promise<DashboardData> {
             .eq("type", "order")
             .not("inspected_at", "is", null)
             .gte("inspected_at", leadTimeSince)
+            // 검수일 순으로 읽는다. id(무작위 값) 순으로 읽으면 쪽마다 표 전체를 흩어 읽게 돼 제한 시간(8초)에 걸렸다.
+            // (supabase/migrate-speed-indexes.sql 의 인덱스가 있으면 해당 기간만 바로 읽는다)
+            .order("inspected_at")
             .order("id")
             .range(from, to),
         { label: "검수 이력" },

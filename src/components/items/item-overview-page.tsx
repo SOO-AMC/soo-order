@@ -14,6 +14,7 @@ import { fetchItemOverview, searchItems } from "@/lib/actions/item-overview-acti
 import { fetchPriceAnalysis } from "@/lib/actions/price-analysis-action";
 import { compareRanges, kstToday } from "@/lib/utils/period";
 import type { PriceAnalysisRow } from "@/lib/types/invoice";
+import { shareInflight } from "@/lib/utils/inflight";
 import type { OrderStatus } from "@/lib/types/order";
 import type { ItemOverview, ItemPricePoint } from "@/lib/types/item-overview";
 
@@ -97,7 +98,9 @@ export function ItemOverviewPage({ productId, name }: { productId: string | null
     if (hasTarget) return;
     let active = true;
     const r = compareRanges("mom", kstToday());
-    fetchPriceAnalysis({ aStart: r.a.start, aEnd: r.a.end, bStart: r.b.start, bEnd: r.b.end, vendorId: null })
+    shareInflight(`price-analysis:${r.a.start}:${r.a.end}:${r.b.start}:${r.b.end}`, () =>
+      fetchPriceAnalysis({ aStart: r.a.start, aEnd: r.a.end, bStart: r.b.start, bEnd: r.b.end, vendorId: null }),
+    )
       .then((res) => { if (active) setChanges(res.rows); })
       .catch(() => { if (active) setChanges([]); });
     return () => { active = false; };

@@ -182,6 +182,13 @@ git push origin main  # 배포 (GitHub → Vercel 자동 배포)
 - **대용량 다운로드는 fetch+blob 금지**: 수백 MB 응답을 `await res.blob()`으로 받으면 브라우저 메모리에 다 들고 있어 OOM. **form POST + `target="_blank"`** 로 라우트 핸들러 호출 → Content-Disposition: attachment 헤더로 브라우저 다운로드 매니저가 디스크로 직접 저장. 예: `/api/vendor-ledger-zip`.
 - **응답 본문 스트리밍은 시작 보장 필요**: 무거운 처리(43초+) 동안 응답 헤더조차 안 나가면 어딘가에서 연결이 끊겨 브라우저는 `Failed to fetch` 표시. 위 form POST 패턴이 가장 안전. JSZip 스트리밍은 `streamFiles:true`로도 paused 상태에서 시작하니 `.resume()` 명시 호출 필요.
 
+- **운영 DB 는 Supabase 무료(NANO) 등급이고 3002·3001 개발 서버도 같은 DB 를 쓴다**: 조회 하나가 8초(제한 시간)를 넘으면 `canceling statement due to statement timeout` 으로 취소되고, 그동안 다른 조회까지 수 초씩 밀린다. 2026-11-15 새벽에 DB 가 연결을 못 받을 만큼 멈춰 프로젝트를 재시작했다. **코드를 고치는 동안에는 개발 서버를 꺼 둔다**(열린 탭이 자동으로 다시 불러오며 무거운 조회를 겹쳐 보낸다). 개발 모드는 effect 를 두 번 실행해서 화면을 열 때 보내는 조회가 두 번 나간다.
+- **화면을 열 때 같은 데이터를 두 번 읽지 말 것**: 서버 페이지에서 읽고(`initialData`) 화면이 뜬 뒤 또 읽으면 무거운 조회가 두 번 돌고, 서버에서 기다리는 동안 화면 이동이 멈춘다. 대시보드·내 현황은 화면이 뜬 뒤 한 번만 읽는다. 열 때 보내는 조회는 `shareInflight(key, fn)`(`lib/utils/inflight.ts`)로 감싸 겹치지 않게 한다.
+- **서버 호출(Server Action)은 브라우저 한 곳에서 보낸 순서대로 하나씩 처리된다**: 화면을 열 때 두 개를 보내면 뒤의 것은 앞의 것이 끝나야 시작한다. 화면에 꼭 필요한 것을 먼저 보낸다(가격 비교: 표 데이터 → 명세서 단가 순).
+- **`serverMemo(key, ttl, fn)`(`lib/utils/server-memo.ts`)**: 서버가 결과를 잠깐 기억해 재사용한다. 누가 불러도 같은 결과이고, 조금 묵어도 되고, 무거운 조회에만 쓴다. **권한 검사는 반드시 serverMemo 밖에서 먼저** 한다. 지금 쓰는 곳: 주문 화면의 품목별 최근 업체(5분), 가격 비교의 최근 명세서 단가(1분), 관리자 대시보드(30초). 방금 고친 값이 바로 보여야 하는 조회에는 쓰지 않는다.
+- **주문 표를 검수일로 거르는 조회**는 `supabase/migrate-speed-indexes.sql`(orders(inspected_at, id) 인덱스)이 있어야 빠르다. id(무작위 값) 순으로 쪽을 나눠 읽으면 표 전체를 흩어 읽어 제한 시간에 걸린다 — 날짜로 거르는 조회는 그 날짜 순으로 읽는다.
+- **물어보기**(관리자 전용, `Ctrl J`): `components/assistant/assistant-panel.tsx` + `lib/actions/assistant-action.ts`(`requireAdmin`, 하루 100개 상한, 활동 로그 `assistant_ask`) + `lib/assistant/tools.ts`. AI 는 DB 를 직접 보지 않고 tools.ts 의 **읽기 전용 도구**만 부른다 — 쓰기 도구를 넣지 말 것. 도구 결과의 필드 이름·note 가 곧 AI 가 읽는 설명이라, 헷갈리는 이름(주문 날짜 vs 명세서 날짜)은 틀린 답으로 이어진다. 모델은 `ASSISTANT_MODEL`(비우면 claude-opus-5-5).
+
 ## 상세 규칙
 - `.claude/rules/ui-patterns.md` — 헤더/카드/반응형 패턴
 - `.claude/rules/architecture.md` — Server/Client 분리, 데이터 페칭

@@ -18,6 +18,7 @@ import { TopItemsChart } from "./top-items-chart";
 import { VendorStatusChart } from "./vendor-status-chart";
 import { ReturnAnalysisChart } from "./return-analysis-chart";
 import { fetchDashboardData } from "@/lib/actions/dashboard-action";
+import { shareInflight } from "@/lib/utils/inflight";
 import type { DashboardData } from "@/lib/types/dashboard";
 
 export function DashboardPage({ initialData }: { initialData?: DashboardData }) {
@@ -25,9 +26,11 @@ export function DashboardPage({ initialData }: { initialData?: DashboardData }) 
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchDashboardData()
-      .then(setData)
-      .catch((e) => setError(e.message));
+    let active = true;
+    shareInflight("dashboard-data", fetchDashboardData)
+      .then((d) => { if (active) setData(d); })
+      .catch((e) => { if (active) setError(e.message); });
+    return () => { active = false; };
   }, []);
 
   return (
