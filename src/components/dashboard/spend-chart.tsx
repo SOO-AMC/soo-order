@@ -11,7 +11,7 @@ import {
 import type { SpendData } from "@/lib/types/dashboard";
 
 const chartConfig = {
-  amount: { label: "추정 지출", color: "#2563EB" },
+  amount: { label: "추정 지출", color: "#1166A7" },
 } satisfies ChartConfig;
 
 const won = (n: number) => `${n.toLocaleString()}원`;
@@ -24,7 +24,7 @@ export function SpendChart({ data }: { data: SpendData }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">지출 추이 (추정)</CardTitle>
+        <CardTitle className="text-[15px] font-bold">지출 추이 (추정)</CardTitle>
         <p className="text-xs text-muted-foreground">
           가격비교 단가 × 수량 기준 추정치. 매칭률 {coverage}% ({data.matchedCount}/{data.totalCount}건)
         </p>
@@ -42,7 +42,7 @@ export function SpendChart({ data }: { data: SpendData }) {
                 <p className="text-lg font-bold">{won(data.thisMonthAmount)}</p>
               </div>
               {data.lastMonthAmount > 0 && Math.abs(diff) > 0 && (
-                <p className={diff > 0 ? "text-xs text-red-600" : "text-xs text-green-700"}>
+                <p className={diff > 0 ? "text-xs text-status-late" : "text-xs text-status-done"}>
                   {diff > 0 ? "▲" : "▼"} 지난달 대비 {won(Math.abs(diff))}
                 </p>
               )}

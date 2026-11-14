@@ -135,7 +135,7 @@ export function FloatingActionBar({
   children: ReactNode;
 }) {
   return (
-    <div className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-center gap-2 rounded-xl bg-foreground py-2 pl-4 pr-2 text-white shadow-[0_8px_24px_rgb(20_33_61/0.25)] md:max-w-xl lg:bottom-4 lg:left-[calc(15rem+1rem)] lg:right-4">
+    <div className="fixed inset-x-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-center gap-2 rounded-xl bg-bar py-2 pl-4 pr-2 text-on-bar shadow-[0_8px_24px_rgb(20_33_61/0.25)] md:max-w-xl lg:bottom-4 lg:left-[calc(15rem+1rem)] lg:right-4">
       <span className="min-w-0 truncate text-sm font-semibold">{label}</span>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">{children}</div>
     </div>

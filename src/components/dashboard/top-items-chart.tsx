@@ -13,7 +13,7 @@ import type { TopItemData } from "@/lib/types/dashboard";
 const chartConfig = {
   count: {
     label: "주문 수",
-    color: "#2563EB",
+    color: "#1166A7",
   },
 } satisfies ChartConfig;
 
@@ -26,7 +26,7 @@ export function TopItemsChart({ data }: TopItemsChartProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">품목 TOP 10</CardTitle>
+          <CardTitle className="text-[15px] font-bold">품목 TOP 10</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">데이터가 없습니다.</p>
@@ -38,7 +38,7 @@ export function TopItemsChart({ data }: TopItemsChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">품목 TOP 10</CardTitle>
+        <CardTitle className="text-[15px] font-bold">품목 TOP 10</CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer id="top-items" config={chartConfig} className="aspect-auto h-[300px] w-full">
@@ -54,7 +54,7 @@ export function TopItemsChart({ data }: TopItemsChartProps) {
               tickFormatter={(v: string) => (v.length > 8 ? v.slice(0, 8) + "…" : v)}
             />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar dataKey="count" fill="#2563EB" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="count" fill="#1166A7" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ChartContainer>
       </CardContent>

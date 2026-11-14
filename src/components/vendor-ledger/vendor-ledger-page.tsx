@@ -1,7 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/page-header";
 import { useEffect, useMemo, useState } from "react";
-import { BookText, Download, Search, FileText, ExternalLink } from "lucide-react";
+import { Download, Search, FileText, ExternalLink } from "lucide-react";
 import type ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/client";
 import { fetchVendorLedger, fetchInvoiceDocs, getInvoiceFileUrl, mergeInvoicePdfs } from "@/lib/actions/vendor-ledger-action";
@@ -222,12 +223,9 @@ export function VendorLedgerPage() {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-6xl">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <BookText className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-bold">거래처원장</h1>
-      </header>
+      <PageHeader title="거래처원장" description={<span className="hidden sm:inline">업체·기간별 명세서 거래 내역</span>} />
 
-      <div className="space-y-4 p-4">
+      <div className="space-y-4 p-4 lg:px-6">
         {/* 필터 */}
         <div className="rounded-2xl bg-card p-4 shadow-card space-y-3">
           <div className="space-y-1.5">
@@ -275,14 +273,14 @@ export function VendorLedgerPage() {
 
         {(rows || docs) && !loading && (
           <div className="space-y-3">
-            <div className="inline-flex rounded-md border bg-card p-0.5 text-sm">
+            <div className="inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-border">
               {(["lines", "docs"] as const).map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setView(v)}
-                  className={`rounded px-3 py-1 font-medium transition-colors ${
-                    view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                  className={`rounded-md px-3 py-1 text-[13px] font-semibold transition-colors ${
+                    view === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {v === "lines" ? "거래 내역" : "명세서 원본"}

@@ -1,7 +1,9 @@
 "use client";
 
+import { UnderlineTabs } from "@/components/list-parts";
+import { PageHeader } from "@/components/page-header";
 import { useEffect, useState } from "react";
-import { TrendingUp, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ChevronDown, ChevronUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPriceAnalysis, fetchItemPriceTrend, fetchTrendProducts } from "@/lib/actions/price-analysis-action";
 import { Button } from "@/components/ui/button";
@@ -118,27 +120,22 @@ export function PriceAnalysisPage() {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-5xl">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <TrendingUp className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-bold">단가 분석</h1>
-      </header>
+      <PageHeader
+        title="단가 분석"
+        tabs={
+          <UnderlineTabs<"compare" | "trend">
+            ariaLabel="분석 방식"
+            value={mode}
+            onValueChange={switchMode}
+            items={[
+              { value: "compare", label: "기간 비교" },
+              { value: "trend", label: "품목 추이" },
+            ]}
+          />
+        }
+      />
 
-      <div className="space-y-4 p-4">
-        {/* 모드 토글 */}
-        <div className="inline-flex rounded-md border bg-card p-0.5 text-sm">
-          {(["compare", "trend"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => switchMode(m)}
-              className={`rounded px-3 py-1 font-medium transition-colors ${
-                mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-              }`}
-            >
-              {m === "compare" ? "기간 비교" : "품목 추이"}
-            </button>
-          ))}
-        </div>
+      <div className="space-y-4 p-4 lg:px-6">
 
         {error && (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -250,7 +247,7 @@ export function PriceAnalysisPage() {
                             <td className="px-3 py-2 text-right tabular-nums">{won(row.bPrice)}</td>
                             <td className={`px-3 py-2 text-right tabular-nums font-semibold ${deltaColor(row.deltaAbs)}`}>
                               {pct(row.deltaPct)}
-                              <span className="ml-1 text-[11px] font-normal opacity-70">
+                              <span className="ml-1 text-xs font-normal opacity-70">
                                 ({row.deltaAbs >= 0 ? "+" : ""}{row.deltaAbs.toLocaleString()})
                               </span>
                             </td>

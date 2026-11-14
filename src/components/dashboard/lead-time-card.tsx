@@ -27,7 +27,7 @@ export function LeadTimeCard({ data }: { data: LeadTimeData }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">처리 시간 (최근 {data.windowDays}일)</CardTitle>
+        <CardTitle className="text-[15px] font-bold">처리 시간 (최근 {data.windowDays}일)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {!hasData ? (
@@ -42,11 +42,11 @@ export function LeadTimeCard({ data }: { data: LeadTimeData }) {
                   <p className="text-xs text-muted-foreground">{s.label}</p>
                   <p className="mt-0.5 text-lg font-bold">{s.count ? formatHours(s.avgHours) : "-"}</p>
                   {s.count > 0 && s.avgHoursPrev > 0 && Math.abs(diff) >= 0.1 && (
-                    <p className={worse ? "text-xs text-red-600" : "text-xs text-green-700"}>
+                    <p className={worse ? "text-xs text-status-late" : "text-xs text-status-done"}>
                       {worse ? "▲" : "▼"} 직전 {data.windowDays}일 대비 {formatHours(Math.abs(diff))} {worse ? "느려짐" : "빨라짐"}
                     </p>
                   )}
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">표본 {s.count}건</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">표본 {s.count}건</p>
                 </div>
               );
             })}

@@ -1,35 +1,28 @@
 import Link from "next/link";
-import { AlertCircle } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { Order, OrderStatus } from "@/lib/types/order";
 import { ORDER_STATUS_LABEL } from "@/lib/types/order";
+import { cn } from "@/lib/utils";
+import { ListSection, Tag } from "@/components/list-parts";
+import { STATUS_TONE_TEXT, StatusIcon } from "@/components/ui/status-badge";
+import { ORDER_STATUS_TONE } from "@/components/orders/order-status-badge";
 import { formatTimeAgo } from "./time-ago";
 
-const STATUS_GROUP_ORDER: OrderStatus[] = ["pending", "ordered", "out_of_stock", "return_requested"];
+/** 진행 순서대로. 반품대기(return_pending)도 포함 — 예전엔 빠져서 목록에 안 보였다 */
+const STATUS_GROUP_ORDER: OrderStatus[] = ["pending", "ordered", "out_of_stock", "return_requested", "return_pending"];
 
-const STATUS_DOT_COLORS: Record<OrderStatus, string> = {
-  pending: "bg-yellow-500",
-  ordered: "bg-green-500",
-  inspecting: "bg-blue-500",
-  return_requested: "bg-orange-500",
-  return_pending: "bg-purple-500",
-  return_completed: "bg-gray-400",
-  out_of_stock: "bg-red-500",
+/** 단계마다 직원이 알아야 할 한 줄 */
+const STATUS_HINT: Partial<Record<OrderStatus, string>> = {
+  pending: "관리자 발주 전",
+  ordered: "발주 완료 · 입고되면 검수",
+  out_of_stock: "업체 품절 — 대체품 확인 필요",
+  return_requested: "반품 접수 전",
+  return_pending: "업체 회수 대기",
 };
 
-interface ActiveOrderListProps {
-  orders: Order[];
-}
+const isReturn = (s: OrderStatus) => s === "return_requested" || s === "return_pending";
 
-export function ActiveOrderList({ orders }: ActiveOrderListProps) {
-  if (orders.length === 0) {
-    return (
-      <div className="rounded-xl bg-card p-8 text-center shadow-card">
-        <p className="text-sm text-muted-foreground">진행중인 주문이 없습니다</p>
-      </div>
-    );
-  }
-
-  // 상태별 그룹핑
+export function ActiveOrderList({ orders }: { orders: Order[] }) {
   const grouped = STATUS_GROUP_ORDER
     .map((status) => ({
       status,
@@ -43,37 +36,58 @@ export function ActiveOrderList({ orders }: ActiveOrderListProps) {
     .filter((g) => g.orders.length > 0);
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {grouped.map(({ status, orders: items }) => (
-        <div key={status} className="rounded-xl bg-card shadow-card overflow-hidden">
-          {/* 섹션 헤더 */}
-          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
-            <span className={`h-2 w-2 rounded-full ${STATUS_DOT_COLORS[status]}`} />
-            <span className="text-sm font-semibold">{ORDER_STATUS_LABEL[status]}</span>
-            <span className="text-xs text-muted-foreground">{items.length}건</span>
-          </div>
-          {/* 아이템 리스트 */}
-          <div className="divide-y">
-            {items.map((order) => (
-              <Link key={order.id} href={`/orders/${order.id}?from=dashboard`} className="block">
-                <div className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium">{order.item_name}</p>
-                      {order.is_urgent && (
-                        <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+    <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+      {grouped.map(({ status, orders: items }) => {
+        const tone = ORDER_STATUS_TONE[status];
+        return (
+          <ListSection key={status}>
+            <div className="flex min-h-12 items-center gap-2 px-4 py-2">
+              <StatusIcon tone={tone} className={cn("size-4", STATUS_TONE_TEXT[tone])} />
+              <h3 className="shrink-0 text-[15px] font-bold">{ORDER_STATUS_LABEL[status]}</h3>
+              <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{items.length}건</span>
+              {STATUS_HINT[status] && (
+                <span className="ml-auto truncate pl-2 text-xs text-muted-foreground">{STATUS_HINT[status]}</span>
+              )}
+            </div>
+            {items.map((order) => {
+              const qty = isReturn(status) ? order.return_quantity ?? order.quantity : order.quantity;
+              return (
+                <Link
+                  key={order.id}
+                  href={`/orders/${order.id}?from=dashboard`}
+                  className="flex items-center gap-3 border-t border-border px-4 py-3 transition-colors hover:bg-muted/60 active:bg-muted"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-[15px] font-semibold leading-snug">{order.item_name}</span>
+                      {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+                    </span>
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
+                      {qty > 0 ? (
+                        <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                          {qty}
+                          {order.unit ? ` ${order.unit}` : ""}
+                        </span>
+                      ) : (
+                        <span className="shrink-0">사진 참고</span>
                       )}
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {order.quantity}{order.unit} · {formatTimeAgo(order.created_at)}
-                    </p>
+                      {order.vendor_name && status !== "pending" && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="truncate">{order.vendor_name}</span>
+                        </>
+                      )}
+                      <span aria-hidden="true">·</span>
+                      <span className="shrink-0">{formatTimeAgo(order.created_at)}</span>
+                    </span>
                   </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      ))}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </Link>
+              );
+            })}
+          </ListSection>
+        );
+      })}
     </div>
   );
 }

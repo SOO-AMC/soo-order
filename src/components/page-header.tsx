@@ -12,9 +12,12 @@ export function PageHeader({
   description,
   tabs,
   action,
+  leading,
   className,
 }: {
   title: string;
+  /** 제목 왼쪽(예: 모바일 뒤로 가기 버튼) */
+  leading?: ReactNode;
   /** 제목 옆 짧은 보조 정보(예: "발주 대기 5건"). 긴 문장은 넣지 않는다. */
   description?: ReactNode;
   tabs?: ReactNode;
@@ -29,6 +32,7 @@ export function PageHeader({
       )}
     >
       <div className="flex min-h-14 items-center gap-3">
+        {leading && <div className="-ml-2 -mr-1 shrink-0">{leading}</div>}
         <div className="flex min-w-0 items-baseline gap-2">
           <h1 className="truncate text-[17px] font-bold leading-tight">{title}</h1>
           {description && (
@@ -37,7 +41,7 @@ export function PageHeader({
         </div>
         {action && <div className="ml-auto flex shrink-0 items-center gap-2">{action}</div>}
       </div>
-      {tabs && <div className="-mx-4 overflow-x-auto px-4 lg:-mx-6 lg:px-6">{tabs}</div>}
+      {tabs && <div className="-mx-4 overflow-x-auto overflow-y-hidden px-4 [scrollbar-width:none] lg:-mx-6 lg:px-6 [&::-webkit-scrollbar]:hidden">{tabs}</div>}
     </header>
   );
 }

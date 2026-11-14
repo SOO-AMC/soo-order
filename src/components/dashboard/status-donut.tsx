@@ -25,7 +25,7 @@ export function StatusDonut({ data }: { data: SummaryData }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">진행 중인 주문 분포</CardTitle>
+        <CardTitle className="text-[15px] font-bold">진행 중인 주문 분포</CardTitle>
       </CardHeader>
       <CardContent>
         {total === 0 ? (
@@ -44,7 +44,7 @@ export function StatusDonut({ data }: { data: SummaryData }) {
               </ChartContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-2xl font-bold leading-none">{total}</span>
-                <span className="mt-1 text-[11px] text-muted-foreground">진행 중인 주문</span>
+                <span className="mt-1 text-xs text-muted-foreground">진행 중인 주문</span>
               </div>
             </div>
             <ul className="mt-4 w-full space-y-2 text-sm">

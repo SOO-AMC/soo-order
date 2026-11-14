@@ -1,10 +1,9 @@
 "use client";
 
 import { Fragment, useState, useMemo, useCallback, useEffect } from "react";
-import { Search, Upload, FileDown, ChevronDown, ChevronUp, Plus, Settings2 } from "lucide-react";
+import { Search, Upload, FileDown, ChevronUp, Pencil, Plus, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -13,14 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ExcelUploadDialog } from "./excel-upload-dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { TableCell, TableRow } from "@/components/ui/table";
 import { toKSTDateString } from "@/lib/utils/format";
 import { useAuth } from "@/hooks/use-auth";
 import { createUnifiedProduct, updateUnifiedProduct, upsertVendorPrice, updateVendorDiscountRate } from "@/app/(main)/price-compare/actions";
@@ -254,33 +246,31 @@ export function ComparisonTable({
 
   // PC: 기존 테이블 행과 동일한 레이아웃으로 인라인 입력
   const renderAddRowPc = () => (
-    <TableRow className="bg-blue-50/40 hover:bg-blue-50/40">
-      {categoryFilter === "all" && (
-        <TableCell>
-          <Select
-            value={newForm?.notes ?? ""}
-            onValueChange={(v) => setNewForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
-          >
-            <SelectTrigger className="h-7 text-xs w-[68px]">
-              <SelectValue placeholder="구분" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="없음">없음</SelectItem>
-              <SelectItem value="약품">약품</SelectItem>
-              <SelectItem value="약국">약국</SelectItem>
-            </SelectContent>
-          </Select>
-        </TableCell>
-      )}
-      <TableCell>
-        <Input
-          autoFocus
-          placeholder="제품명 *"
-          value={newForm?.name ?? ""}
-          onChange={(e) => setNewForm((f) => f ? { ...f, name: e.target.value } : f)}
-          className="h-7 text-sm"
-          onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") closeAdd(); }}
-        />
+    <TableRow className="bg-primary/[0.04] hover:bg-primary/[0.04] [&>td]:border-b [&>td]:border-border [&>td]:py-2">
+      <TableCell className="sticky left-0 z-[1] bg-card px-4">
+        <div className="flex items-center gap-1.5">
+              <Select
+                value={newForm?.notes ?? ""}
+                onValueChange={(v) => setNewForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
+              >
+                <SelectTrigger className="h-9 w-[72px] shrink-0 text-xs">
+                  <SelectValue placeholder="구분" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="없음">없음</SelectItem>
+                  <SelectItem value="약품">약품</SelectItem>
+                  <SelectItem value="약국">약국</SelectItem>
+                </SelectContent>
+              </Select>
+            <Input
+              autoFocus
+              placeholder="제품명 *"
+              value={newForm?.name ?? ""}
+              onChange={(e) => setNewForm((f) => f ? { ...f, name: e.target.value } : f)}
+              className="h-9 text-sm"
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") closeAdd(); }}
+            />
+        </div>
       </TableCell>
       {vendors.map((vendor) => {
         const rate = vendor.discount_rate ?? 0;
@@ -299,10 +289,10 @@ export function ComparisonTable({
                   f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
                 )
               }
-              className="h-7 text-sm text-right"
+              className="h-9 text-sm text-right tabular-nums"
             />
             {rate > 0 && discounted != null && (
-              <p className="text-[10px] text-right text-green-600 mt-0.5">→ {discounted.toLocaleString()}</p>
+              <p className="text-xs text-right text-status-done mt-0.5">→ {discounted.toLocaleString()}</p>
             )}
           </TableCell>
         );
@@ -312,15 +302,15 @@ export function ComparisonTable({
           placeholder="비고"
           value={newForm?.remarks ?? ""}
           onChange={(e) => setNewForm((f) => f ? { ...f, remarks: e.target.value } : f)}
-          className="h-7 text-sm"
+          className="h-9 text-sm"
         />
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={closeAdd} disabled={isSaving}>
+          <Button variant="ghost" size="sm" className="h-9 px-2.5 text-xs" onClick={closeAdd} disabled={isSaving}>
             취소
           </Button>
-          <Button size="sm" className="h-7 px-2 text-xs" onClick={handleCreate} disabled={isSaving || !newForm?.name.trim()}>
+          <Button size="sm" className="h-9 px-2.5 text-xs" onClick={handleCreate} disabled={isSaving || !newForm?.name.trim()}>
             {isSaving ? "..." : "저장"}
           </Button>
         </div>
@@ -330,25 +320,25 @@ export function ComparisonTable({
 
   // 모바일: 카드 형태
   const renderAddCardMobile = () => (
-    <div className="rounded-xl bg-card p-4 shadow-card border-2 border-primary/20 space-y-4">
+    <div className="space-y-4 rounded-xl bg-card p-4 ring-2 ring-primary">
       <div className="grid grid-cols-2 gap-2">
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-muted-foreground">제품명 *</label>
+          <label className="text-[13px] font-medium text-subtle-foreground">제품명 *</label>
           <Input
             autoFocus
             placeholder="제품명 입력"
             value={newForm?.name ?? ""}
             onChange={(e) => setNewForm((f) => f ? { ...f, name: e.target.value } : f)}
-            className="h-8 text-sm"
+            className="h-9 text-sm"
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">카테고리</label>
+          <label className="text-[13px] font-medium text-subtle-foreground">카테고리</label>
           <Select
             value={newForm?.notes ?? ""}
             onValueChange={(v) => setNewForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
           >
-            <SelectTrigger className="h-8 text-sm">
+            <SelectTrigger className="h-9 text-sm">
               <SelectValue placeholder="선택" />
             </SelectTrigger>
             <SelectContent>
@@ -359,17 +349,17 @@ export function ComparisonTable({
           </Select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">비고</label>
+          <label className="text-[13px] font-medium text-subtle-foreground">비고</label>
           <Input
             placeholder="비고 (선택)"
             value={newForm?.remarks ?? ""}
             onChange={(e) => setNewForm((f) => f ? { ...f, remarks: e.target.value } : f)}
-            className="h-8 text-sm"
+            className="h-9 text-sm"
           />
         </div>
       </div>
       <div>
-        <label className="text-xs text-muted-foreground mb-2 block">업체별 단가</label>
+        <label className="mb-2 block text-[13px] font-medium text-subtle-foreground">업체별 단가</label>
         <div className="grid grid-cols-2 gap-2">
           {vendors.map((vendor) => {
             const rate = vendor.discount_rate ?? 0;
@@ -391,10 +381,10 @@ export function ComparisonTable({
                       f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
                     )
                   }
-                  className="h-8 text-sm"
+                  className="h-9 text-sm"
                 />
                 {rate > 0 && discounted != null && (
-                  <p className="text-[10px] text-green-600">→ {discounted.toLocaleString()}원</p>
+                  <p className="text-xs text-status-done">→ {discounted.toLocaleString()}원</p>
                 )}
               </div>
             );
@@ -412,32 +402,30 @@ export function ComparisonTable({
 
   // PC: 기존 행과 동일한 레이아웃으로 인라인 편집
   const renderEditRowPc = (row: ComparisonRow) => (
-    <TableRow className="bg-amber-50/40 hover:bg-amber-50/40">
-      {categoryFilter === "all" && (
-        <TableCell>
-          <Select
-            value={editForm?.notes ?? ""}
-            onValueChange={(v) => setEditForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
-          >
-            <SelectTrigger className="h-7 text-xs w-[68px]">
-              <SelectValue placeholder="구분" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="없음">없음</SelectItem>
-              <SelectItem value="약품">약품</SelectItem>
-              <SelectItem value="약국">약국</SelectItem>
-            </SelectContent>
-          </Select>
-        </TableCell>
-      )}
-      <TableCell>
-        <Input
-          autoFocus
-          value={editForm?.name ?? ""}
-          onChange={(e) => setEditForm((f) => f ? { ...f, name: e.target.value } : f)}
-          className="h-7 text-sm"
-          onKeyDown={(e) => { if (e.key === "Enter") handleSave(row.unified); if (e.key === "Escape") closeEdit(); }}
-        />
+    <TableRow className="bg-primary/[0.04] hover:bg-primary/[0.04] [&>td]:border-b [&>td]:border-border [&>td]:py-2">
+      <TableCell className="sticky left-0 z-[1] bg-card px-4">
+        <div className="flex items-center gap-1.5">
+              <Select
+                value={editForm?.notes ?? ""}
+                onValueChange={(v) => setEditForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
+              >
+                <SelectTrigger className="h-9 w-[72px] shrink-0 text-xs">
+                  <SelectValue placeholder="구분" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="없음">없음</SelectItem>
+                  <SelectItem value="약품">약품</SelectItem>
+                  <SelectItem value="약국">약국</SelectItem>
+                </SelectContent>
+              </Select>
+            <Input
+              autoFocus
+              value={editForm?.name ?? ""}
+              onChange={(e) => setEditForm((f) => f ? { ...f, name: e.target.value } : f)}
+              className="h-9 text-sm"
+              onKeyDown={(e) => { if (e.key === "Enter") handleSave(row.unified); if (e.key === "Escape") closeEdit(); }}
+            />
+        </div>
       </TableCell>
       {vendors.map((vendor) => {
         const rate = vendor.discount_rate ?? 0;
@@ -456,10 +444,10 @@ export function ComparisonTable({
                   f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
                 )
               }
-              className="h-7 text-sm text-right"
+              className="h-9 text-sm text-right tabular-nums"
             />
             {rate > 0 && preDiscount != null && (
-              <p className="text-[10px] text-right text-muted-foreground mt-0.5">→ 할인전 {preDiscount.toLocaleString()}</p>
+              <p className="text-xs text-right text-muted-foreground mt-0.5">→ 할인전 {preDiscount.toLocaleString()}</p>
             )}
           </TableCell>
         );
@@ -469,15 +457,15 @@ export function ComparisonTable({
           placeholder="비고"
           value={editForm?.remarks ?? ""}
           onChange={(e) => setEditForm((f) => f ? { ...f, remarks: e.target.value } : f)}
-          className="h-7 text-sm"
+          className="h-9 text-sm"
         />
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={closeEdit} disabled={isSaving}>
+          <Button variant="ghost" size="sm" className="h-9 px-2.5 text-xs" onClick={closeEdit} disabled={isSaving}>
             취소
           </Button>
-          <Button size="sm" className="h-7 px-2 text-xs" onClick={() => handleSave(row.unified)} disabled={isSaving}>
+          <Button size="sm" className="h-9 px-2.5 text-xs" onClick={() => handleSave(row.unified)} disabled={isSaving}>
             {isSaving ? "..." : "저장"}
           </Button>
         </div>
@@ -487,23 +475,23 @@ export function ComparisonTable({
 
   // 모바일: 카드 내 인라인 편집 패널
   const renderMobileEditPanel = (row: ComparisonRow) => (
-    <div className="mt-3 pt-3 border-t space-y-4">
+    <div className="space-y-4 border-t border-border pt-3">
       <div className="grid grid-cols-2 gap-2">
         <div className="col-span-2 space-y-1">
-          <label className="text-xs text-muted-foreground">제품명</label>
+          <label className="text-[13px] font-medium text-subtle-foreground">제품명</label>
           <Input
             value={editForm?.name ?? ""}
             onChange={(e) => setEditForm((f) => f ? { ...f, name: e.target.value } : f)}
-            className="h-8 text-sm"
+            className="h-9 text-sm"
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">카테고리</label>
+          <label className="text-[13px] font-medium text-subtle-foreground">카테고리</label>
           <Select
             value={editForm?.notes ?? ""}
             onValueChange={(v) => setEditForm((f) => f ? { ...f, notes: v === "없음" ? "" : v } : f)}
           >
-            <SelectTrigger className="h-8 text-sm">
+            <SelectTrigger className="h-9 text-sm">
               <SelectValue placeholder="선택" />
             </SelectTrigger>
             <SelectContent>
@@ -514,16 +502,16 @@ export function ComparisonTable({
           </Select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">비고</label>
+          <label className="text-[13px] font-medium text-subtle-foreground">비고</label>
           <Input
             value={editForm?.remarks ?? ""}
             onChange={(e) => setEditForm((f) => f ? { ...f, remarks: e.target.value } : f)}
-            className="h-8 text-sm"
+            className="h-9 text-sm"
           />
         </div>
       </div>
       <div>
-        <label className="text-xs text-muted-foreground mb-2 block">업체별 단가</label>
+        <label className="mb-2 block text-[13px] font-medium text-subtle-foreground">업체별 단가</label>
         <div className="grid grid-cols-2 gap-2">
           {vendors.map((vendor) => {
             const rate = vendor.discount_rate ?? 0;
@@ -545,10 +533,10 @@ export function ComparisonTable({
                       f ? { ...f, prices: { ...f.prices, [vendor.id]: e.target.value } } : f
                     )
                   }
-                  className="h-8 text-sm"
+                  className="h-9 text-sm"
                 />
                 {rate > 0 && preDiscount != null && (
-                  <p className="text-[10px] text-muted-foreground">→ 할인전 {preDiscount.toLocaleString()}원</p>
+                  <p className="text-xs text-muted-foreground">→ 할인전 {preDiscount.toLocaleString()}원</p>
                 )}
               </div>
             );
@@ -569,7 +557,7 @@ export function ComparisonTable({
     const workbook = new ExcelJS.Workbook();
 
     const colors = {
-      headerBg: "FF2563EB",
+      headerBg: "FF1166A7",
       headerFont: "FFFFFFFF",
       categoryBg: "FFF1F5F9",
       minPriceBg: "FFDCFCE7",
@@ -724,71 +712,105 @@ export function ComparisonTable({
     return vals.length ? Math.min(...vals) : null;
   };
 
+  const categoryTag = (notes: string | null | undefined) =>
+    notes ? (
+      <span
+        className={`inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-bold ${
+          notes === "약품" ? "bg-status-doing-bg text-status-doing" : "bg-secondary text-subtle-foreground"
+        }`}
+      >
+        {notes}
+      </span>
+    ) : null;
+
+  const CATEGORY_FILTERS = [
+    { value: "all", label: "전체", count: rows.length },
+    { value: "약품", label: "약품", count: categoryCounts.약품 },
+    { value: "약국", label: "약국", count: categoryCounts.약국 },
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    <div className="space-y-3">
+      {/* 검색 + 동작 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[12rem] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="제품명 검색..."
+            placeholder="제품명·비고 검색"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 bg-card"
+            className="h-9 bg-card pl-9"
           />
         </div>
-        {isAdmin && (
-          <Button variant="outline" size="sm" className="bg-card" onClick={openAdd}>
-            <Plus className="h-4 w-4 mr-1" />
-            추가
+        <div className="flex items-center gap-1.5">
+          {isAdmin && (
+            <Button size="sm" className="h-9 rounded-lg" onClick={openAdd}>
+              <Plus className="h-4 w-4" />
+              품목 추가
+            </Button>
+          )}
+          <Button variant="outline" size="sm" className="h-9 rounded-lg" onClick={() => setUploadOpen(true)} aria-label="엑셀 업로드">
+            <Upload className="h-4 w-4" />
+            <span className="hidden sm:inline">업로드</span>
           </Button>
-        )}
-        <Button variant="outline" size="sm" className="bg-card" onClick={() => setUploadOpen(true)}>
-          <Upload className="h-4 w-4 mr-1" />
-          업로드
-        </Button>
-        <Button variant="outline" size="sm" className="bg-card" onClick={() => handleTemplateDownload(rows.length > 0)}>
-          <FileDown className="h-4 w-4 mr-1" />
-          {rows.length > 0 ? "내보내기" : "양식"}
-        </Button>
-        {isAdmin && (
           <Button
-            variant={showSettings ? "default" : "outline"}
+            variant="outline"
             size="sm"
-            className={showSettings ? "" : "bg-card"}
-            onClick={() => setShowSettings((v) => !v)}
+            className="h-9 rounded-lg"
+            onClick={() => handleTemplateDownload(rows.length > 0)}
+            aria-label={rows.length > 0 ? "엑셀 내보내기" : "엑셀 양식"}
           >
-            <Settings2 className="h-4 w-4" />
+            <FileDown className="h-4 w-4" />
+            <span className="hidden sm:inline">{rows.length > 0 ? "내보내기" : "양식"}</span>
           </Button>
-        )}
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              className={`h-9 rounded-lg ${showSettings ? "border-primary text-primary" : ""}`}
+              onClick={() => setShowSettings((v) => !v)}
+              aria-pressed={showSettings}
+              aria-label="업체별 할인율"
+            >
+              <Settings2 className="h-4 w-4" />
+              <span className="hidden sm:inline">할인율</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {showSettings && isAdmin && (
-        <div className="rounded-xl bg-card p-4 shadow-card space-y-3">
-          <p className="text-sm font-medium">업체별 할인율 설정</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <section className="space-y-3 rounded-xl bg-card p-4 ring-1 ring-border">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-[15px] font-bold">업체별 할인율</h2>
+            <p className="text-[13px] text-muted-foreground">입력한 정가에서 이 비율만큼 빼고 저장해요</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             {vendors.map((vendor) => (
-              <div key={vendor.id} className="space-y-1">
-                <label className="text-xs text-muted-foreground">{vendor.name}</label>
-                <div className="flex items-center gap-1">
-                  <input
+              <label key={vendor.id} className="space-y-1">
+                <span className="block text-[13px] font-medium text-subtle-foreground">{vendor.name}</span>
+                <span className="flex items-center gap-1.5">
+                  <Input
                     type="number"
                     min="0"
                     max="100"
                     step="0.1"
                     value={discountRates[vendor.id] ?? "0"}
-                    onChange={(e) =>
-                      setDiscountRates((prev) => ({ ...prev, [vendor.id]: e.target.value }))
-                    }
-                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-ring"
+                    onChange={(e) => setDiscountRates((prev) => ({ ...prev, [vendor.id]: e.target.value }))}
+                    className="h-9 text-right tabular-nums"
                   />
-                  <span className="text-sm text-muted-foreground shrink-0">%</span>
-                </div>
-              </div>
+                  <span className="shrink-0 text-sm text-muted-foreground">%</span>
+                </span>
+              </label>
             ))}
           </div>
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" className="h-9 rounded-lg" onClick={() => setShowSettings(false)}>
+              닫기
+            </Button>
             <Button
               size="sm"
+              className="h-9 rounded-lg"
               onClick={async () => {
                 await Promise.all(
                   vendors.map((vendor) => {
@@ -802,31 +824,42 @@ export function ComparisonTable({
               저장
             </Button>
           </div>
-        </div>
+        </section>
       )}
 
-      <ExcelUploadDialog
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        onSuccess={onDataChange}
-      />
+      <ExcelUploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} onSuccess={onDataChange} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Tabs value={categoryFilter} onValueChange={setCategoryFilter}>
-          <TabsList>
-            <TabsTrigger value="all">전체 ({rows.length})</TabsTrigger>
-            <TabsTrigger value="약품">약품 ({categoryCounts.약품})</TabsTrigger>
-            <TabsTrigger value="약국">약국 ({categoryCounts.약국})</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="inline-flex rounded-md border bg-card p-0.5 text-xs">
+      {/* 구분 필터 + 할인후/할인전 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1.5" role="group" aria-label="구분">
+          {CATEGORY_FILTERS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              aria-pressed={categoryFilter === c.value}
+              onClick={() => setCategoryFilter(c.value)}
+              className={`inline-flex h-8 items-center gap-1 rounded-full px-3 text-[13px] font-semibold transition-colors ${
+                categoryFilter === c.value
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card text-subtle-foreground ring-1 ring-border hover:text-foreground"
+              }`}
+            >
+              {c.label}
+              <span className={`tabular-nums ${categoryFilter === c.value ? "opacity-80" : "text-muted-foreground"}`}>
+                {c.count}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-border">
           {(["after", "before"] as const).map((v) => (
             <button
               key={v}
               type="button"
+              aria-pressed={priceView === v}
               onClick={() => setPriceView(v)}
-              className={`rounded px-2.5 py-1 font-medium transition-colors ${
-                priceView === v ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+              className={`rounded-md px-3 py-1 text-[13px] font-semibold transition-colors ${
+                priceView === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {v === "after" ? "할인후" : "할인전"}
@@ -835,155 +868,166 @@ export function ComparisonTable({
         </div>
       </div>
 
-      {vendors.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">
-          업체를 먼저 등록해주세요.
-        </p>
-      ) : filtered.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">
-          {rows.length === 0
-            ? "통합 제품을 등록하고 매핑해주세요."
-            : "검색 결과가 없습니다."}
+      {vendors.length === 0 || (filtered.length === 0 && !isAdding) ? (
+        <p className="rounded-xl bg-card px-4 py-10 text-center text-[13px] text-muted-foreground ring-1 ring-border">
+          {vendors.length === 0
+            ? "업체를 먼저 등록해주세요."
+            : rows.length === 0
+              ? "통합 제품을 등록하고 매핑해주세요."
+              : "검색 결과가 없습니다."}
         </p>
       ) : (
         <>
           {/* 모바일 카드 뷰 */}
-          <div className="space-y-3 lg:hidden">
+          <div className="space-y-2.5 lg:hidden">
             {isAdding && newForm && renderAddCardMobile()}
             {filtered.map((row) => {
               const isExpanded = expandedId === row.unified.id;
               const dmin = rowDisplayMin(row);
               return (
-                <div key={row.unified.id} className="rounded-xl bg-card p-4 shadow-card space-y-2">
-                  <div
-                    className={`flex items-center gap-2 ${isAdmin ? "cursor-pointer" : ""}`}
+                <div
+                  key={row.unified.id}
+                  className={`overflow-hidden rounded-xl bg-card ${isExpanded ? "ring-2 ring-primary" : "ring-1 ring-border"}`}
+                >
+                  <button
+                    type="button"
+                    disabled={!isAdmin}
                     onClick={() => handleToggle(row)}
+                    aria-expanded={isAdmin ? isExpanded : undefined}
+                    className="flex w-full items-start gap-2 px-4 pb-2 pt-3 text-left disabled:cursor-default"
                   >
-                    <div className="flex-1 flex items-center gap-2 flex-wrap">
-                      {categoryFilter === "all" && row.unified.notes && (
-                        <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                          row.unified.notes === "약품"
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-emerald-100 text-emerald-700"
-                        }`}>
-                          {row.unified.notes}
-                        </span>
-                      )}
-                      <span className="font-medium">{row.unified.name}</span>
+                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                      {categoryFilter === "all" && categoryTag(row.unified.notes)}
+                      <span className="text-[15px] font-semibold leading-snug">{row.unified.name}</span>
                       {row.unified.remarks && (
-                        <span className="text-xs text-muted-foreground">({row.unified.remarks})</span>
+                        <span className="text-[13px] text-muted-foreground">{row.unified.remarks}</span>
                       )}
-                    </div>
-                    {isAdmin && (
-                      isExpanded
-                        ? <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        : <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
+                    </span>
+                    {isAdmin &&
+                      (isExpanded ? (
+                        <ChevronUp className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <Pencil className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      ))}
+                  </button>
+                  <div className="grid grid-cols-2 gap-1 px-3 pb-3">
                     {vendors.map((vendor) => {
                       const shown = cellValue(row.prices.get(vendor.id)?.price ?? null, vendor.discount_rate ?? 0);
                       const isMin = dmin != null && shown === dmin;
                       return (
                         <div
                           key={vendor.id}
-                          className={`flex items-center justify-between text-sm px-2 py-1 rounded ${
-                            isMin ? "bg-green-50 dark:bg-green-950/30" : ""
+                          className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 ${
+                            isMin ? "bg-status-done-bg" : "bg-muted"
                           }`}
                         >
-                          <span className="text-muted-foreground text-xs">{vendor.name}</span>
-                          <span className={isMin ? "font-bold text-green-600" : ""}>
-                            {shown != null ? `${shown.toLocaleString()}원` : "-"}
+                          <span className="truncate text-xs text-subtle-foreground">{vendor.name}</span>
+                          <span
+                            className={`shrink-0 text-sm tabular-nums ${
+                              isMin ? "font-bold text-status-done" : shown == null ? "text-muted-foreground" : "font-medium"
+                            }`}
+                          >
+                            {shown != null ? shown.toLocaleString() : "-"}
                           </span>
                         </div>
                       );
                     })}
                   </div>
-                  {isExpanded && editForm && renderMobileEditPanel(row)}
+                  {isExpanded && editForm && <div className="px-4 pb-4">{renderMobileEditPanel(row)}</div>}
                 </div>
               );
             })}
           </div>
 
-          {/* PC 테이블 뷰 */}
-          <div className="hidden lg:block rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {categoryFilter === "all" && (
-                    <TableHead className="w-[60px]">구분</TableHead>
-                  )}
-                  <TableHead className="w-[200px]">제품명</TableHead>
-                  {vendors.map((vendor) => (
-                    <TableHead key={vendor.id} className="w-[120px] text-right">
-                      {vendor.name}
-                    </TableHead>
-                  ))}
-                  <TableHead className="w-[120px]">비고</TableHead>
-                  {isAdmin && <TableHead className="w-[40px]" />}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isAdding && newForm && renderAddRowPc()}
-                {filtered.map((row) => {
-                  const isExpanded = expandedId === row.unified.id;
-                  const dmin = rowDisplayMin(row);
+          {/* PC 표: 머리글·제품명 고정, 표 안에서 스크롤 */}
+          <div className="hidden overflow-hidden rounded-xl bg-card ring-1 ring-border lg:block">
+            <div className="max-h-[calc(100dvh-18rem)] min-h-[20rem] overflow-auto">
+              <table className="w-full border-separate border-spacing-0 text-sm">
+                <thead className="sticky top-0 z-20">
+                  <tr className="text-left text-[13px] font-semibold text-subtle-foreground">
+                    <th className="sticky left-0 z-10 min-w-[240px] border-b border-border bg-muted px-4 py-2.5">
+                      제품명
+                      <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">{filtered.length}</span>
+                    </th>
+                    {vendors.map((vendor) => {
+                      const rate = vendor.discount_rate ?? 0;
+                      return (
+                        <th key={vendor.id} className="min-w-[110px] border-b border-border bg-muted px-3 py-2.5 text-right">
+                          <span className="block leading-tight">{vendor.name}</span>
+                          {rate > 0 && (
+                            <span className="block text-[11px] font-normal leading-tight text-muted-foreground">
+                              할인 {rate}%
+                            </span>
+                          )}
+                        </th>
+                      );
+                    })}
+                    <th className="min-w-[140px] border-b border-border bg-muted px-3 py-2.5">비고</th>
+                    {isAdmin && <th className="w-[44px] border-b border-border bg-muted" />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {isAdding && newForm && renderAddRowPc()}
+                  {filtered.map((row) => {
+                    const isExpanded = expandedId === row.unified.id;
+                    const dmin = rowDisplayMin(row);
 
-                  return (
-                    <Fragment key={row.unified.id}>
-                      {isExpanded && editForm ? renderEditRowPc(row) : (
-                        <TableRow
-                          className={isAdmin ? "cursor-pointer" : ""}
-                          onClick={() => handleToggle(row)}
-                        >
-                          {categoryFilter === "all" && (
-                            <TableCell>
-                              {row.unified.notes && (
-                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                                  row.unified.notes === "약품"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "bg-emerald-100 text-emerald-700"
-                                }`}>
-                                  {row.unified.notes}
-                                </span>
-                              )}
-                            </TableCell>
-                          )}
-                          <TableCell className="font-medium">{row.unified.name}</TableCell>
-                          {vendors.map((vendor) => {
-                            const entry = row.prices.get(vendor.id);
-                            const shown = cellValue(entry?.price ?? null, vendor.discount_rate ?? 0);
-                            const isMin = dmin != null && shown === dmin;
-                            return (
-                              <TableCell
-                                key={vendor.id}
-                                className={`text-right ${
-                                  isMin
-                                    ? "bg-green-50 dark:bg-green-950/30 font-bold text-green-600"
-                                    : ""
-                                }`}
-                                title={entry?.productName}
-                              >
-                                {shown != null ? shown.toLocaleString() : "-"}
-                              </TableCell>
-                            );
-                          })}
-                          <TableCell className="text-sm text-muted-foreground">
-                            {row.unified.remarks || ""}
-                          </TableCell>
-                          {isAdmin && (
-                            <TableCell className="text-muted-foreground">
-                              <ChevronDown className="h-4 w-4" />
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                    return (
+                      <Fragment key={row.unified.id}>
+                        {isExpanded && editForm ? (
+                          renderEditRowPc(row)
+                        ) : (
+                          <tr
+                            className={`group ${isAdmin ? "cursor-pointer" : ""}`}
+                            onClick={() => handleToggle(row)}
+                          >
+                            <td className="sticky left-0 z-[1] border-b border-border bg-card px-4 py-2.5 group-hover:bg-muted">
+                              <span className="flex items-center gap-1.5">
+                                {categoryFilter === "all" && categoryTag(row.unified.notes)}
+                                <span className="font-medium">{row.unified.name}</span>
+                              </span>
+                            </td>
+                            {vendors.map((vendor) => {
+                              const entry = row.prices.get(vendor.id);
+                              const shown = cellValue(entry?.price ?? null, vendor.discount_rate ?? 0);
+                              const isMin = dmin != null && shown === dmin;
+                              return (
+                                <td
+                                  key={vendor.id}
+                                  title={entry?.productName}
+                                  className={`border-b border-border px-3 py-2.5 text-right tabular-nums ${
+                                    isMin
+                                      ? "bg-status-done-bg font-bold text-status-done"
+                                      : shown == null
+                                        ? "text-muted-foreground group-hover:bg-muted"
+                                        : "group-hover:bg-muted"
+                                  }`}
+                                >
+                                  {shown != null ? shown.toLocaleString() : "-"}
+                                </td>
+                              );
+                            })}
+                            <td className="border-b border-border px-3 py-2.5 text-[13px] text-muted-foreground group-hover:bg-muted">
+                              {row.unified.remarks || ""}
+                            </td>
+                            {isAdmin && (
+                              <td className="border-b border-border px-2 text-muted-foreground group-hover:bg-muted">
+                                <Pencil className="h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
+                              </td>
+                            )}
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
+          <p className="hidden px-1 text-xs text-muted-foreground lg:block">
+            초록 칸 = 그 품목의 최저가 · 업체 칸에 마우스를 올리면 업체 쪽 품목명이 보여요
+            {isAdmin ? " · 행을 누르면 바로 수정" : ""}
+          </p>
         </>
       )}
     </div>

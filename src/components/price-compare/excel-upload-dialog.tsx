@@ -72,7 +72,7 @@ export function ExcelUploadDialog({ open, onClose, onSuccess }: ExcelUploadDialo
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("가격비교");
 
-    const headerBg = "FF2563EB";
+    const headerBg = "FF1166A7";
     const headerFont = "FFFFFFFF";
     const borderColor = "FF1D4ED8";
     const guideBg = "FFF8FAFC";

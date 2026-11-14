@@ -2,23 +2,24 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BarChart3, BookText, CalendarDays, CalendarRange, ChevronRight, Droplets, LogOut, PackageX, Scale, ScanLine, TrendingUp, Undo2, UserCog, Users } from "lucide-react";
+import { ChevronRight, KeyRound, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { useTabCounts } from "@/hooks/use-tab-counts";
+import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
+import { NotificationBell } from "@/components/notification-bell";
+import { NAV_GROUPS, type NavItem } from "@/components/nav-config";
+import { ROLE_LABEL, POSITION_LABEL, type Role, type Position } from "@/lib/types/member";
 import { logClientAction } from "@/app/(main)/log-action";
 
-const ROLE_LABEL: Record<string, string> = {
-  admin: "관리자",
-  user: "일반 사용자",
-};
-
+/**
+ * 더보기 (모바일 마지막 탭, 토스 "전체" 탭 모양).
+ * 내 정보 → 메뉴(사이드바와 같은 구성 NAV_GROUPS, 건수 포함) → 설정 → 로그아웃.
+ */
 export function MorePage() {
-  const { userId, userName, isAdmin } = useAuth();
-  const profile = { id: userId, full_name: userName, role: isAdmin ? "admin" : "user" };
+  const { userName, isAdmin, role, position } = useAuth();
+  const counts = useTabCounts();
   const router = useRouter();
   const supabase = createClient();
 
@@ -28,207 +29,105 @@ export function MorePage() {
     router.replace("/login");
   };
 
+  const roleText = ROLE_LABEL[role as Role] ?? role;
+  const positionText = position ? POSITION_LABEL[position as Position] ?? position : null;
+
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <h1 className="text-lg font-bold">더보기</h1>
-      </header>
+    <>
+      <PageHeader
+        title="더보기"
+        action={
+          <div className="lg:hidden">
+            <NotificationBell />
+          </div>
+        }
+      />
 
-      <div className="flex min-h-[calc(100dvh-3.25rem-3.5rem-env(safe-area-inset-bottom))] flex-col p-4 lg:min-h-[calc(100dvh-3.25rem)]">
-        <div className="space-y-4">
-          {/* 사용자 정보 */}
-          <Card>
-            <CardContent className="flex items-center justify-between py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold">
-                  {profile.full_name?.charAt(0) ?? "?"}
-                </div>
-                <div>
-                  <p className="font-medium">{profile.full_name}</p>
-                  <Badge
-                    variant={isAdmin ? "default" : "secondary"}
-                    className="mt-0.5"
-                  >
-                    {ROLE_LABEL[profile.role] ?? profile.role}
-                  </Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      <div className="mx-auto max-w-md md:max-w-2xl flex flex-col gap-5 p-4 pb-8 lg:px-6">
+        {/* 내 정보 */}
+        <Link
+          href="/account"
+          className="flex items-center gap-3.5 rounded-2xl bg-card p-4 ring-1 ring-border transition-colors hover:bg-muted/60 active:bg-muted"
+        >
+          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-primary/10 text-lg font-bold text-primary">
+            {userName?.charAt(0) ?? "?"}
+          </span>
+          <span className="min-w-0 flex-1">
+            <b className="block truncate text-[17px] font-bold">{userName}</b>
+            <span className="text-[13px] text-muted-foreground">
+              {roleText}
+              {positionText ? ` · ${positionText}` : ""}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-0.5 text-[13px] font-semibold text-subtle-foreground">
+            내 계정
+            <ChevronRight className="size-4" />
+          </span>
+        </Link>
 
-          {/* 인사 */}
-          <p className="px-1 text-xs font-semibold text-muted-foreground/70">인사</p>
-          <Card className="py-0 gap-0">
-            <CardContent className="divide-y p-0">
-              <Link
-                href="/leave"
-                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-              >
-                <div className="flex items-center gap-3">
-                  <CalendarDays className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">연차</span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-              </Link>
-              <Link
-                href="/schedule"
-                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-              >
-                <div className="flex items-center gap-3">
-                  <CalendarRange className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">근무표</span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-              </Link>
-            </CardContent>
-          </Card>
+        {/* 메뉴 — 사이드바와 같은 구성 */}
+        {NAV_GROUPS.filter((g) => !g.adminOnly || isAdmin).map((group, gi) => (
+          <MenuGroup key={group.label ?? gi} label={group.label ?? "내 현황"}>
+            {group.items.map((item) => {
+              const info = item.countKey ? counts[item.countKey] : null;
+              return <MenuRow key={item.href} item={item} count={info?.count ?? 0} urgent={info?.hasUrgent ?? false} />;
+            })}
+          </MenuGroup>
+        ))}
 
-          {/* 업무 */}
-          <p className="px-1 text-xs font-semibold text-muted-foreground/70">업무</p>
-          <Card className="py-0 gap-0">
-            <CardContent className="divide-y p-0">
-              <Link
-                href="/returns"
-                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-              >
-                <div className="flex items-center gap-3">
-                  <Undo2 className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">반품</span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-              </Link>
-              <Link
-                href="/out-of-stock"
-                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-              >
-                <div className="flex items-center gap-3">
-                  <PackageX className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">품절</span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-              </Link>
-            </CardContent>
-          </Card>
+        <MenuGroup label="설정">
+          <MenuRow item={{ href: "/account", label: "내 계정 · 비밀번호", icon: KeyRound }} count={0} urgent={false} />
+        </MenuGroup>
 
-          {/* 혈액 대장 */}
-          <p className="px-1 text-xs font-semibold text-muted-foreground/70">혈액 관리</p>
-          <Card className="py-0 gap-0">
-            <CardContent className="divide-y p-0">
-              <Link
-                href="/blood"
-                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-              >
-                <div className="flex items-center gap-3">
-                  <Droplets className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">혈액 대장</span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-              </Link>
-            </CardContent>
-          </Card>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-card text-[15px] font-semibold text-status-late ring-1 ring-border transition-colors hover:bg-status-late-bg"
+        >
+          <LogOut className="size-4" />
+          로그아웃
+        </button>
 
-          {/* 관리자 전용 메뉴 */}
-          {isAdmin && (
-            <>
-              <p className="px-1 text-xs font-semibold text-muted-foreground/70">관리자 전용</p>
-              <Card className="py-0 gap-0">
-                <CardContent className="divide-y p-0">
-                  <Link
-                    href="/dashboard/admin"
-                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <BarChart3 className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-medium">대시보드</span>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </Link>
-                  <Link
-                    href="/invoice-scan"
-                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <ScanLine className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-medium">명세서 스캔</span>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </Link>
-                  <Link
-                    href="/price-compare"
-                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Scale className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-medium">가격 비교</span>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </Link>
-                  <Link
-                    href="/vendor-ledger"
-                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <BookText className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-medium">거래처원장</span>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </Link>
-                  <Link
-                    href="/price-analysis"
-                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <TrendingUp className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-medium">단가 분석</span>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </Link>
-                  <Link
-                    href="/members"
-                    className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Users className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-medium">직원 관리</span>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </Link>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {/* 설정 */}
-          <p className="px-1 text-xs font-semibold text-muted-foreground/70">설정</p>
-          <Card className="py-0 gap-0">
-            <CardContent className="divide-y p-0">
-              <Link
-                href="/account"
-                className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-accent/50"
-              >
-                <div className="flex items-center gap-3">
-                  <UserCog className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">내 계정관리</span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* 로그아웃 - 하단 고정 */}
-        <div className="mt-auto pt-4">
-          <Separator className="mb-4" />
-          <Button
-            variant="outline"
-            className="w-full text-destructive hover:text-destructive"
-            onClick={handleLogout}
-          >
-            <LogOut className="h-4 w-4" />
-            로그아웃
-          </Button>
-        </div>
+        <p className="text-center text-xs text-muted-foreground">수오더 · SOO Animal Medical Center</p>
       </div>
-    </div>
+    </>
+  );
+}
+
+function MenuGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-2 px-1 text-[13px] font-semibold text-subtle-foreground">{label}</h2>
+      <ul className="overflow-hidden rounded-2xl bg-card ring-1 ring-border">{children}</ul>
+    </section>
+  );
+}
+
+function MenuRow({ item, count, urgent }: { item: NavItem; count: number; urgent: boolean }) {
+  const Icon = item.icon;
+  return (
+    <li className="border-t border-border first:border-t-0">
+      <Link
+        href={item.href}
+        aria-label={count > 0 ? `${item.label}, ${count}건${urgent ? " (긴급 포함)" : ""}` : undefined}
+        className="flex min-h-14 items-center gap-3 px-4 transition-colors hover:bg-muted/60 active:bg-muted"
+      >
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-subtle-foreground">
+          <Icon className="size-[18px]" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-base font-semibold">{item.label}</span>
+        {count > 0 && (
+          <span
+            className={cn(
+              "min-w-6 rounded-full px-2 py-0.5 text-center text-xs font-bold tabular-nums",
+              urgent ? "bg-status-late-bg text-status-late" : "bg-muted text-subtle-foreground"
+            )}
+          >
+            {count}
+          </span>
+        )}
+        <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      </Link>
+    </li>
   );
 }

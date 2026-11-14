@@ -1,27 +1,21 @@
 export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { createClient, getSessionProfile } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Tag } from "@/components/list-parts";
 import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { CancelInspectionButton } from "@/components/search/cancel-inspection-button";
 import { ReturnRequestButton } from "@/components/search/return-request-button";
 import { DeleteOrderButton } from "@/components/search/delete-order-button";
 import { PhotoGallery } from "@/components/orders/photo-gallery";
+import { DetailPage, DetailHero, DetailCard, InfoGrid, DetailActions } from "@/components/workspace/detail-page";
+import { Timeline } from "@/components/workspace/detail-panel";
 import { formatDateTime } from "@/lib/utils/format";
 import type { OrderType, OrderStatus } from "@/lib/types/order";
 import { ORDER_TYPE_LABEL } from "@/lib/types/order";
 
-export default async function SearchDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function SearchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { userId, isAdmin } = await getSessionProfile();
 
@@ -36,241 +30,138 @@ export default async function SearchDetailPage({
 
   if (!order) notFound();
 
-  const isInspector = order.inspected_by === userId;
-  const canCancelInspection =
-    order.status === "inspecting" && (isInspector || isAdmin);
-
+  const status = order.status as OrderStatus;
+  const canCancelInspection = status === "inspecting" && (order.inspected_by === userId || isAdmin);
+  const canReturn = status === "inspecting";
   const wasUpdated = order.updated_at !== order.created_at;
+  const showOrdered = ["ordered", "inspecting", "return_requested", "return_pending", "return_completed"].includes(status);
+  const showInspected = ["inspecting", "return_requested", "return_pending", "return_completed"].includes(status);
+  const showReturn = ["return_requested", "return_pending", "return_completed"].includes(status);
+  const qty = order.quantity > 0 ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}` : "수량은 사진 참고";
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/search">
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <h1 className="text-lg font-bold">조회 상세</h1>
-      </header>
+    <DetailPage
+      title="조회 상세"
+      backHref="/search"
+      aside={
+        <>
+          {(canCancelInspection || canReturn || isAdmin) && (
+            <DetailActions>
+              {canReturn && (
+                <ReturnRequestButton
+                  orderId={order.id}
+                  itemName={order.item_name}
+                  defaultQuantity={order.confirmed_quantity ?? order.quantity}
+                  unit={order.unit}
+                />
+              )}
+              {canCancelInspection && <CancelInspectionButton orderId={order.id} itemName={order.item_name} />}
+              {isAdmin && <DeleteOrderButton orderId={order.id} itemName={order.item_name} />}
+            </DetailActions>
+          )}
+          <DetailCard title="처리 이력">
+            <Timeline
+              items={[
+                ...(order.return_requested_at
+                  ? [{ key: "ret", text: <><b className="font-semibold text-foreground">반품 신청</b> · {order.return_requester?.full_name ?? "—"}</>, at: formatDateTime(order.return_requested_at) }]
+                  : []),
+                ...(order.inspected_at
+                  ? [{ key: "insp", text: <><b className="font-semibold text-foreground">검수 완료</b> · {order.inspector?.full_name ?? "—"}</>, at: formatDateTime(order.inspected_at) }]
+                  : []),
+                ...(order.dispatched_at
+                  ? [{ key: "disp", text: <><b className="font-semibold text-foreground">발주</b> · {order.vendor_name || "업체 미지정"}</>, at: formatDateTime(order.dispatched_at) }]
+                  : []),
+                { key: "created", text: <><b className="font-semibold text-foreground">등록</b> · {order.requester?.full_name ?? "—"}</>, at: formatDateTime(order.created_at) },
+              ]}
+            />
+          </DetailCard>
+        </>
+      }
+    >
+      <DetailHero
+        badges={
+          <>
+            <OrderTypeBadge type={order.type as OrderType} />
+            <OrderStatusBadge status={status} />
+            {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+          </>
+        }
+        title={order.item_name}
+        summary={
+          <>
+            <b className="font-semibold text-foreground tabular-nums">{qty}</b>
+            {order.vendor_name ? ` · ${order.vendor_name}` : ""} · {order.requester?.full_name ?? "알 수 없음"} 요청
+          </>
+        }
+      />
 
-      <div className="p-4"><div className="space-y-6 rounded-2xl bg-card p-5 shadow-card">
-        {/* 상태 뱃지 */}
-        <div className="flex items-center gap-2">
-          <OrderTypeBadge type={order.type as OrderType} />
-          <OrderStatusBadge status={order.status as OrderStatus} />
-          {order.is_urgent && <Badge variant="destructive">긴급</Badge>}
-        </div>
+      <DetailCard title="요청 정보">
+        <InfoGrid
+          items={[
+            { label: "유형", value: ORDER_TYPE_LABEL[order.type as OrderType] },
+            { label: "요청 수량", value: order.quantity > 0 ? qty : <span className="text-muted-foreground">사진 참고</span> },
+            { label: "요청자", value: order.requester?.full_name ?? "알 수 없음" },
+            { label: "요청 일시", value: formatDateTime(order.created_at) },
+            wasUpdated && order.updater && { label: "마지막 수정", value: `${order.updater.full_name ?? "—"} · ${formatDateTime(order.updated_at)}` },
+            order.notes && { label: "비고", value: order.notes, wide: true },
+          ]}
+        />
+      </DetailCard>
 
-        {/* 섹션 1: 주문/반품 요청 정보 */}
-        <Separator />
-        <div>
-          <h2 className="font-semibold">요청 정보</h2>
-          <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
-            <div>
-              <dt className="text-sm text-muted-foreground">유형</dt>
-              <dd className="mt-0.5 font-medium">
-                {ORDER_TYPE_LABEL[order.type as OrderType]}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">품목</dt>
-              <dd className="mt-0.5 font-medium">{order.item_name}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">요청 수량</dt>
-              <dd className="mt-0.5 font-medium">
-                {order.quantity > 0
-                  ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
-                  : <span className="text-muted-foreground">(사진 참고)</span>}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">주문요청자</dt>
-              <dd className="mt-0.5 font-medium">
-                {order.requester?.full_name ?? "알 수 없음"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">요청일시</dt>
-              <dd className="mt-0.5 font-medium">
-                {formatDateTime(order.created_at)}
-              </dd>
-            </div>
-            {order.notes && (
-              <div>
-                <dt className="text-sm text-muted-foreground">비고</dt>
-                <dd className="mt-0.5 font-medium">{order.notes}</dd>
-              </div>
-            )}
-            {wasUpdated && (
-              <>
-                {order.updater && (
-                  <div>
-                    <dt className="text-sm text-muted-foreground">수정자</dt>
-                    <dd className="mt-0.5 font-medium">
-                      {order.updater.full_name ?? "알 수 없음"}
-                    </dd>
-                  </div>
-                )}
-                <div>
-                  <dt className="text-sm text-muted-foreground">수정일시</dt>
-                  <dd className="mt-0.5 font-medium">
-                    {formatDateTime(order.updated_at)}
-                  </dd>
-                </div>
-              </>
-            )}
-          </dl>
-          {order.photo_urls?.length > 0 && (
+      {showOrdered && (
+        <DetailCard title="발주 정보">
+          <InfoGrid
+            items={[
+              { label: "업체", value: order.vendor_name || <span className="text-muted-foreground">없음</span> },
+              order.dispatched_at && { label: "발주 일시", value: formatDateTime(order.dispatched_at) },
+              order.order_notes && { label: "발주 비고", value: order.order_notes, wide: true },
+            ]}
+          />
+        </DetailCard>
+      )}
+
+      {showInspected && (
+        <DetailCard title="검수 정보">
+          <InfoGrid
+            items={[
+              { label: "확인 수량", value: order.confirmed_quantity ?? "—" },
+              {
+                label: "거래명세서",
+                value:
+                  order.invoice_received === true ? "수령" : order.invoice_received === false ? <span className="text-status-ask">미수령</span> : "—",
+              },
+              { label: "검수자", value: order.inspector?.full_name ?? "알 수 없음" },
+              order.inspected_at && { label: "검수 일시", value: formatDateTime(order.inspected_at) },
+              order.inspection_notes && { label: "검수 비고", value: order.inspection_notes, wide: true },
+            ]}
+          />
+        </DetailCard>
+      )}
+
+      {showReturn && (
+        <DetailCard title="반품 정보">
+          <InfoGrid
+            items={[
+              { label: "반품 수량", value: `${order.return_quantity ?? order.quantity}${order.unit ? ` ${order.unit}` : ""}` },
+              { label: "신청자", value: order.return_requester?.full_name ?? "알 수 없음" },
+              order.return_requested_at && { label: "신청 일시", value: formatDateTime(order.return_requested_at) },
+              { label: "반품 사유", value: order.return_reason || "—", wide: true },
+            ]}
+          />
+          {order.return_photo_urls?.length > 0 && (
             <div className="mt-4">
-              <dt className="text-sm text-muted-foreground mb-2">사진</dt>
-              <PhotoGallery photoUrls={order.photo_urls} />
+              <p className="mb-2 text-xs text-muted-foreground">반품 사진</p>
+              <PhotoGallery photoUrls={order.return_photo_urls} />
             </div>
           )}
-        </div>
+        </DetailCard>
+      )}
 
-        {/* 섹션 2: 주문 정보 (ordered 이상) */}
-        {(order.status === "ordered" || order.status === "inspecting" || order.status === "return_requested" || order.status === "return_completed") && (
-          <>
-            <Separator />
-            <div>
-              <h2 className="font-semibold">주문 정보</h2>
-              <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
-                <div>
-                  <dt className="text-sm text-muted-foreground">업체명</dt>
-                  <dd className="mt-0.5 font-medium">
-                    {order.vendor_name || "-"}
-                  </dd>
-                </div>
-                {order.order_notes && (
-                  <div>
-                    <dt className="text-sm text-muted-foreground">비고</dt>
-                    <dd className="mt-0.5 font-medium">{order.order_notes}</dd>
-                  </div>
-                )}
-              </dl>
-            </div>
-          </>
-        )}
-
-        {/* 섹션 3: 검수 정보 (inspecting 이상) */}
-        {(order.status === "inspecting" || order.status === "return_requested" || order.status === "return_completed") && (
-          <>
-            <Separator />
-            <div>
-              <h2 className="font-semibold">검수 정보</h2>
-              <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
-                <div>
-                  <dt className="text-sm text-muted-foreground">확인 수량</dt>
-                  <dd className="mt-0.5 font-medium">
-                    {order.confirmed_quantity ?? "-"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-muted-foreground">
-                    거래명세서 수령
-                  </dt>
-                  <dd className="mt-0.5 font-medium">
-                    {order.invoice_received === true
-                      ? "수령"
-                      : order.invoice_received === false
-                        ? "미수령"
-                        : "-"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-muted-foreground">검수자</dt>
-                  <dd className="mt-0.5 font-medium">
-                    {order.inspector?.full_name ?? "알 수 없음"}
-                  </dd>
-                </div>
-                {order.inspected_at && (
-                  <div>
-                    <dt className="text-sm text-muted-foreground">검수일시</dt>
-                    <dd className="mt-0.5 font-medium">
-                      {formatDateTime(order.inspected_at)}
-                    </dd>
-                  </div>
-                )}
-                {order.inspection_notes && (
-                  <div>
-                    <dt className="text-sm text-muted-foreground">비고</dt>
-                    <dd className="mt-0.5 font-medium">{order.inspection_notes}</dd>
-                  </div>
-                )}
-              </dl>
-            </div>
-          </>
-        )}
-
-        {/* 섹션 4: 반품 정보 (반품 상태일 때) */}
-        {(order.status === "return_requested" || order.status === "return_completed") && (
-          <>
-            <Separator />
-            <div>
-              <h2 className="font-semibold">반품 정보</h2>
-              <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
-                <div>
-                  <dt className="text-sm text-muted-foreground">반품 수량</dt>
-                  <dd className="mt-0.5 font-medium">
-                    {order.return_quantity ?? order.quantity}
-                    {order.unit ? ` ${order.unit}` : ""}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-muted-foreground">반품 사유</dt>
-                  <dd className="mt-0.5 font-medium">
-                    {order.return_reason || "-"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm text-muted-foreground">반품 신청자</dt>
-                  <dd className="mt-0.5 font-medium">
-                    {order.return_requester?.full_name ?? "알 수 없음"}
-                  </dd>
-                </div>
-                {order.return_requested_at && (
-                  <div>
-                    <dt className="text-sm text-muted-foreground">반품 신청일시</dt>
-                    <dd className="mt-0.5 font-medium">
-                      {formatDateTime(order.return_requested_at)}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </div>
-          </>
-        )}
-
-        {/* 검수 취소 버튼 */}
-        {canCancelInspection && (
-          <>
-            <Separator />
-            <CancelInspectionButton orderId={order.id} itemName={order.item_name} />
-          </>
-        )}
-
-        {/* 반품 신청 버튼 (검수완료 상태일 때) */}
-        {order.status === "inspecting" && (
-          <>
-            <Separator />
-            <ReturnRequestButton
-              orderId={order.id}
-              itemName={order.item_name}
-              defaultQuantity={order.confirmed_quantity ?? order.quantity}
-              unit={order.unit}
-            />
-          </>
-        )}
-
-        {/* 삭제 버튼 (관리자만) */}
-        {isAdmin && (
-          <>
-            <Separator />
-            <DeleteOrderButton orderId={order.id} itemName={order.item_name} />
-          </>
-        )}
-      </div></div>
-    </div>
+      {order.photo_urls?.length > 0 && (
+        <DetailCard title={`사진 ${order.photo_urls.length}`}>
+          <PhotoGallery photoUrls={order.photo_urls} />
+        </DetailCard>
+      )}
+    </DetailPage>
   );
 }

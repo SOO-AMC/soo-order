@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
+import { BackButton } from "@/components/back-button";
 import { useRouter } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import { OrderForm } from "@/components/orders/order-form";
 import type { OrderFormResult } from "@/components/orders/order-form";
 import type { Order } from "@/lib/types/order";
@@ -90,17 +89,9 @@ export function EditOrderForm({ order }: { order: Order }) {
   };
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href={`/orders/${id}`}>
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <h1 className="text-lg font-bold">주문 수정</h1>
-      </header>
-      <div className="p-4">
-        <div className="rounded-2xl bg-card p-5 shadow-card">
+    <div className="mx-auto max-w-md md:max-w-2xl">
+      <PageHeader title="주문 수정" leading={<BackButton fallbackHref={`/orders/${id}`} />} />
+      <div className="py-2 lg:px-6 lg:py-4">
           <OrderForm
             defaultValues={{
               item_name: order.item_name,
@@ -114,7 +105,6 @@ export function EditOrderForm({ order }: { order: Order }) {
             showVendorField={order.status !== "pending"}
             onSubmit={handleSubmit}
           />
-        </div>
       </div>
     </div>
   );

@@ -20,23 +20,18 @@ export default async function ReturnsPage() {
     .order("return_requested_at", { ascending: false });
   const initialOrders = (data as OrderWithRequester[] | null) ?? [];
 
+  // 상단바(PageHeader)는 탭 건수가 필요해 ReturnList 안에서 그린다
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <div className="lg:hidden">
-          <BackButton fallbackHref="/more" />
-        </div>
-        <div>
-          <h1 className="text-lg font-bold leading-tight">반품</h1>
-          <p className="hidden text-xs text-muted-foreground sm:block">반품 신청·접수 처리 대기</p>
-        </div>
-        <div className="ml-auto">
-          <AdminReturnCreateDialog />
-        </div>
-      </header>
-      <div className="p-4">
-        <ReturnList initialOrders={initialOrders} />
-      </div>
+      <ReturnList
+        initialOrders={initialOrders}
+        headerLeading={
+          <div className="lg:hidden">
+            <BackButton fallbackHref="/more" />
+          </div>
+        }
+        headerAction={<AdminReturnCreateDialog />}
+      />
     </div>
   );
 }

@@ -15,7 +15,7 @@ import type { VendorData } from "@/lib/types/dashboard";
 const chartConfig = {
   total: {
     label: "발주 건수",
-    color: "#2563EB",
+    color: "#1166A7",
   },
   invoiceReceived: {
     label: "명세서 수령",
@@ -32,7 +32,7 @@ export function VendorStatusChart({ data }: VendorStatusChartProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">업체별 발주 현황</CardTitle>
+          <CardTitle className="text-[15px] font-bold">업체별 발주 현황</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">데이터가 없습니다.</p>
@@ -44,7 +44,7 @@ export function VendorStatusChart({ data }: VendorStatusChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">업체별 발주 현황</CardTitle>
+        <CardTitle className="text-[15px] font-bold">업체별 발주 현황</CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer id="vendor-status" config={chartConfig} className="aspect-auto h-[300px] w-full">

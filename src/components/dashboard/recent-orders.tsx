@@ -11,7 +11,7 @@ export function RecentOrders({ data }: { data: RecentOrderRow[] }) {
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base">최근 주문</CardTitle>
+        <CardTitle className="text-[15px] font-bold">최근 주문</CardTitle>
         <Link href="/search" className="text-xs text-primary hover:underline">전체 보기</Link>
       </CardHeader>
       <CardContent>

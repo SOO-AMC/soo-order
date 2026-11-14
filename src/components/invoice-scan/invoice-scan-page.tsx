@@ -1,7 +1,8 @@
 "use client";
 
+import { PageHeader } from "@/components/page-header";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ScanLine, Upload, FileText, AlertTriangle, Check, X, RefreshCw, Plus, Layers, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
+import { Upload, FileText, AlertTriangle, Check, X, RefreshCw, Plus, Layers, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 import { scanInvoice, renderInvoiceThumbnail, renderInvoicePages } from "@/lib/actions/invoice-scan-action";
@@ -15,7 +16,8 @@ import { logClientAction } from "@/app/(main)/log-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Select,
@@ -790,95 +792,188 @@ export function InvoiceScanPage() {
   const orderLabel = (o: OrderLite) =>
     `${o.item_name} · ${o.requester?.full_name ?? "?"} · ${o.vendor_name || "업체?"} (잔여 ${Math.max(0, o.quantity - o.received_quantity)})`;
 
-  return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-4xl">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <ScanLine className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-bold">명세서 스캔</h1>
-      </header>
+  // 단계 표시: 묶음이면 업로드 → 업체 확인 → 품목 확인, 단일이면 업로드 → 품목 확인
+  const bundleMode = step === "grouping" || queue.length > 1;
+  const steps = bundleMode ? ["파일 올리기", "업체 확인", "품목 확인·확정"] : ["파일 올리기", "품목 확인·확정"];
+  const stepIndex = step === "upload" || step === "scanning" ? 0 : step === "grouping" ? 1 : steps.length - 1;
 
-      <div className="p-4">
+  // 확인 단계 요약: 신규·단가 불일치·배분 남음
+  const rowSummary =
+    step === "preview"
+      ? rows.reduce(
+          (acc, r) => {
+            const d = derive(r);
+            if (d.isNewProduct) acc.newCount++;
+            if (d.priceMismatch) acc.mismatch++;
+            if (d.leftover !== 0) acc.leftover++;
+            return acc;
+          },
+          { newCount: 0, mismatch: 0, leftover: 0 },
+        )
+      : null;
+
+  // 하단 고정 버튼 줄: 모바일은 하단 메뉴 위
+  const stickyBar =
+    "sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 -mx-4 flex gap-2 border-t border-border bg-card px-4 py-3 lg:bottom-0 lg:-mx-6 lg:px-6";
+
+  return (
+    <div
+      className={cn(
+        "mx-auto max-w-md md:max-w-2xl",
+        step === "preview" && showOriginal ? "lg:max-w-7xl" : "lg:max-w-4xl",
+      )}
+    >
+      <PageHeader title="명세서 스캔" description={<span className="hidden sm:inline">명세서로 검수·단가를 한 번에</span>} />
+
+      <div className="space-y-4 p-4 lg:px-6">
+        {/* 단계 */}
+        <ol className="flex items-center gap-2 text-[13px]" aria-label="진행 단계">
+          {steps.map((label, i) => {
+            const done = i < stepIndex;
+            const current = i === stepIndex;
+            return (
+              <li key={label} className="flex items-center gap-2">
+                {i > 0 && <span className={cn("h-px w-4 sm:w-8", done || current ? "bg-primary" : "bg-border")} />}
+                <span
+                  aria-current={current ? "step" : undefined}
+                  className={cn(
+                    "flex items-center gap-1.5 font-semibold",
+                    current ? "text-foreground" : done ? "text-primary" : "text-muted-foreground",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                      current
+                        ? "bg-primary text-primary-foreground"
+                        : done
+                          ? "bg-status-doing-bg text-primary"
+                          : "bg-secondary text-muted-foreground",
+                    )}
+                  >
+                    {done ? <Check className="size-3" strokeWidth={3} /> : i + 1}
+                  </span>
+                  <span className={cn(!current && "hidden sm:inline")}>{label}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+
         {error && (
-          <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div role="alert" className="flex items-start gap-2 rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             {error}
           </div>
         )}
 
         {success && (
-          <div className="mb-3 flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-            <Check className="h-4 w-4 shrink-0" />
+          <div role="status" className="flex items-start gap-2 rounded-lg bg-status-done-bg px-3 py-2.5 text-sm font-medium text-status-done">
+            <Check className="mt-0.5 h-4 w-4 shrink-0" />
             {success}
           </div>
         )}
 
         {step === "upload" && (
-          <div className="space-y-3">
-            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card p-8 text-center shadow-card transition-colors hover:bg-accent/40">
-              <Upload className="h-7 w-7 text-muted-foreground" />
-              <span className="text-sm font-medium">단일 명세서 업로드</span>
-              <span className="text-xs text-muted-foreground">한 업체 명세서 (여러 페이지여도 1건) · PDF/이미지</span>
-              <input
-                type="file"
-                accept={ACCEPT}
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleSingle(f);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-8 text-center shadow-card transition-colors hover:bg-primary/10">
-              <Layers className="h-7 w-7 text-primary" />
-              <span className="text-sm font-medium">여러 명세서 묶음 업로드</span>
-              <span className="text-xs text-muted-foreground">여러 파일을 한꺼번에, 또는 합쳐진 PDF 1개 · 업체별로 묶어 확인 후 처리</span>
-              <input
-                type="file"
-                accept={ACCEPT}
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  const files = e.target.files ? Array.from(e.target.files) : [];
-                  if (files.length) handleBundle(files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-input bg-card px-6 py-10 text-center transition-colors hover:border-primary hover:bg-primary/[0.03]">
+                <span className="flex size-12 items-center justify-center rounded-full bg-secondary text-subtle-foreground transition-colors group-hover:bg-status-doing-bg group-hover:text-primary">
+                  <Upload className="h-6 w-6" />
+                </span>
+                <span className="text-[15px] font-bold">명세서 1건</span>
+                <span className="text-[13px] text-muted-foreground">한 업체 명세서 · 여러 페이지여도 1건</span>
+                <span className="text-xs text-muted-foreground">PDF · 이미지</span>
+                <input
+                  type="file"
+                  accept={ACCEPT}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleSingle(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <label className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-input bg-card px-6 py-10 text-center transition-colors hover:border-primary hover:bg-primary/[0.03]">
+                <span className="flex size-12 items-center justify-center rounded-full bg-secondary text-subtle-foreground transition-colors group-hover:bg-status-doing-bg group-hover:text-primary">
+                  <Layers className="h-6 w-6" />
+                </span>
+                <span className="text-[15px] font-bold">여러 명세서 묶음</span>
+                <span className="text-[13px] text-muted-foreground">파일 여러 개, 또는 합쳐진 PDF 1개</span>
+                <span className="text-xs text-muted-foreground">업체별로 묶어 확인한 뒤 차례로 처리</span>
+                <input
+                  type="file"
+                  accept={ACCEPT}
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    if (files.length) handleBundle(files);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+
+            <section className="rounded-xl bg-card px-4 py-3.5 ring-1 ring-border">
+              <h2 className="text-[13px] font-semibold text-subtle-foreground">확정하면 이렇게 처리돼요</h2>
+              <ul className="mt-2 grid gap-x-6 gap-y-1.5 text-[13px] text-foreground sm:grid-cols-2">
+                <li className="flex items-start gap-1.5">
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-status-done" />
+                  검수대기 주문을 검수완료(부분입고 포함)로
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-status-done" />
+                  달라진 단가를 가격비교에 갱신
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-status-done" />
+                  처음 보는 품목·업체는 새로 등록
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-status-done" />
+                  거래처원장·단가 분석에 기록
+                </li>
+              </ul>
+            </section>
           </div>
         )}
 
         {step === "scanning" && (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-card p-10 shadow-card">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-xl bg-card px-6 py-14 ring-1 ring-border">
             <Spinner text="명세서 읽는 중…" />
-            <span className="text-xs text-muted-foreground">Claude가 표를 추출하고 있어요 (수 초 소요)</span>
+            <span className="text-[13px] text-muted-foreground">표를 읽어 품목·수량·단가를 뽑고 있어요 (수 초 소요)</span>
           </div>
         )}
 
         {step === "grouping" && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
-              <span className="flex items-center gap-1.5 text-sm font-medium text-primary">
-                <Layers className="h-4 w-4" /> 명세서 {units.length}건 — 업체별로 묶었어요
-              </span>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                업체가 잘못 묶였으면 카드의 업체를 바꾸고, 화살표로 순서를 조정한 뒤 다음으로 진행하세요.
+            <div className="rounded-lg bg-status-doing-bg px-3.5 py-3">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-status-doing">
+                <Layers className="h-4 w-4" /> 명세서 {units.length}건을 업체별로 묶었어요
+              </p>
+              <p className="mt-0.5 text-[13px] text-subtle-foreground">
+                잘못 묶였으면 카드에서 업체를 바꾸고, 순서를 정한 뒤 다음으로 넘어가세요.
+                <span className="hidden lg:inline"> 카드를 끌어 다른 업체로 옮길 수도 있어요.</span>
               </p>
             </div>
 
             {groupedUnits.map((g) => (
-              <div
+              <section
                 key={g.key}
-                className="space-y-2 rounded-xl p-1 transition-colors"
+                className={cn(
+                  "overflow-hidden rounded-xl bg-card ring-1 transition-colors",
+                  dragId ? "ring-primary/40" : "ring-border",
+                )}
                 onDragOver={(e) => {
                   if (dragId) e.preventDefault();
                 }}
                 onDrop={() => dropOnGroup(g.key, g.vendorId)}
               >
-                <div className="flex items-center gap-2 px-1">
-                  <span className="text-sm font-semibold">{g.label}</span>
-                  <Badge variant="secondary" className="px-1.5 py-0 text-[11px]">
-                    {g.units.length}건
-                  </Badge>
+                <div className="flex min-h-11 items-center gap-2 px-4">
+                  <h2 className="truncate text-[15px] font-bold">{g.label}</h2>
+                  <span className="text-[13px] tabular-nums text-muted-foreground">{g.units.length}건</span>
                 </div>
                 {g.units.map((u) => (
                   <div
@@ -893,13 +988,17 @@ export function InvoiceScanPage() {
                       e.stopPropagation();
                       dropOnUnit(u.id);
                     }}
-                    className={`flex gap-3 rounded-xl bg-card p-3 shadow-card ${dragId === u.id ? "opacity-50" : ""} ${dragId ? "cursor-grabbing" : "lg:cursor-grab"}`}
+                    className={cn(
+                      "flex gap-3 border-t border-border px-3 py-3 sm:px-4",
+                      dragId === u.id && "opacity-50",
+                      dragId ? "cursor-grabbing" : "lg:cursor-grab",
+                    )}
                   >
-                    <GripVertical className="mt-8 hidden h-4 w-4 shrink-0 text-muted-foreground lg:block" />
+                    <GripVertical className="mt-1 hidden h-4 w-4 shrink-0 text-muted-foreground lg:block" />
                     <button
                       type="button"
                       onClick={() => openEnlarge(u)}
-                      className="group relative shrink-0"
+                      className="group relative shrink-0 self-start"
                       aria-label="크게 보기"
                     >
                       {u.thumbUrl ? (
@@ -907,22 +1006,25 @@ export function InvoiceScanPage() {
                         <img
                           src={u.thumbUrl}
                           alt=""
-                          className="h-44 w-32 rounded-md border object-cover object-top transition group-hover:ring-2 group-hover:ring-primary"
+                          className="h-36 w-[6.5rem] rounded-md object-cover object-top ring-1 ring-border transition group-hover:ring-2 group-hover:ring-primary sm:h-44 sm:w-32"
                         />
                       ) : (
-                        <div className="flex h-44 w-32 items-center justify-center rounded-md border bg-muted">
+                        <div className="flex h-36 w-[6.5rem] items-center justify-center rounded-md bg-muted ring-1 ring-border sm:h-44 sm:w-32">
                           <FileText className="h-7 w-7 text-muted-foreground" />
                         </div>
                       )}
-                      <span className="absolute inset-x-0 bottom-0 rounded-b-md bg-black/50 py-0.5 text-center text-[10px] text-white opacity-0 group-hover:opacity-100">
+                      <span className="absolute inset-x-0 bottom-0 rounded-b-md bg-foreground/70 py-1 text-center text-xs font-medium text-white opacity-0 group-hover:opacity-100">
                         크게 보기
                       </span>
                     </button>
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                        <span className="truncate font-medium text-foreground">{u.invoice.vendorName || "업체 미상"}</span>
-                        {u.invoice.invoiceDate && <span>· {u.invoice.invoiceDate}</span>}
-                        <span>· {u.invoice.items.length}품목</span>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div>
+                        <p className="truncate text-sm font-semibold">{u.invoice.vendorName || "업체 미상"}</p>
+                        <p className="text-[13px] tabular-nums text-muted-foreground">
+                          {u.invoice.invoiceDate ? `${u.invoice.invoiceDate} · ` : ""}
+                          {u.invoice.items.length}품목
+                          {u.kind === "pdf" ? ` · ${u.pageStart}~${u.pageEnd}쪽` : ""}
+                        </p>
                       </div>
                       <SearchableSelect
                         value={u.vendorId}
@@ -931,30 +1033,30 @@ export function InvoiceScanPage() {
                         placeholder="업체 선택"
                         allowClear
                         clearLabel={`미매칭 (${u.invoice.vendorName})`}
-                        className="h-8 text-sm"
+                        className="h-9 text-sm"
                       />
                       {groupRegUnitId === u.id ? (
-                        <div className="space-y-1.5 rounded-md border border-primary/30 bg-primary/5 p-2">
+                        <div className="space-y-2 rounded-lg bg-muted p-2.5">
                           <div className="flex items-center gap-1.5">
                             <Input
                               value={regName}
                               onChange={(e) => setRegName(e.target.value)}
                               placeholder="업체명"
-                              className="h-8 flex-1 text-sm"
+                              className="h-9 flex-1 bg-card text-sm"
                             />
                             <Input
                               type="number"
                               value={regRate}
                               onChange={(e) => setRegRate(e.target.value)}
-                              className="h-8 w-14"
+                              className="h-9 w-16 bg-card text-right tabular-nums"
                               aria-label="할인율"
                             />
-                            <span className="text-xs text-muted-foreground">%</span>
+                            <span className="text-[13px] text-muted-foreground">%</span>
                           </div>
                           <div className="flex gap-1.5">
                             <Button
                               size="sm"
-                              className="flex-1"
+                              className="h-9 flex-1 rounded-lg"
                               onClick={() => handleRegisterVendorForUnit(u.id)}
                               disabled={registering || !regName.trim()}
                             >
@@ -963,7 +1065,7 @@ export function InvoiceScanPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="flex-1"
+                              className="h-9 flex-1 rounded-lg"
                               onClick={() => setGroupRegUnitId(null)}
                               disabled={registering}
                             >
@@ -980,7 +1082,7 @@ export function InvoiceScanPage() {
                             setRegRate("0");
                             setError("");
                           }}
-                          className="flex items-center gap-1 text-xs text-primary hover:underline"
+                          className="flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
                         >
                           <Plus className="h-3.5 w-3.5" /> 신규 업체 등록
                         </button>
@@ -990,7 +1092,7 @@ export function InvoiceScanPage() {
                       <button
                         type="button"
                         onClick={() => moveUnit(u.id, "up")}
-                        className="rounded p-1 text-muted-foreground hover:bg-accent"
+                        className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
                         aria-label="위로"
                       >
                         <ChevronUp className="h-4 w-4" />
@@ -998,31 +1100,23 @@ export function InvoiceScanPage() {
                       <button
                         type="button"
                         onClick={() => moveUnit(u.id, "down")}
-                        className="rounded p-1 text-muted-foreground hover:bg-accent"
+                        className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
                         aria-label="아래로"
                       >
                         <ChevronDown className="h-4 w-4" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => openEnlarge(u)}
-                        className="rounded p-1 text-muted-foreground hover:bg-accent"
-                        aria-label="원본 보기"
-                      >
-                        <FileText className="h-4 w-4" />
-                      </button>
                     </div>
                   </div>
                 ))}
-              </div>
+              </section>
             ))}
 
-            <div className="sticky bottom-0 flex gap-2 border-t border-border/60 bg-background/95 py-3 backdrop-blur-sm">
-              <Button variant="outline" className="flex-1" onClick={reset}>
+            <div className={stickyBar}>
+              <Button variant="outline" className="h-10 flex-1 rounded-lg" onClick={reset}>
                 취소
               </Button>
-              <Button className="flex-1" onClick={proceedFromGrouping} disabled={units.length === 0}>
-                <Check className="h-4 w-4" /> 다음 ({units.length}건)
+              <Button className="h-10 flex-[2] rounded-lg" onClick={proceedFromGrouping} disabled={units.length === 0}>
+                <Check className="h-4 w-4" /> 다음 · 명세서 {units.length}건 차례로 확인
               </Button>
             </div>
 
@@ -1030,7 +1124,7 @@ export function InvoiceScanPage() {
             <Dialog open={!!enlargeUnit} onOpenChange={(o) => !o && setEnlargeUnit(null)}>
               <DialogContent className="max-h-[92dvh] max-w-5xl overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle className="text-sm">
+                  <DialogTitle className="text-[15px]">
                     {enlargeUnit?.invoice.vendorName || "명세서"}
                     {enlargeUnit && enlargeUnit.kind === "pdf" ? ` · ${enlargeUnit.pageStart}~${enlargeUnit.pageEnd}쪽` : ""}
                   </DialogTitle>
@@ -1045,7 +1139,7 @@ export function InvoiceScanPage() {
                   <div className="space-y-2">
                     {enlargePages.map((src, i) => (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img key={i} src={src} alt={`page ${i + 1}`} className="w-full rounded border" />
+                      <img key={i} src={src} alt={`page ${i + 1}`} className="w-full rounded-md ring-1 ring-border" />
                     ))}
                   </div>
                 )}
@@ -1057,299 +1151,381 @@ export function InvoiceScanPage() {
         {step === "preview" && (
           <div className="space-y-4">
             {queue.length > 1 && (
-              <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
-                <span className="flex items-center gap-1.5 font-medium text-primary">
-                  <Layers className="h-4 w-4" /> 명세서 {queue.length}건 묶음
-                </span>
-                <span className="text-muted-foreground">{queueIndex + 1} / {queue.length} 처리 중</span>
+              <div className="rounded-lg bg-status-doing-bg px-3.5 py-2.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 font-semibold text-status-doing">
+                    <Layers className="h-4 w-4" /> 묶음 명세서
+                  </span>
+                  <span className="font-semibold tabular-nums text-status-doing">
+                    {queueIndex + 1} / {queue.length}
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-card">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width]"
+                    style={{ width: `${((queueIndex + 1) / queue.length) * 100}%` }}
+                  />
+                </div>
               </div>
             )}
-            <div className="rounded-2xl bg-card p-4 shadow-card space-y-3">
-              <div className="space-y-1.5">
-                <Label>업체</Label>
-                <SearchableSelect
-                  value={vendorId}
-                  onChange={changeVendor}
-                  options={vendors.map((v) => ({
-                    value: v.id,
-                    label: v.discount_rate ? `${v.name} · 할인 ${v.discount_rate}%` : v.name,
-                    keywords: v.name,
-                  }))}
-                  placeholder="업체 선택"
-                  allowClear
-                  clearLabel={`매칭 안 됨${vendorName ? ` (${vendorName})` : ""}`}
-                  className="h-9 text-sm"
-                />
+
+            <div
+              className={cn(
+                "space-y-4",
+                showOriginal &&
+                  "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start lg:gap-4 lg:space-y-0",
+              )}
+            >
+              {/* 업체·거래일자 */}
+              <section className="space-y-3 rounded-xl bg-card p-4 ring-1 ring-border lg:col-start-1 lg:row-start-1">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
+                  <div className="space-y-1.5">
+                    <Label className="text-[13px] text-subtle-foreground">업체</Label>
+                    <SearchableSelect
+                      value={vendorId}
+                      onChange={changeVendor}
+                      options={vendors.map((v) => ({
+                        value: v.id,
+                        label: v.discount_rate ? `${v.name} · 할인 ${v.discount_rate}%` : v.name,
+                        keywords: v.name,
+                      }))}
+                      placeholder="업체 선택"
+                      allowClear
+                      clearLabel={`매칭 안 됨${vendorName ? ` (${vendorName})` : ""}`}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="inv-date" className="text-[13px] text-subtle-foreground">
+                      거래일자
+                    </Label>
+                    <Input
+                      id="inv-date"
+                      type="date"
+                      value={invoiceDate}
+                      onChange={(e) => setInvoiceDate(e.target.value)}
+                      className="h-9 tabular-nums"
+                    />
+                  </div>
+                </div>
 
                 {!regOpen && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <button
                       type="button"
                       onClick={openRegister}
-                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                      className="flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
                     >
                       <Plus className="h-3.5 w-3.5" /> 신규 업체 등록
                     </button>
                     {!vendorId && (
-                      <span className="text-xs text-amber-600">미등록 업체 — 등록하면 할인율이 적용돼요</span>
+                      <span className="flex items-center gap-1 text-[13px] font-medium text-status-ask">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        미등록 업체 — 등록하면 할인율이 적용돼요
+                      </span>
                     )}
                   </div>
                 )}
 
                 {regOpen && (
-                  <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-2.5">
+                  <div className="space-y-2 rounded-lg bg-muted p-3">
                     <div className="flex items-center gap-2">
                       <Input
                         value={regName}
                         onChange={(e) => setRegName(e.target.value)}
                         placeholder="업체명"
-                        className="h-8 flex-1 text-sm"
+                        className="h-9 flex-1 bg-card text-sm"
                       />
                       <div className="flex items-center gap-1">
                         <Input
                           type="number"
                           value={regRate}
                           onChange={(e) => setRegRate(e.target.value)}
-                          className="h-8 w-16"
+                          className="h-9 w-16 bg-card text-right tabular-nums"
                           aria-label="할인율"
                         />
-                        <span className="text-xs text-muted-foreground">% 할인</span>
+                        <span className="text-[13px] text-muted-foreground">% 할인</span>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" className="flex-1" onClick={handleRegisterVendor} disabled={registering || !regName.trim()}>
+                      <Button size="sm" className="h-9 flex-1 rounded-lg" onClick={handleRegisterVendor} disabled={registering || !regName.trim()}>
                         {registering ? "등록 중…" : "등록"}
                       </Button>
-                      <Button size="sm" variant="outline" className="flex-1" onClick={() => setRegOpen(false)} disabled={registering}>
+                      <Button size="sm" variant="outline" className="h-9 flex-1 rounded-lg" onClick={() => setRegOpen(false)} disabled={registering}>
                         취소
                       </Button>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">가격비교 탭엔 숨겨지고, 명세서·거래처원장 검색에만 나와요. 할인율은 나중에 가격비교에서 수정 가능.</p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      가격비교 탭엔 숨겨지고, 명세서·거래처원장 검색에만 나와요. 할인율은 나중에 가격비교에서 수정할 수 있어요.
+                    </p>
                   </div>
                 )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="inv-date">거래일자</Label>
-                <Input id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowOriginal((s) => !s)}
-                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                {showOriginal ? "원본 숨기기" : "원본 보기"}
-              </button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn("h-9 rounded-lg", showOriginal && "border-primary text-primary")}
+                  aria-pressed={showOriginal}
+                  onClick={() => setShowOriginal((s) => !s)}
+                >
+                  <FileText className="h-4 w-4" />
+                  {showOriginal ? "원본 닫기" : "원본 보기"}
+                  <span className="hidden font-normal text-muted-foreground lg:inline">· 오른쪽에 나란히</span>
+                </Button>
+              </section>
+
+              {/* 원본: PC는 오른쪽에 붙어서 따라옴, 모바일은 업체 칸 아래 */}
               {showOriginal && (
-                fileKind === "image" && previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={previewUrl} alt="원본 명세서" className="w-full rounded-md border" />
-                ) : fileKind === "pdf" ? (
-                  loadingOriginal ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Spinner text="원본 페이지 렌더 중…" />
-                    </div>
-                  ) : originalPages && originalPages.length > 0 ? (
-                    <div className="space-y-2">
-                      {originalPages.map((src, i) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          key={i}
-                          src={src}
-                          alt={`원본 명세서 ${currentPageStart + i}쪽`}
-                          className="w-full rounded-md border"
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="py-4 text-center text-sm text-muted-foreground">원본을 불러올 수 없습니다.</p>
-                  )
-                ) : null
-              )}
-            </div>
-
-            <div className="space-y-2">
-              {rows.map((row) => {
-                const d = derive(row);
-                const hasMatch = row.allocations.length > 0;
-                const leftover = d.leftover;
-                return (
-                  <div
-                    key={row.id}
-                    className={`rounded-xl bg-card p-3 shadow-card ${leftover !== 0 ? "ring-1 ring-amber-300" : ""}`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <Input
-                        value={row.name}
-                        onChange={(e) => updateRow(row.id, { name: e.target.value })}
-                        className="h-8 flex-1 text-sm font-medium"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setRows((prev) => prev.filter((r) => r.id !== row.id))}
-                        className="mt-1 shrink-0 text-muted-foreground hover:text-destructive"
-                        aria-label="라인 삭제"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {/* 수량 / 명세서 정가 입력 */}
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-                      <label className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground">수량</span>
-                        <Input
-                          type="number"
-                          value={row.quantity}
-                          onChange={(e) => updateRow(row.id, { quantity: Number(e.target.value) || 0 })}
-                          className="h-8 w-16"
-                        />
-                      </label>
-                      <label className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground">명세서 정가</span>
-                        <Input
-                          type="number"
-                          value={row.listPrice}
-                          onChange={(e) => updateRow(row.id, { listPrice: Number(e.target.value) || 0 })}
-                          className="h-8 w-24"
-                        />
-                        <span className="text-xs text-muted-foreground">원</span>
-                      </label>
-                    </div>
-
-                    {/* 단가 비교 — 신규/불일치일 때만 표시 (일치는 생략) */}
-                    {d.isNewProduct ? (
-                      <div className="mt-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-2.5 py-2 text-xs text-blue-700">
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-700">신규</Badge>
-                        <span>앱에 없는 품목 — 이 단가({won(d.computedUnitPrice)})로 새로 등록돼요</span>
-                      </div>
-                    ) : d.priceMismatch ? (
-                      <div className="mt-2 space-y-1 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
-                        <div className="text-[11px] font-medium opacity-80">단가 불일치 · 할인후 기준</div>
-                        <div className="flex items-center justify-between">
-                          <span>{discountRate > 0 ? `명세서 정가 → 할인후 (−${discountRate}%)` : "명세서 단가"}</span>
-                          <span className="font-semibold tabular-nums">{won(d.computedUnitPrice)}</span>
+                <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border lg:sticky lg:top-[calc(var(--page-top)+4.5rem)] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:max-h-[calc(100dvh-var(--page-top)-6rem)] lg:overflow-y-auto">
+                  <div className="flex min-h-10 items-center border-b border-border px-4 text-[13px] font-semibold text-subtle-foreground">
+                    원본 명세서
+                  </div>
+                  <div className="p-2">
+                    {fileKind === "image" && previewUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={previewUrl} alt="원본 명세서" className="w-full rounded-md" />
+                    ) : fileKind === "pdf" ? (
+                      loadingOriginal ? (
+                        <div className="flex items-center justify-center py-10">
+                          <Spinner text="원본 페이지 렌더 중…" />
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span>앱 저장 단가 (할인후)</span>
-                          <span className="font-semibold tabular-nums">{won(d.currentUnitPrice ?? 0)}</span>
-                        </div>
-                        <label className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 border-t border-amber-200 pt-1.5">
-                          <span className="flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3 shrink-0" />
-                            앱 단가를 {won(d.computedUnitPrice)}로
-                          </span>
-                          <span className="flex shrink-0 items-center gap-1 font-medium">
-                            <input
-                              type="checkbox"
-                              checked={row.updatePrice}
-                              onChange={(e) => updateRow(row.id, { updatePrice: e.target.checked })}
+                      ) : originalPages && originalPages.length > 0 ? (
+                        <div className="space-y-2">
+                          {originalPages.map((src, i) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={i}
+                              src={src}
+                              alt={`원본 명세서 ${currentPageStart + i}쪽`}
+                              className="w-full rounded-md ring-1 ring-border"
                             />
-                            갱신
-                          </span>
-                        </label>
-                      </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="py-6 text-center text-sm text-muted-foreground">원본을 불러올 수 없습니다.</p>
+                      )
                     ) : null}
+                  </div>
+                </section>
+              )}
 
-                    {/* 검수대기 배분 */}
-                    <div className="mt-2 border-t border-border/60 pt-2 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">검수대기 배분</span>
-                        <span className={`text-xs ${leftover === 0 ? "text-muted-foreground" : "text-amber-600"}`}>
-                          배분 {d.allocated} / {row.quantity}{leftover !== 0 ? ` · 잔여 ${leftover}` : ""}
-                        </span>
-                      </div>
+              {/* 품목 줄 */}
+              <div className="space-y-2.5 lg:col-start-1 lg:row-start-2">
+                {rowSummary && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[13px]">
+                    <span className="font-semibold">
+                      품목 <span className="tabular-nums">{rows.length}</span>줄
+                    </span>
+                    {rowSummary.newCount > 0 && (
+                      <span className="font-medium text-status-doing">신규 {rowSummary.newCount}</span>
+                    )}
+                    {rowSummary.mismatch > 0 && (
+                      <span className="font-medium text-status-ask">단가 다름 {rowSummary.mismatch}</span>
+                    )}
+                    {rowSummary.leftover > 0 && (
+                      <span className="font-medium text-status-late">배분 남음 {rowSummary.leftover}</span>
+                    )}
+                    {rowSummary.newCount + rowSummary.mismatch + rowSummary.leftover === 0 && rows.length > 0 && (
+                      <span className="font-medium text-status-done">모두 맞음</span>
+                    )}
+                  </div>
+                )}
 
-                      {row.allocations.map((a, idx) => (
-                        <div key={idx} className="flex items-center gap-1.5">
-                          <div className="flex-1">
-                            <SearchableSelect
-                              value={a.orderId}
-                              onChange={(v) => updateAlloc(row.id, idx, { orderId: v ?? "" })}
-                              options={orderOptionsFor(row, a.orderId).map((o) => ({
-                                value: o.id,
-                                label: orderLabel(o),
-                                keywords: o.item_name,
-                              }))}
-                              placeholder="주문 선택"
-                              emptyText="검수대기 주문 없음"
-                            />
-                          </div>
-                          <Input
-                            type="number"
-                            value={a.quantity}
-                            onChange={(e) => updateAlloc(row.id, idx, { quantity: Number(e.target.value) || 0 })}
-                            className="h-8 w-14"
-                            aria-label="배분 수량"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeAlloc(row.id, idx)}
-                            className="shrink-0 text-muted-foreground hover:text-destructive"
-                            aria-label="배분 삭제"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-
-                      <div className="flex items-center gap-3">
-                        {orderOptionsFor(row).length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => addAlloc(row.id)}
-                            className="flex items-center gap-1 text-xs text-primary hover:underline"
-                          >
-                            <Plus className="h-3.5 w-3.5" /> 주문 추가 배분
-                          </button>
+                {rows.map((row) => {
+                  const d = derive(row);
+                  const hasMatch = row.allocations.length > 0;
+                  const leftover = d.leftover;
+                  return (
+                    <div
+                      key={row.id}
+                      className={cn(
+                        "rounded-xl bg-card p-3.5 ring-1",
+                        leftover !== 0 ? "ring-status-late/40" : "ring-border",
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={row.name}
+                          onChange={(e) => updateRow(row.id, { name: e.target.value })}
+                          className="h-9 flex-1 text-sm font-semibold"
+                          aria-label="품목명"
+                        />
+                        {d.isNewProduct && (
+                          <span className="inline-flex h-6 shrink-0 items-center rounded-md bg-status-doing-bg px-2 text-xs font-bold text-status-doing">
+                            신규
+                          </span>
+                        )}
+                        {d.priceMismatch && (
+                          <span className="inline-flex h-6 shrink-0 items-center rounded-md bg-status-ask-bg px-2 text-xs font-bold text-status-ask">
+                            단가 다름
+                          </span>
                         )}
                         <button
                           type="button"
-                          onClick={() => redistribute(row.id)}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => setRows((prev) => prev.filter((r) => r.id !== row.id))}
+                          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-status-late-bg hover:text-status-late"
+                          aria-label="이 줄 삭제"
                         >
-                          <RefreshCw className="h-3 w-3" /> 자동 재배분
+                          <X className="h-4 w-4" />
                         </button>
                       </div>
 
-                      {/* 잔여 처리 */}
-                      {leftover > 0 && (
-                        <div className="flex items-center gap-1.5">
-                          <Badge variant="secondary" className="bg-red-50 text-red-700 gap-1 shrink-0">
-                            <AlertTriangle className="h-3 w-3" /> {hasMatch ? `잔여 ${leftover}` : "오류건"}
-                          </Badge>
-                          <Select
-                            value={row.leftoverAction}
-                            onValueChange={(v) => updateRow(row.id, { leftoverAction: v as UnmatchedAction })}
-                          >
-                            <SelectTrigger className="h-8 flex-1 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="inspect">검수완료로 등록</SelectItem>
-                              <SelectItem value="return">반품으로 등록</SelectItem>
-                              <SelectItem value="ledger">원장에만 기록</SelectItem>
-                            </SelectContent>
-                          </Select>
+                      {/* 수량 / 명세서 정가 */}
+                      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <label className="flex items-center gap-1.5">
+                          <span className="text-[13px] text-subtle-foreground">수량</span>
+                          <Input
+                            type="number"
+                            value={row.quantity}
+                            onChange={(e) => updateRow(row.id, { quantity: Number(e.target.value) || 0 })}
+                            className="h-9 w-20 text-right tabular-nums"
+                          />
+                        </label>
+                        <label className="flex items-center gap-1.5">
+                          <span className="text-[13px] text-subtle-foreground">명세서 정가</span>
+                          <Input
+                            type="number"
+                            value={row.listPrice}
+                            onChange={(e) => updateRow(row.id, { listPrice: Number(e.target.value) || 0 })}
+                            className="h-9 w-28 text-right tabular-nums"
+                          />
+                          <span className="text-[13px] text-muted-foreground">원</span>
+                        </label>
+                      </div>
+
+                      {/* 단가 비교 — 신규/불일치일 때만 */}
+                      {d.isNewProduct ? (
+                        <p className="mt-2.5 rounded-lg bg-status-doing-bg px-3 py-2 text-[13px] text-status-doing">
+                          앱에 없는 품목이에요. 이 단가(<b className="tabular-nums">{won(d.computedUnitPrice)}</b>)로 새로 등록돼요.
+                        </p>
+                      ) : d.priceMismatch ? (
+                        <div className="mt-2.5 rounded-lg bg-status-ask-bg px-3 py-2.5 text-[13px]">
+                          <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
+                            <span className="text-subtle-foreground">
+                              {discountRate > 0 ? `명세서 정가 → 할인후 (−${discountRate}%)` : "명세서 단가"}
+                            </span>
+                            <span className="text-right font-bold tabular-nums text-status-ask">{won(d.computedUnitPrice)}</span>
+                            <span className="text-subtle-foreground">앱 저장 단가 (할인후)</span>
+                            <span className="text-right font-semibold tabular-nums">{won(d.currentUnitPrice ?? 0)}</span>
+                          </div>
+                          <label className="mt-2 flex cursor-pointer items-center gap-2 border-t border-status-ask/20 pt-2 font-medium">
+                            <Checkbox
+                              checked={row.updatePrice}
+                              onCheckedChange={(c) => updateRow(row.id, { updatePrice: c === true })}
+                            />
+                            앱 단가를 <b className="tabular-nums">{won(d.computedUnitPrice)}</b>로 갱신
+                          </label>
                         </div>
-                      )}
+                      ) : null}
+
+                      {/* 검수대기 배분 */}
+                      <div className="mt-3 space-y-2 border-t border-border pt-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[13px] font-semibold text-subtle-foreground">검수대기 배분</span>
+                          <span
+                            className={cn(
+                              "text-[13px] tabular-nums",
+                              leftover === 0 ? "text-muted-foreground" : "font-semibold text-status-late",
+                            )}
+                          >
+                            {d.allocated} / {row.quantity}
+                            {leftover !== 0 ? ` · 남음 ${leftover}` : ""}
+                          </span>
+                        </div>
+
+                        {row.allocations.map((a, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <div className="min-w-0 flex-1">
+                              <SearchableSelect
+                                value={a.orderId}
+                                onChange={(v) => updateAlloc(row.id, idx, { orderId: v ?? "" })}
+                                options={orderOptionsFor(row, a.orderId).map((o) => ({
+                                  value: o.id,
+                                  label: orderLabel(o),
+                                  keywords: o.item_name,
+                                }))}
+                                placeholder="주문 선택"
+                                emptyText="검수대기 주문 없음"
+                                className="h-9 text-sm"
+                              />
+                            </div>
+                            <Input
+                              type="number"
+                              value={a.quantity}
+                              onChange={(e) => updateAlloc(row.id, idx, { quantity: Number(e.target.value) || 0 })}
+                              className="h-9 w-16 text-right tabular-nums"
+                              aria-label="배분 수량"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeAlloc(row.id, idx)}
+                              className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-status-late-bg hover:text-status-late"
+                              aria-label="배분 삭제"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+
+                        <div className="flex items-center gap-4">
+                          {orderOptionsFor(row).length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => addAlloc(row.id)}
+                              className="flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> 주문 추가 배분
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => redistribute(row.id)}
+                            className="flex items-center gap-1 text-[13px] font-medium text-muted-foreground hover:text-foreground"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" /> 자동 재배분
+                          </button>
+                        </div>
+
+                        {/* 남은 수량 처리 */}
+                        {leftover > 0 && (
+                          <div className="flex items-center gap-2 rounded-lg bg-status-late-bg p-2">
+                            <span className="flex shrink-0 items-center gap-1 pl-1 text-[13px] font-semibold text-status-late">
+                              <AlertTriangle className="h-3.5 w-3.5" /> {hasMatch ? `남은 ${leftover}개` : "맞는 주문 없음"}
+                            </span>
+                            <Select
+                              value={row.leftoverAction}
+                              onValueChange={(v) => updateRow(row.id, { leftoverAction: v as UnmatchedAction })}
+                            >
+                              <SelectTrigger className="h-9 flex-1 bg-card text-[13px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="inspect">검수완료로 등록</SelectItem>
+                                <SelectItem value="return">반품으로 등록</SelectItem>
+                                <SelectItem value="ledger">원장에만 기록</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="sticky bottom-0 flex gap-2 border-t border-border/60 bg-background/95 py-3 backdrop-blur-sm">
-              <Button variant="outline" className="flex-1" onClick={skipCurrent} disabled={saving}>
-                <RefreshCw className="h-4 w-4" /> {queueIndex + 1 < queue.length ? "이 명세서 건너뛰기" : "건너뛰기"}
+            <div className={stickyBar}>
+              <Button variant="outline" className="h-10 flex-1 rounded-lg" onClick={skipCurrent} disabled={saving}>
+                {queueIndex + 1 < queue.length ? "이 명세서 건너뛰기" : "건너뛰기"}
               </Button>
-              <Button className="flex-1" onClick={handleConfirm} disabled={saving || rows.length === 0}>
-                <Check className="h-4 w-4" />{" "}
+              <Button className="h-10 flex-[2] rounded-lg" onClick={handleConfirm} disabled={saving || rows.length === 0}>
+                <Check className="h-4 w-4" />
                 {saving
                   ? "처리 중…"
                   : queueIndex + 1 < queue.length
-                    ? `확정 후 다음 (${rows.length})`
-                    : `확정 (${rows.length}건)`}
+                    ? `${rows.length}줄 확정 후 다음 명세서`
+                    : `${rows.length}줄 확정`}
               </Button>
             </div>
           </div>

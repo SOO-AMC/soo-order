@@ -1,9 +1,3 @@
 {
-  "regions": ["icn1"],
-  "crons": [
-    {
-      "path": "/api/leave-rollover",
-      "schedule": "10 15 * * *"
-    }
-  ]
+  "regions": ["icn1"]
 }

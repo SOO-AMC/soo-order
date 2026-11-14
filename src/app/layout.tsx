@@ -1,10 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// Pretendard를 앱에 직접 포함(수링크와 동일). 이전 CDN 주소(jsdelivr gh)는 404라 폰트가 한 번도 적용되지 않았다.
+const pretendard = localFont({
+  src: "./fonts/PretendardVariable.woff2",
+  variable: "--font-pretendard",
+  weight: "45 920",
+  display: "swap",
 });
 
 const APP_NAME = "수오더";
@@ -20,10 +23,15 @@ export const metadata: Metadata = {
     title: APP_NAME,
   },
   formatDetection: { telephone: false },
+  openGraph: {
+    title: APP_NAME,
+    description: APP_DESCRIPTION,
+    images: [{ url: "/sooorder-brand/og-image.png", width: 1200, height: 630 }],
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2563EB",
+  themeColor: "#1166A7",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -37,20 +45,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
-      <head>
-        {/* Pretendard 폰트: @import 대신 head의 link로 — 즉시 발견 + 병렬 다운로드 + 연결 미리 열기 */}
-        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendard-dynamic-subset.css"
-        />
-      </head>
-      <body
-        className={`${geistSans.variable} antialiased`}
-      >
-        {children}
-      </body>
+    <html lang="ko" className={`${pretendard.variable} antialiased`}>
+      <body>{children}</body>
     </html>
   );
 }

@@ -1,10 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
+import { BackButton } from "@/components/back-button";
 import { BloodForm } from "@/components/blood/blood-form";
 import type { BloodFormData } from "@/components/blood/blood-form";
 import { logClientAction } from "@/app/(main)/log-action";
@@ -44,19 +43,10 @@ export default function NewBloodPage() {
   };
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-none">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/blood">
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <h1 className="text-lg font-bold">혈액 등록</h1>
-      </header>
-      <div className="p-4">
-        <div className="rounded-2xl bg-card p-5 shadow-card">
-          <BloodForm onSubmit={handleSubmit} />
-        </div>
+    <div className="mx-auto max-w-md md:max-w-2xl">
+      <PageHeader title="혈액 등록" leading={<BackButton fallbackHref="/blood" />} />
+      <div className="py-2 lg:px-6 lg:py-4">
+        <BloodForm onSubmit={handleSubmit} />
       </div>
     </div>
   );

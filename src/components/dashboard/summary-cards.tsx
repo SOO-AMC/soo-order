@@ -41,7 +41,7 @@ export function SummaryCards({ data }: SummaryCardsProps) {
       value: data.returnRequested,
       yesterday: data.returnRequestedYesterday,
       urgent: 0,
-      color: "text-red-600",
+      color: "text-status-late",
     },
   ];
 
@@ -57,7 +57,7 @@ export function SummaryCards({ data }: SummaryCardsProps) {
               <DiffBadge current={card.value} previous={card.yesterday} />
             </div>
             {card.urgent > 0 && (
-              <Badge variant="destructive" className="mt-1.5 text-[10px] px-1.5 py-0">
+              <Badge variant="destructive" className="mt-1.5 text-xs px-1.5 py-0">
                 긴급 {card.urgent}
               </Badge>
             )}

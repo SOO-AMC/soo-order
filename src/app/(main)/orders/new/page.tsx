@@ -7,6 +7,7 @@ import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -176,19 +177,19 @@ export default function NewOrderPage() {
   };
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-none">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/orders">
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <h1 className="text-lg font-bold">새 주문 등록</h1>
-      </header>
-      <div className="p-4">
-        <div className="rounded-2xl bg-card p-5 shadow-card">
-          <OrderForm onSubmit={handleSubmit} activeOrders={activeOrders} />
-        </div>
+    <div className="mx-auto max-w-md md:max-w-2xl">
+      <PageHeader
+        title="주문 등록"
+        leading={
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/orders" aria-label="주문으로 돌아가기">
+              <ChevronLeft />
+            </Link>
+          </Button>
+        }
+      />
+      <div className="py-2 lg:px-6 lg:py-4">
+        <OrderForm onSubmit={handleSubmit} activeOrders={activeOrders} />
       </div>
 
       <Dialog open={duplicateOpen} onOpenChange={(o) => { if (!o) setDuplicateOpen(false); }}>

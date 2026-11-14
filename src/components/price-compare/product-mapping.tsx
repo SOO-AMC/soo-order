@@ -489,7 +489,7 @@ function MappingAdder({
               setIsOpen(false);
             }}
           >
-            <Badge variant="outline" className="text-[10px] shrink-0">
+            <Badge variant="outline" className="text-xs shrink-0">
               {vendorMap.get(vp.vendor_id)?.name ?? "?"}
             </Badge>
             <span className="truncate">{vp.product_name}</span>

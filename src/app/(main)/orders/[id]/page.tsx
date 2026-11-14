@@ -1,23 +1,19 @@
 export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
-import { BackButton } from "@/components/back-button";
 import { createClient, getSessionProfile } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Tag } from "@/components/list-parts";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { OrderDetailActions } from "@/components/orders/order-detail-actions";
 import { OrderAdminAction } from "@/components/orders/order-admin-action";
 import { PhotoGallery } from "@/components/orders/photo-gallery";
+import { DetailPage, DetailHero, DetailCard, InfoGrid, DetailActions } from "@/components/workspace/detail-page";
+import { Timeline } from "@/components/workspace/detail-panel";
 import { formatDateTime } from "@/lib/utils/format";
 import type { OrderType, OrderStatus } from "@/lib/types/order";
 import { ORDER_TYPE_LABEL } from "@/lib/types/order";
 
-export default async function OrderDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { userId, isAdmin } = await getSessionProfile();
 
@@ -31,111 +27,72 @@ export default async function OrderDetailPage({
   if (!order) notFound();
 
   const canEdit = isAdmin || order.requester_id === userId;
-
+  const canDispatch = isAdmin && order.status === "pending";
   const wasUpdated = order.updated_at !== order.created_at;
+  const qty = order.quantity > 0 ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}` : "수량은 사진 참고";
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <BackButton fallbackHref="/orders" />
-        <h1 className="text-lg font-bold">주문 상세</h1>
-      </header>
-
-      <div className="p-4"><div className="space-y-6 rounded-2xl bg-card p-5 shadow-card">
-        <div className="flex items-center gap-2">
-          <OrderStatusBadge status={order.status as OrderStatus} />
-          {order.is_urgent && <Badge variant="destructive">긴급</Badge>}
-        </div>
-
-        <Separator />
-
-        <dl className="space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
-          <div>
-            <dt className="text-sm text-muted-foreground">유형</dt>
-            <dd className="mt-0.5 font-medium">
-              {ORDER_TYPE_LABEL[order.type as OrderType]}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm text-muted-foreground">품목</dt>
-            <dd className="mt-0.5 font-medium">{order.item_name}</dd>
-          </div>
-          <div>
-            <dt className="text-sm text-muted-foreground">요청 수량</dt>
-            <dd className="mt-0.5 font-medium">
-              {order.quantity > 0
-                ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
-                : <span className="text-muted-foreground">(사진 참고)</span>}
-            </dd>
-          </div>
-          {order.vendor_name && (
-            <div>
-              <dt className="text-sm text-muted-foreground">업체명</dt>
-              <dd className="mt-0.5 font-medium">{order.vendor_name}</dd>
-            </div>
+    <DetailPage
+      title="주문 상세"
+      backHref="/orders"
+      aside={
+        <>
+          {(canDispatch || canEdit) && (
+            <DetailActions hint={canDispatch ? "업체를 정해 발주하면 검수 대기로 넘어가요." : undefined}>
+              {canDispatch && <OrderAdminAction orderId={order.id} itemName={order.item_name} quantity={order.quantity} unit={order.unit} />}
+              {canEdit && <OrderDetailActions orderId={order.id} itemName={order.item_name} />}
+            </DetailActions>
           )}
-          <div>
-            <dt className="text-sm text-muted-foreground">주문요청자</dt>
-            <dd className="mt-0.5 font-medium">
-              {order.requester?.full_name ?? "알 수 없음"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm text-muted-foreground">요청일시</dt>
-            <dd className="mt-0.5 font-medium">
-              {formatDateTime(order.created_at)}
-            </dd>
-          </div>
-          {order.notes && (
-            <div>
-              <dt className="text-sm text-muted-foreground">비고</dt>
-              <dd className="mt-0.5 font-medium">{order.notes}</dd>
-            </div>
-          )}
-          {wasUpdated && (
-            <>
-              {order.updater && (
-                <div>
-                  <dt className="text-sm text-muted-foreground">수정자</dt>
-                  <dd className="mt-0.5 font-medium">
-                    {order.updater.full_name ?? "알 수 없음"}
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt className="text-sm text-muted-foreground">수정일시</dt>
-                <dd className="mt-0.5 font-medium">
-                  {formatDateTime(order.updated_at)}
-                </dd>
-              </div>
-            </>
-          )}
-        </dl>
-
-        {order.photo_urls?.length > 0 && (
+          <DetailCard title="처리 이력">
+            <Timeline
+              items={[
+                ...(order.dispatched_at
+                  ? [{ key: "disp", text: <><b className="font-semibold text-foreground">발주</b> · {order.vendor_name || "업체 미지정"}</>, at: formatDateTime(order.dispatched_at) }]
+                  : []),
+                ...(wasUpdated && order.updater
+                  ? [{ key: "upd", text: <><b className="font-semibold text-foreground">수정</b> · {order.updater.full_name ?? "—"}</>, at: formatDateTime(order.updated_at) }]
+                  : []),
+                { key: "created", text: <><b className="font-semibold text-foreground">주문 등록</b> · {order.requester?.full_name ?? "—"}</>, at: formatDateTime(order.created_at) },
+              ]}
+            />
+          </DetailCard>
+        </>
+      }
+    >
+      <DetailHero
+        badges={
           <>
-            <Separator />
-            <div>
-              <dt className="text-sm text-muted-foreground mb-2">사진</dt>
-              <PhotoGallery photoUrls={order.photo_urls} />
-            </div>
+            <OrderStatusBadge status={order.status as OrderStatus} />
+            {order.is_urgent && <Tag tone="danger">긴급</Tag>}
           </>
-        )}
-
-        {isAdmin && order.status === "pending" && (
+        }
+        title={order.item_name}
+        summary={
           <>
-            <Separator />
-            <OrderAdminAction orderId={order.id} itemName={order.item_name} quantity={order.quantity} unit={order.unit} />
+            <b className="font-semibold text-foreground tabular-nums">{qty}</b> · {order.requester?.full_name ?? "알 수 없음"} 요청
           </>
-        )}
+        }
+      />
 
-        {canEdit && (
-          <>
-            <Separator />
-            <OrderDetailActions orderId={order.id} itemName={order.item_name} />
-          </>
-        )}
-      </div></div>
-    </div>
+      <DetailCard title="주문 정보">
+        <InfoGrid
+          items={[
+            { label: "유형", value: ORDER_TYPE_LABEL[order.type as OrderType] },
+            { label: "요청 수량", value: order.quantity > 0 ? qty : <span className="text-muted-foreground">사진 참고</span> },
+            { label: "업체", value: order.vendor_name || <span className="text-muted-foreground">아직 안 정함</span> },
+            { label: "요청자", value: order.requester?.full_name ?? "알 수 없음" },
+            { label: "요청 일시", value: formatDateTime(order.created_at) },
+            wasUpdated && order.updater && { label: "마지막 수정", value: `${order.updater.full_name ?? "—"} · ${formatDateTime(order.updated_at)}` },
+            order.notes && { label: "비고", value: order.notes, wide: true },
+          ]}
+        />
+      </DetailCard>
+
+      {order.photo_urls?.length > 0 && (
+        <DetailCard title={`사진 ${order.photo_urls.length}`}>
+          <PhotoGallery photoUrls={order.photo_urls} />
+        </DetailCard>
+      )}
+    </DetailPage>
   );
 }

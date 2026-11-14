@@ -11,7 +11,8 @@ export const metadata: Metadata = {
   title: "주문",
 };
 
-export default async function OrdersPage() {
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+  const { view } = await searchParams;
   const supabase = await createClient();
   // 가격비교 데이터는 무겁고 팝업 열 때만 필요하므로 페이지 렌더를 막지 않음
   // (vendor-price-popover 모듈이 클라이언트 마운트 시 백그라운드로 프리페치함)
@@ -60,6 +61,7 @@ export default async function OrdersPage() {
       <OrderList
         initialOrders={initialOrders}
         initialLastVendors={initialLastVendors}
+        initialView={view}
         headerAction={
           <Button asChild className="h-10 rounded-lg px-3 text-[13px] lg:h-9">
             <Link href="/orders/new">

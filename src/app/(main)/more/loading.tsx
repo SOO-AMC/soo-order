@@ -1,27 +1,31 @@
+import { PageHeader } from "@/components/page-header";
+
 export default function MoreLoading() {
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <h1 className="text-lg font-bold">더보기</h1>
-      </header>
-      <div className="p-4 space-y-4">
-        {/* 프로필 카드 */}
-        <div className="rounded-xl bg-card p-4 shadow-card animate-pulse">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-muted" />
-            <div className="space-y-2">
-              <div className="h-4 w-20 rounded bg-muted" />
-              <div className="h-5 w-14 rounded-full bg-muted" />
+    <>
+      <PageHeader title="더보기" />
+      <div className="mx-auto max-w-md md:max-w-2xl flex animate-pulse flex-col gap-5 p-4 lg:px-6">
+        <div className="flex items-center gap-3.5 rounded-2xl bg-card p-4 ring-1 ring-border">
+          <div className="size-12 rounded-full bg-muted" />
+          <div className="space-y-2">
+            <div className="h-4 w-20 rounded bg-muted" />
+            <div className="h-3 w-28 rounded bg-muted" />
+          </div>
+        </div>
+        {[2, 6].map((rows, i) => (
+          <div key={i}>
+            <div className="mb-2 h-3 w-10 rounded bg-muted" />
+            <div className="rounded-2xl bg-card ring-1 ring-border">
+              {Array.from({ length: rows }).map((_, j) => (
+                <div key={j} className="flex h-14 items-center gap-3 border-t border-border px-4 first:border-t-0">
+                  <div className="size-9 rounded-xl bg-muted" />
+                  <div className="h-4 w-24 rounded bg-muted" />
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-        {/* 메뉴 카드 */}
-        <div className="rounded-xl bg-card shadow-card animate-pulse">
-          <div className="px-4 py-3.5">
-            <div className="h-4 w-24 rounded bg-muted" />
-          </div>
-        </div>
+        ))}
       </div>
-    </div>
+    </>
   );
 }

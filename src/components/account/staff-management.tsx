@@ -3,13 +3,14 @@
 import { useState, useEffect, useActionState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Plus, ChevronRight, KeyRound, Pencil, Trash2, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
+import { PageHeader } from "@/components/page-header";
+import { UnderlineTabs } from "@/components/list-parts";
 import {
   Dialog,
   DialogContent,
@@ -81,38 +82,42 @@ export function StaffManagement({ initialMembers }: { initialMembers?: MemberDat
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="직원 관리"
+        description={members.length > 0 ? `${members.length}명` : undefined}
+        leading={
           <Button variant="ghost" size="icon" asChild className="lg:hidden">
-            <Link href="/more">
+            <Link href="/more" aria-label="더보기로">
               <ChevronLeft />
             </Link>
           </Button>
-          <h1 className="text-lg font-bold">직원 관리</h1>
-        </div>
-        <Button size="icon" onClick={() => openDialog("create")}>
-          <Plus className="h-4 w-4" />
-        </Button>
-      </header>
+        }
+        action={
+          <Button size="sm" className="h-9 rounded-lg" onClick={() => openDialog("create")}>
+            <Plus className="h-4 w-4" />
+            직원 추가
+          </Button>
+        }
+        tabs={
+          members.length > 0 ? (
+            <UnderlineTabs
+              ariaLabel="직책"
+              value={tab}
+              onValueChange={setTab}
+              items={STAFF_TABS.map((t) => ({
+                value: t.key,
+                label: t.label,
+                count: t.pos ? members.filter((m) => m.position === t.pos).length : members.length,
+              }))}
+            />
+          ) : undefined
+        }
+      />
 
-      <div className="p-4 space-y-4">
+      <div className="space-y-4 p-4 lg:px-6">
 
       {!isLoading && members.length > 0 && (
         <>
-          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-            {STAFF_TABS.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={cn(
-                  "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-                  tab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input

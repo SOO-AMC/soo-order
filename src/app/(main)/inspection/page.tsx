@@ -7,7 +7,8 @@ export const metadata: Metadata = {
   title: "검수",
 };
 
-export default async function InspectionPage() {
+export default async function InspectionPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+  const { view } = await searchParams;
   const supabase = await createClient();
   const { data } = await supabase
     .from("orders")
@@ -16,17 +17,10 @@ export default async function InspectionPage() {
     .order("created_at", { ascending: false });
   const initialOrders = (data as OrderWithRequester[] | null) ?? [];
 
+  // 상단바(PageHeader)는 탭 건수가 필요해 InspectionList 안에서 그린다
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <div>
-          <h1 className="text-lg font-bold leading-tight">검수</h1>
-          <p className="hidden text-xs text-muted-foreground sm:block">입고 후 검수 대기 중인 품목</p>
-        </div>
-      </header>
-      <div className="p-4">
-        <InspectionList initialOrders={initialOrders} />
-      </div>
+      <InspectionList initialOrders={initialOrders} initialView={view} />
     </div>
   );
 }

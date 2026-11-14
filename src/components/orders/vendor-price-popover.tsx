@@ -2,13 +2,14 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { ChevronsUpDown, Search, X, Pencil } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { BottomSheet } from "@/components/workspace/bottom-sheet";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/spinner";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 import { setItemAlias, removeItemAlias } from "@/lib/actions/item-alias-actions";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
@@ -206,73 +207,203 @@ function resolveMatchCached(itemName: string, data: PriceData, visibleVendors: V
 }
 
 export const VENDOR_COLORS = [
-  // row: 업체가 지정된 주문 행 바탕(같은 업체 = 같은 색). bg보다 옅게 해서 버튼과 구분
-  { bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-700", row: "bg-blue-50/60" },
-  { bg: "bg-rose-50", border: "border-rose-300", text: "text-rose-700", row: "bg-rose-50/60" },
-  { bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-700", row: "bg-amber-50/60" },
-  { bg: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-700", row: "bg-emerald-50/60" },
-  { bg: "bg-violet-50", border: "border-violet-300", text: "text-violet-700", row: "bg-violet-50/60" },
-  { bg: "bg-cyan-50", border: "border-cyan-300", text: "text-cyan-700", row: "bg-cyan-50/60" },
-  { bg: "bg-orange-50", border: "border-orange-300", text: "text-orange-700", row: "bg-orange-50/60" },
-  { bg: "bg-pink-50", border: "border-pink-300", text: "text-pink-700", row: "bg-pink-50/60" },
+  // 업체 지정 표시용 점 색(같은 업체 = 같은 색). 행 바탕은 칠하지 않는다(선택 행만 row-selected).
+  { dot: "bg-blue-500" },
+  { dot: "bg-rose-500" },
+  { dot: "bg-amber-500" },
+  { dot: "bg-emerald-500" },
+  { dot: "bg-violet-500" },
+  { dot: "bg-cyan-500" },
+  { dot: "bg-orange-500" },
+  { dot: "bg-pink-500" },
 ] as const;
 
 export type VendorColor = (typeof VENDOR_COLORS)[number];
+
+/** 가격비교 데이터(모듈 캐시 공유). 처음 쓰는 컴포넌트가 백그라운드로 불러온다. */
+export function usePriceData() {
+  const [data, setData] = useState<PriceData | null>(cachedData);
+  useEffect(() => {
+    let active = true;
+    getPriceData()
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+  return [data, setData] as const;
+}
+
+/** 품목의 업체별 단가(할인후). 주문 화면 업체 칸·상세 패널이 쓴다. */
+export function matchItemPrices(itemName: string, data: PriceData | null) {
+  if (!data) return null;
+  const visible = data.vendors.filter((v) => v.show_in_compare !== false);
+  return resolveMatchCached(itemName, data, visible);
+}
+
+export type ItemPriceMatch = NonNullable<ReturnType<typeof matchItemPrices>>;
+
+/** 고른 업체의 단가 (없으면 null) */
+export function priceOfVendor(match: ItemPriceMatch | null, vendorName: string) {
+  if (!match || !vendorName) return null;
+  return match.prices.find((p) => p.vendorName === vendorName)?.price ?? null;
+}
+
+/** 최저가 업체 */
+export function bestVendor(match: ItemPriceMatch | null) {
+  if (!match || match.minPrice === null) return null;
+  return match.prices.find((p) => p.price === match.minPrice) ?? null;
+}
 
 interface VendorPricePopoverProps {
   itemName: string;
   selectedVendor: string;
   vendorColor?: VendorColor;
-  /** 이 품목을 가장 최근에 발주했던 업체명 (있으면 드롭다운에 바로가기로 표시) */
+  /** 이 품목을 가장 최근에 발주했던 업체명 (있으면 바로가기로 표시) */
   lastOrderedVendor?: string;
   onSelectVendor: (vendorName: string) => void;
+  /** 모바일 카드처럼 넓은 칸 */
+  size?: "sm" | "lg";
 }
 
-export function VendorPricePopover({ itemName, selectedVendor, vendorColor, lastOrderedVendor, onSelectVendor }: VendorPricePopoverProps) {
+/**
+ * 업체 고르기 (디자인 시스템 DataTable 업체 칸 + BottomSheet).
+ * 칸: 고른 업체 + 그 업체 단가, 안 고르면 점선 "업체 고르기 · 최저 …".
+ * PC는 팝오버, 모바일은 아래 시트("어디서 살까요?").
+ */
+export function VendorPricePopover({ itemName, selectedVendor, vendorColor, lastOrderedVendor, onSelectVendor, size = "sm" }: VendorPricePopoverProps) {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<PriceData | null>(null);
+  const [data, setData] = usePriceData();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+
+  const priceMatch = useMemo(() => matchItemPrices(itemName, data), [itemName, data]);
+  const selectedPrice = priceOfVendor(priceMatch, selectedVendor);
+  const best = bestVendor(priceMatch);
+
+  const select = (v: string) => {
+    onSelectVendor(v);
+    setOpen(false);
+  };
+
+  const trigger = (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!isDesktop) setOpen(true);
+      }}
+      className={cn(
+        "flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-left text-[13px] transition-colors",
+        size === "lg" ? "h-10" : "h-8",
+        selectedVendor
+          ? "bg-card text-foreground shadow-[inset_0_0_0_1px_var(--input)] hover:shadow-[inset_0_0_0_1px_var(--control)]"
+          : "border border-dashed border-input text-muted-foreground hover:border-control hover:text-foreground"
+      )}
+    >
+      {selectedVendor ? (
+        <>
+          {vendorColor && <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", vendorColor.dot)} />}
+          <span className="min-w-0 truncate font-medium">{selectedVendor}</span>
+          {selectedPrice !== null && (
+            <b
+              className={cn(
+                "ml-auto shrink-0 tabular-nums",
+                selectedPrice === priceMatch?.minPrice ? "text-status-done" : "text-foreground"
+              )}
+            >
+              {selectedPrice.toLocaleString()}
+            </b>
+          )}
+        </>
+      ) : (
+        <span className="min-w-0 truncate">
+          업체 고르기
+          {best && best.price !== null && (
+            <span className="text-muted-foreground">
+              {" "}· 최저 {best.vendorName} <span className="tabular-nums">{best.price.toLocaleString()}</span>
+            </span>
+          )}
+        </span>
+      )}
+      <ChevronsUpDown className={cn("size-3.5 shrink-0 opacity-50", selectedVendor && selectedPrice !== null ? "" : "ml-auto")} />
+    </button>
+  );
+
+  if (!isDesktop) {
+    return (
+      <>
+        {trigger}
+        <BottomSheet
+          open={open}
+          onOpenChange={setOpen}
+          title="어디서 살까요?"
+          description={`${itemName} · 할인후 단가`}
+        >
+          <VendorPicker
+            itemName={itemName}
+            data={data}
+            setData={setData}
+            selectedVendor={selectedVendor}
+            lastOrderedVendor={lastOrderedVendor}
+            onSelect={select}
+            variant="sheet"
+          />
+        </BottomSheet>
+      </>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent
+        className="w-[min(24rem,calc(100vw-2rem))] p-0"
+        align="start"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <VendorPicker
+          itemName={itemName}
+          data={data}
+          setData={setData}
+          selectedVendor={selectedVendor}
+          lastOrderedVendor={lastOrderedVendor}
+          onSelect={select}
+          variant="popover"
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** 팝오버·시트 안 내용: 매칭 상태, 이전 업체, 업체별 단가, 매칭 수정 */
+function VendorPicker({
+  itemName,
+  data,
+  setData,
+  selectedVendor,
+  lastOrderedVendor,
+  onSelect,
+  variant,
+}: {
+  itemName: string;
+  data: PriceData | null;
+  setData: (d: PriceData) => void;
+  selectedVendor: string;
+  lastOrderedVendor?: string;
+  onSelect: (vendorName: string) => void;
+  variant: "popover" | "sheet";
+}) {
   const [editingMatch, setEditingMatch] = useState(false);
   const [matchSearch, setMatchSearch] = useState("");
   const [savingAlias, setSavingAlias] = useState(false);
+  const sheet = variant === "sheet";
 
-  // 마운트 시 백그라운드 프리페치 — 첫 번째 인스턴스가 fetch를 시작하고
-  // 나머지는 동일한 Promise를 공유하므로 실제 요청은 한 번만 발생
-  useEffect(() => {
-    getPriceData().then((result) => setData(result)).catch(() => {});
-  }, []);
-
-  const handleOpen = async (isOpen: boolean) => {
-    setOpen(isOpen);
-    if (!isOpen) {
-      setEditingMatch(false);
-      setMatchSearch("");
-      return;
-    }
-    if (!data) {
-      setLoading(true);
-      try {
-        const result = await getPriceData();
-        setData(result);
-      } catch {
-        // silently fail
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  // 주문 탭 드롭다운엔 기존 주력 업체(show_in_compare !== false)만 노출.
-  // (명세서로 자동등록된 신규 업체는 제외)
-  const visibleVendors = useMemo(
-    () => (data ? data.vendors.filter((v) => v.show_in_compare !== false) : []),
-    [data],
-  );
-
-  const priceMatch = useMemo(() => {
-    if (!data) return null;
-    return resolveMatchCached(itemName, data, visibleVendors);
-  }, [itemName, data, visibleVendors]);
+  // 주문 화면엔 기존 주력 업체(show_in_compare !== false)만 노출 (명세서로 자동등록된 신규 업체 제외)
+  const visibleVendors = useMemo(() => (data ? data.vendors.filter((v) => v.show_in_compare !== false) : []), [data]);
+  const priceMatch = useMemo(() => (data ? resolveMatchCached(itemName, data, visibleVendors) : null), [itemName, data, visibleVendors]);
 
   const filteredUnified = useMemo(() => {
     if (!data) return [];
@@ -308,8 +439,7 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, last
 
   const handleSelect = (vendorName: string) => {
     // 선택은 항상 먼저 반영 — 학습(부수효과)이 실패해도 선택을 막지 않도록
-    onSelectVendor(vendorName);
-    setOpen(false);
+    onSelect(vendorName);
     try {
       autoLearnFromSelection(vendorName);
     } catch {
@@ -356,207 +486,217 @@ export function VendorPricePopover({ itemName, selectedVendor, vendorColor, last
     }
   };
 
-  return (
-    <Popover open={open} onOpenChange={handleOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className={`h-7 w-full justify-between gap-1 px-2 text-xs font-normal ${
-            vendorColor
-              ? `${vendorColor.bg} ${vendorColor.border} ${vendorColor.text} font-medium`
-              : ""
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="truncate">
-            {selectedVendor || "업체 선택"}
-          </span>
-          <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-[min(24rem,calc(100vw-2rem))] p-0"
-        align="start"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {loading ? (
-          <div className="flex items-center justify-center py-6">
-            <Spinner text="가격 데이터 로딩 중..." />
-          </div>
-        ) : editingMatch ? (
-          /* ─── 매칭 수정 모드 ─── */
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2 border-b px-3 py-2">
-              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <input
-                autoFocus
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                placeholder="통합제품 검색…"
-                value={matchSearch}
-                onChange={(e) => setMatchSearch(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={() => { setEditingMatch(false); setMatchSearch(""); }}
-                className="text-muted-foreground hover:text-foreground"
-                aria-label="닫기"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="max-h-72 overflow-y-auto py-1">
-              {filteredUnified.length === 0 ? (
-                <p className="px-3 py-4 text-center text-sm text-muted-foreground">검색 결과 없음</p>
-              ) : (
-                filteredUnified.map((u) => {
-                  const isCurrent = priceMatch?.unifiedProductId === u.id;
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      disabled={savingAlias}
-                      onClick={() => applyAlias(u.id)}
-                      className={`flex w-full flex-col items-start rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent disabled:opacity-50 ${isCurrent ? "bg-accent" : ""}`}
-                    >
-                      <span className="font-medium">{u.name}</span>
-                      {u.notes && <span className="text-xs text-muted-foreground">{u.notes}</span>}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            {priceMatch?.source === "alias" && (
-              <div className="border-t px-3 py-2">
+  if (!data) {
+    return (
+      <div className="space-y-2 p-3" role="status" aria-label="가격 불러오는 중">
+        {[0, 1, 2].map((i) => (
+          <span key={i} className="block h-10 animate-pulse rounded-lg bg-muted" />
+        ))}
+      </div>
+    );
+  }
+
+  if (editingMatch) {
+    return (
+      <div className="flex flex-col">
+        <div className={cn("flex items-center gap-2 border-b border-border px-3", sheet ? "h-12" : "h-10")}>
+          <Search className="size-3.5 shrink-0 text-muted-foreground" />
+          <input
+            autoFocus
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            placeholder="가격비교 품목 검색"
+            aria-label="가격비교 품목 검색"
+            value={matchSearch}
+            onChange={(e) => setMatchSearch(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setEditingMatch(false);
+              setMatchSearch("");
+            }}
+            className="grid size-7 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
+            aria-label="매칭 수정 닫기"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+        <div className={cn("overflow-y-auto py-1", sheet ? "max-h-[50dvh]" : "max-h-72")}>
+          {filteredUnified.length === 0 ? (
+            <p className="px-3 py-4 text-center text-sm text-muted-foreground">맞는 품목이 없어요</p>
+          ) : (
+            filteredUnified.map((u) => {
+              const isCurrent = priceMatch?.unifiedProductId === u.id;
+              return (
                 <button
+                  key={u.id}
                   type="button"
                   disabled={savingAlias}
-                  onClick={clearAlias}
-                  className="text-xs text-destructive hover:underline disabled:opacity-50"
+                  onClick={() => applyAlias(u.id)}
+                  className={cn(
+                    "flex w-full flex-col items-start rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent disabled:opacity-50",
+                    isCurrent && "bg-accent"
+                  )}
                 >
-                  매칭 해제 (자동 매칭으로 되돌리기)
+                  <span className="font-medium">{u.name}</span>
+                  {u.notes && <span className="text-xs text-muted-foreground">{u.notes}</span>}
                 </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* ─── 일반 모드 ─── */
-          <div className="py-1">
-            {/* 매칭 상태 + 수정 버튼 */}
-            <div className="flex items-center gap-2 border-b px-3 py-2 text-xs">
-              {priceMatch ? (
-                priceMatch.source === "alias" ? (
-                  <span className="flex min-w-0 items-center gap-1 text-blue-700">
-                    <span className="shrink-0 rounded bg-blue-50 px-1 py-0.5 font-medium">학습됨</span>
-                    <span className="truncate">{priceMatch.productName}</span>
-                  </span>
-                ) : (
-                  <span className="min-w-0 flex-1 truncate text-muted-foreground">추정: {priceMatch.productName}</span>
-                )
-              ) : (
-                <span className="flex-1 text-muted-foreground">매칭된 가격 없음</span>
-              )}
-              <button
-                type="button"
-                onClick={() => setEditingMatch(true)}
-                className="ml-auto flex shrink-0 items-center gap-0.5 text-primary hover:underline"
-              >
-                <Pencil className="h-3 w-3" /> 매칭 수정
-              </button>
-            </div>
-
-            {/* 선택없음 */}
-            <div className="px-1 pb-1 border-b mb-1">
-              <button
-                type="button"
-                className={`flex w-full items-center rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${!selectedVendor ? "bg-accent" : ""}`}
-                onClick={() => handleSelect("")}
-              >
-                <span className="text-muted-foreground">선택없음</span>
-              </button>
-            </div>
-
-            {/* 이전 주문 업체 바로가기 */}
-            {lastOrderedVendor && (
-              <div className="px-1 pb-1 border-b mb-1">
-                <button
-                  type="button"
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${selectedVendor === lastOrderedVendor ? "bg-accent" : ""}`}
-                  onClick={() => handleSelect(lastOrderedVendor)}
-                >
-                  <span className="shrink-0 rounded bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-700">이전 주문 업체</span>
-                  <span className="truncate font-medium">{lastOrderedVendor}</span>
-                </button>
-              </div>
-            )}
-
-            {priceMatch ? (
-              <>
-                {priceMatch.remarks && (
-                  <div className="mx-3 mb-1 mt-2 rounded-md bg-yellow-50 px-2 py-1 text-xs text-yellow-700">
-                    비고: {priceMatch.remarks}
-                  </div>
-                )}
-                <div className="px-1 py-1">
-                  {priceMatch.prices.map((p) => {
-                    const isMin = p.price !== null && p.price === priceMatch.minPrice;
-                    const isSelected = selectedVendor === p.vendorName;
-                    return (
-                      <button
-                        key={p.vendorName}
-                        type="button"
-                        className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${
-                          isSelected ? "bg-accent" : ""
-                        }`}
-                        onClick={() => handleSelect(p.vendorName)}
-                      >
-                        <div className="min-w-0 flex-1 text-left">
-                          <span className="font-medium">{p.vendorName}</span>
-                          <p className="truncate text-xs text-muted-foreground">{p.productName}</p>
-                        </div>
-                        <span
-                          className={`shrink-0 text-sm tabular-nums ${
-                            isMin
-                              ? "font-semibold text-green-700"
-                              : p.price !== null
-                                ? "text-foreground"
-                                : "text-muted-foreground"
-                          }`}
-                        >
-                          {p.price !== null ? `${p.price.toLocaleString()}원` : "-"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            ) : visibleVendors.length > 0 ? (
-              <>
-                <div className="px-3 pt-2 pb-1 text-xs text-muted-foreground">가격 데이터 없음 — 업체 직접 선택</div>
-                <div className="px-1 pb-1">
-                  {visibleVendors.map((v) => {
-                    const isSelected = selectedVendor === v.name;
-                    return (
-                      <button
-                        key={v.id}
-                        type="button"
-                        className={`flex w-full items-center rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent ${isSelected ? "bg-accent" : ""}`}
-                        onClick={() => handleSelect(v.name)}
-                      >
-                        <span className="font-medium">{v.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                업체 데이터 없음
-              </div>
-            )}
+              );
+            })
+          )}
+        </div>
+        {priceMatch?.source === "alias" && (
+          <div className="border-t border-border px-3 py-2">
+            <button
+              type="button"
+              disabled={savingAlias}
+              onClick={clearAlias}
+              className="text-xs font-medium text-destructive hover:underline disabled:opacity-50"
+            >
+              매칭 해제 (자동 매칭으로 되돌리기)
+            </button>
           </div>
         )}
-      </PopoverContent>
-    </Popover>
+      </div>
+    );
+  }
+
+  // 선택지: 업체별 단가(가격 있음) → 없으면 업체 목록
+  const options: { vendorName: string; price: number | null; hint?: string }[] = priceMatch
+    ? priceMatch.prices.map((p) => ({ vendorName: p.vendorName, price: p.price, hint: p.productName }))
+    : visibleVendors.map((v) => ({ vendorName: v.name, price: null }));
+  const min = priceMatch?.minPrice ?? null;
+
+  return (
+    <div className={sheet ? "" : "py-1"}>
+      {/* 매칭 상태 + 수정 */}
+      <div className={cn("flex items-center gap-2 text-xs", sheet ? "mb-3" : "border-b border-border px-3 py-2")}>
+        {priceMatch ? (
+          priceMatch.source === "alias" ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="shrink-0 rounded bg-status-doing-bg px-1.5 py-0.5 font-semibold text-status-doing">학습됨</span>
+              <span className="truncate text-subtle-foreground">{priceMatch.productName}</span>
+            </span>
+          ) : (
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">추정: {priceMatch.productName}</span>
+          )
+        ) : (
+          <span className="flex-1 text-muted-foreground">가격비교에 맞는 품목이 없어요</span>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditingMatch(true)}
+          className="ml-auto flex shrink-0 items-center gap-1 font-semibold text-primary hover:underline"
+        >
+          <Pencil className="size-3" /> 매칭 수정
+        </button>
+      </div>
+
+      {priceMatch?.remarks && (
+        <p className={cn("rounded-md bg-status-ask-bg px-2.5 py-1.5 text-xs text-status-ask", sheet ? "mb-3" : "mx-3 my-2")}>
+          비고: {priceMatch.remarks}
+        </p>
+      )}
+
+      <div className={sheet ? "grid gap-2" : "px-1 py-1"}>
+        {lastOrderedVendor && !options.some((o) => o.vendorName === lastOrderedVendor) && (
+          <VendorOption
+            sheet={sheet}
+            name={lastOrderedVendor}
+            hint="지난번 발주 업체"
+            price={null}
+            selected={selectedVendor === lastOrderedVendor}
+            best={false}
+            onClick={() => handleSelect(lastOrderedVendor)}
+          />
+        )}
+        {options.map((o) => (
+          <VendorOption
+            key={o.vendorName}
+            sheet={sheet}
+            name={o.vendorName}
+            hint={[o.vendorName === lastOrderedVendor ? "지난번 발주" : null, o.price !== null && o.price === min ? "최저가" : null, !sheet ? o.hint : null]
+              .filter(Boolean)
+              .join(" · ") || undefined}
+            price={o.price}
+            selected={selectedVendor === o.vendorName}
+            best={o.price !== null && o.price === min}
+            onClick={() => handleSelect(o.vendorName)}
+          />
+        ))}
+        {options.length === 0 && !lastOrderedVendor && (
+          <p className="px-3 py-4 text-center text-sm text-muted-foreground">등록된 업체가 없어요</p>
+        )}
+      </div>
+
+      {selectedVendor && (
+        <div className={cn(sheet ? "mt-3" : "mt-1 border-t border-border px-1 pt-1")}>
+          <button
+            type="button"
+            onClick={() => handleSelect("")}
+            className="flex h-9 w-full items-center rounded-md px-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            업체 지정 해제
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VendorOption({
+  sheet,
+  name,
+  hint,
+  price,
+  selected,
+  best,
+  onClick,
+}: {
+  sheet: boolean;
+  name: string;
+  hint?: string;
+  price: number | null;
+  selected: boolean;
+  best: boolean;
+  onClick: () => void;
+}) {
+  if (sheet) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={selected}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-[14px] px-4 py-3.5 text-left transition-colors",
+          selected || best ? "bg-status-doing-bg" : "bg-muted hover:bg-secondary",
+          selected ? "shadow-[inset_0_0_0_2px_var(--primary)]" : best ? "shadow-[inset_0_0_0_1px_var(--primary)]" : ""
+        )}
+      >
+        <span className="min-w-0 flex-1">
+          <b className="block text-base font-semibold">{name}</b>
+          {hint && <span className="text-[13px] text-subtle-foreground">{hint}</span>}
+        </span>
+        <span className={cn("shrink-0 text-lg font-extrabold tabular-nums", best ? "text-status-done" : price === null ? "text-muted-foreground" : "")}>
+          {price !== null ? price.toLocaleString() : "—"}
+        </span>
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={cn("flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent", selected && "bg-accent")}
+    >
+      <span className="min-w-0 flex-1 text-left">
+        <span className="font-medium">{name}</span>
+        {hint && <span className="block truncate text-xs text-muted-foreground">{hint}</span>}
+      </span>
+      <span className={cn("shrink-0 tabular-nums", best ? "font-bold text-status-done" : price === null ? "text-muted-foreground" : "")}>
+        {price !== null ? `${price.toLocaleString()}원` : "—"}
+      </span>
+    </button>
   );
 }

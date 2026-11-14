@@ -24,6 +24,9 @@ export function ItemNameAutocomplete({
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  /** 목록에서 막 고른 이름 — 그 값으로 다시 검색돼도 목록을 다시 열지 않는다 */
+  const pickedRef = useRef<string | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -85,7 +88,9 @@ export function ItemNameAutocomplete({
       // 통합제품(표준 품목) 우선 노출 → 그다음 과거 주문명
       const merged = [...unified, ...orderNames].slice(0, 20);
       setSuggestions(merged);
-      setOpen(merged.length > 0);
+      // 입력칸에서 치고 있을 때만 연다(수정 화면처럼 값이 미리 채워진 채 열릴 때 저절로 뜨지 않게)
+      const typing = typeof document !== "undefined" && document.activeElement === inputRef.current;
+      setOpen(merged.length > 0 && typing && pickedRef.current !== q);
     }, 300);
 
     return () => {
@@ -109,24 +114,30 @@ export function ItemNameAutocomplete({
   return (
     <div ref={containerRef} className="relative">
       <Input
-        placeholder="품목명을 입력하세요"
+        ref={inputRef}
+        placeholder="품목 이름 (예: 포스레놀)"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        className="h-11 text-base"
+        onChange={(e) => {
+          pickedRef.current = null;
+          onChange(e.target.value);
+        }}
         onFocus={() => {
           if (suggestions.length > 0) setOpen(true);
         }}
       />
       {open && suggestions.length > 0 && (
-        <ul className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+        <ul className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border bg-popover p-1 shadow-lg">
           {suggestions.map((s) => (
             <li
               key={(s.isUnified ? "u:" : "o:") + s.name}
               className={cn(
-                "flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
+                "flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[15px]",
                 "hover:bg-accent hover:text-accent-foreground"
               )}
               onMouseDown={(e) => {
                 e.preventDefault();
+                pickedRef.current = s.name;
                 onChange(s.name);
                 setOpen(false);
               }}

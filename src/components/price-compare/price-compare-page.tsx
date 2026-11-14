@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/page-header";
+import { UnderlineTabs } from "@/components/list-parts";
 import { ComparisonTable } from "./comparison-table";
 import { AliasManagement } from "./alias-management";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
@@ -40,16 +41,27 @@ export function PriceComparePage() {
 
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="가격 비교"
+        leading={
           <Button variant="ghost" size="icon" asChild className="lg:hidden">
-            <Link href="/more">
+            <Link href="/more" aria-label="더보기로">
               <ChevronLeft />
             </Link>
           </Button>
-          <h1 className="text-lg font-bold">가격 비교</h1>
-        </div>
-      </header>
+        }
+        tabs={
+          <UnderlineTabs<"compare" | "aliases">
+            ariaLabel="가격 비교 보기"
+            value={tab}
+            onValueChange={setTab}
+            items={[
+              { value: "compare", label: "가격 비교표" },
+              { value: "aliases", label: "품목 매칭", count: data?.itemAliases.length },
+            ]}
+          />
+        }
+      />
 
       {error ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -61,13 +73,7 @@ export function PriceComparePage() {
           <Spinner text="불러오는 중..." />
         </div>
       ) : (
-        <div className="space-y-4 p-4">
-          <Tabs value={tab} onValueChange={(v) => setTab(v as "compare" | "aliases")}>
-            <TabsList>
-              <TabsTrigger value="compare">가격 비교표</TabsTrigger>
-              <TabsTrigger value="aliases">품목 매칭 ({data.itemAliases.length})</TabsTrigger>
-            </TabsList>
-          </Tabs>
+        <div className="space-y-4 p-4 lg:px-6">
 
           {tab === "compare" ? (
             <ComparisonTable

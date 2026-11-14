@@ -25,31 +25,31 @@ export function AlertPanel({ data }: { data: AlertsData }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">⚡ 챙겨야 할 것</CardTitle>
+        <CardTitle className="text-[15px] font-bold">챙겨야 할 것</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {active.length === 0 && <p className="text-sm text-muted-foreground">지금 밀린 항목이 없습니다 👍</p>}
+      <CardContent className="space-y-2.5">
+        {active.length === 0 && <p className="text-sm text-muted-foreground">지금 밀린 항목이 없습니다</p>}
         {active.map((b) => {
           const Icon = b.icon;
           return (
-            <div key={b.title} className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-              <Link href={b.href} className="flex items-center gap-2 text-sm font-semibold text-amber-900 hover:underline">
+            <div key={b.title} className="rounded-lg bg-status-ask-bg p-3">
+              <Link href={b.href} className="flex items-center gap-2 text-sm font-semibold text-status-ask hover:underline">
                 <Icon className="h-4 w-4 shrink-0" />
                 <span>{b.title}</span>
-                <span className="rounded-full bg-amber-200 px-1.5 text-xs">{b.section.count}건</span>
+                <span className="text-[13px] font-bold tabular-nums">{b.section.count}건</span>
                 <ChevronRight className="ml-auto h-4 w-4 shrink-0" />
               </Link>
-              <p className="mt-0.5 text-xs text-amber-700">{b.sub}</p>
-              <ul className="mt-1.5 space-y-0.5 text-xs text-amber-900/90">
+              <p className="mt-0.5 text-xs text-subtle-foreground">{b.sub}</p>
+              <ul className="mt-1.5 space-y-0.5 text-[13px] text-foreground">
                 {b.section.items.slice(0, 5).map((it) => (
                   <li key={it.id} className="truncate">
-                    {it.isUrgent ? "🔴 " : ""}
+                    {it.isUrgent && <span className="mr-1 font-bold text-status-late">긴급</span>}
                     {it.itemName}
                     {it.quantity > 0 ? ` ${it.quantity}${it.unit ? ` ${it.unit}` : ""}` : ""} — {it.requester}
                     {it.vendor ? ` / ${it.vendor}` : ""} ({it.days}일)
                   </li>
                 ))}
-                {b.section.count > 5 && <li className="text-amber-700">… 외 {b.section.count - 5}건</li>}
+                {b.section.count > 5 && <li className="text-muted-foreground">… 외 {b.section.count - 5}건</li>}
               </ul>
             </div>
           );

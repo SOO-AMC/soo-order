@@ -166,6 +166,64 @@ export async function bulkInspectOrders(
   }
 }
 
+/**
+ * 받은 수량 기록 (검수 화면에서 수량 칸을 고쳤을 때).
+ * 명세서 확정(invoice-confirm-action)과 같은 규칙: 받은 수량 합이 주문 수량보다 적으면 부분입고로 남기고(status 그대로),
+ * 다 받으면 검수완료(inspecting). receivedTotal은 지금까지 받은 "총" 수량.
+ */
+export async function recordReceivedQuantity(orderId: string, receivedTotal: number, inspectionNotes = "") {
+  const { supabase, userId } = await requireAdmin();
+  if (!Number.isFinite(receivedTotal) || receivedTotal < 0) throw new Error("받은 수량이 올바르지 않습니다.");
+
+  const { data: order, error: readErr } = await supabase
+    .from("orders")
+    .select("quantity, status, requester_id, item_name")
+    .eq("id", orderId)
+    .single();
+  if (readErr || !order) throw new Error("주문을 찾을 수 없습니다.");
+  if (order.status !== "ordered") throw new Error("검수대기 상태가 아닙니다.");
+
+  const received = Math.floor(receivedTotal);
+  const trimmedNotes = inspectionNotes.trim();
+
+  if (order.quantity > 0 && received < order.quantity) {
+    const { error } = await supabase
+      .from("orders")
+      .update({ received_quantity: received, updated_by: userId })
+      .eq("id", orderId);
+    if (error) throw new Error("받은 수량 저장에 실패했습니다.");
+    return { completed: false };
+  }
+
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      status: "inspecting",
+      confirmed_quantity: received,
+      received_quantity: received,
+      invoice_received: true,
+      inspection_notes: trimmedNotes,
+      inspection_memo: null,
+      inspected_by: userId,
+      inspected_at: new Date().toISOString(),
+      updated_by: userId,
+    })
+    .eq("id", orderId);
+  if (error) throw new Error("검수 처리에 실패했습니다.");
+
+  if (trimmedNotes && order.requester_id && order.requester_id !== userId) {
+    await supabase.from("notifications").insert({
+      user_id: order.requester_id,
+      order_id: orderId,
+      type: "inspection_completed",
+      title: `'${order.item_name}' 검수가 완료되었습니다`,
+      body: `검수비고: ${trimmedNotes}`,
+      link: `/inspection/${orderId}`,
+    });
+  }
+  return { completed: true };
+}
+
 /** 품절 처리 (status → out_of_stock) */
 export async function markOutOfStock(orderId: string, reason: string) {
   const { supabase } = await requireAdmin();

@@ -14,7 +14,7 @@ import type { TrendDataPoint } from "@/lib/types/dashboard";
 const chartConfig = {
   count: {
     label: "주문 수",
-    color: "#2563EB",
+    color: "#1166A7",
   },
 } satisfies ChartConfig;
 
@@ -41,7 +41,7 @@ export function OrderTrendChart({ daily, weekly, monthly }: OrderTrendChartProps
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base">주문 추이</CardTitle>
+        <CardTitle className="text-[15px] font-bold">주문 추이</CardTitle>
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value as Period)}
@@ -59,8 +59,8 @@ export function OrderTrendChart({ daily, weekly, monthly }: OrderTrendChartProps
           <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
             <defs>
               <linearGradient id="fillCount" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#2563EB" stopOpacity={0.05} />
+                <stop offset="5%" stopColor="#1166A7" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#1166A7" stopOpacity={0.05} />
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -70,7 +70,7 @@ export function OrderTrendChart({ daily, weekly, monthly }: OrderTrendChartProps
             <Area
               type="monotone"
               dataKey="count"
-              stroke="#2563EB"
+              stroke="#1166A7"
               strokeWidth={2}
               fill="url(#fillCount)"
             />

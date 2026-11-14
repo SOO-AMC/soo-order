@@ -3,6 +3,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { UploadIndicator } from "@/components/upload-indicator";
 import { MainContent } from "@/components/main-content";
 import { LayoutProviders } from "@/components/tab-counts-provider";
+import { CommandPaletteProvider } from "@/components/workspace/command-palette";
 import { getSessionProfile } from "@/lib/supabase/server";
 
 export default async function MainLayout({
@@ -20,12 +21,14 @@ export default async function MainLayout({
       role={role}
       position={position}
     >
+      <CommandPaletteProvider>
       <div className="flex min-h-dvh flex-col">
         <AppSidebar />
         <UploadIndicator />
         <MainContent>{children}</MainContent>
         <BottomNav />
       </div>
+      </CommandPaletteProvider>
     </LayoutProviders>
   );
 }

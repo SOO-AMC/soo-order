@@ -1,35 +1,5 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { DetailSkeleton } from "@/components/workspace/detail-page";
 
 export default function SearchDetailLoading() {
-  return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/search">
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <h1 className="text-lg font-bold">조회 상세</h1>
-      </header>
-      <div className="p-4">
-        <div className="space-y-6 rounded-2xl bg-card p-5 shadow-card animate-pulse">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-16 rounded-full bg-muted" />
-            <div className="h-6 w-16 rounded-full bg-muted" />
-          </div>
-          <div className="h-px bg-muted" />
-          <div className="space-y-4">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i}>
-                <div className="h-3 w-16 rounded bg-muted" />
-                <div className="mt-1.5 h-4 w-32 rounded bg-muted" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <DetailSkeleton title="조회 상세" backHref="/search" />;
 }

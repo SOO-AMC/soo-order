@@ -12,7 +12,7 @@ function CountDelta({ current, previous }: { current: number; previous: number }
   if (diff === 0) return <span className="text-xs text-muted-foreground">어제와 동일</span>;
   const up = diff > 0;
   return (
-    <span className={cn("text-xs font-medium", up ? "text-red-500" : "text-emerald-600")}>
+    <span className={cn("text-xs font-medium", up ? "text-status-late" : "text-status-done")}>
       {up ? "▲" : "▼"} {Math.abs(diff)} <span className="font-normal text-muted-foreground">어제 대비</span>
     </span>
   );
@@ -24,7 +24,7 @@ function MoneyDelta({ spend }: { spend: SpendData }) {
   if (diff === 0) return <span className="text-xs text-muted-foreground">지난달과 동일</span>;
   const up = diff > 0;
   return (
-    <span className={cn("text-xs font-medium", up ? "text-red-500" : "text-emerald-600")}>
+    <span className={cn("text-xs font-medium", up ? "text-status-late" : "text-status-done")}>
       {up ? "▲" : "▼"} {won(Math.abs(diff))} <span className="font-normal text-muted-foreground">지난달 대비</span>
     </span>
   );
@@ -56,14 +56,14 @@ export function StatCards({ summary, spend }: { summary: SummaryData; spend?: Sp
           <Card key={it.label}>
             <CardContent className="flex items-start justify-between gap-2 p-4">
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">{it.label}</p>
-                <p className="mt-1 text-2xl font-bold leading-tight">
+                <p className="text-[13px] font-medium text-subtle-foreground">{it.label}</p>
+                <p className="mt-1 text-2xl font-bold leading-tight tabular-nums">
                   {it.value}
                   {it.unit && <span className="ml-0.5 text-sm font-medium text-muted-foreground">{it.unit}</span>}
                 </p>
                 <div className="mt-1">{it.delta}</div>
               </div>
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-subtle-foreground">
                 <Icon className="h-5 w-5" />
               </span>
             </CardContent>

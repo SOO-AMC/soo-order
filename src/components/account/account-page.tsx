@@ -1,106 +1,123 @@
 "use client";
 
-import { useActionState } from "react";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import {
-  changePassword,
-  type ChangePasswordState,
-} from "@/app/(main)/account/actions";
+import { PageHeader } from "@/components/page-header";
+import { BackButton } from "@/components/back-button";
+import { ROLE_LABEL, POSITION_LABEL, type Role, type Position } from "@/lib/types/member";
+import { changePassword, type ChangePasswordState } from "@/app/(main)/account/actions";
 
-const ROLE_LABEL: Record<string, string> = {
-  admin: "관리자",
-  user: "일반 사용자",
-};
-
+/** 내 계정: 내 정보 + 비밀번호 바꾸기 */
 export function AccountPage() {
-  const { userId, userName, isAdmin } = useAuth();
-  const profile = { id: userId, full_name: userName, role: isAdmin ? "admin" : "user" };
-  const [state, formAction, isPending] = useActionState<
-    ChangePasswordState,
-    FormData
-  >(changePassword, {});
+  const { userName, role, position } = useAuth();
+  const [state, formAction, isPending] = useActionState<ChangePasswordState, FormData>(changePassword, {});
+  const [show, setShow] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // 바꾸기에 성공하면 입력칸을 비운다
+  useEffect(() => {
+    if (state.success) formRef.current?.reset();
+  }, [state]);
+
+  const roleText = ROLE_LABEL[role as Role] ?? role;
+  const positionText = position ? POSITION_LABEL[position as Position] ?? position : null;
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" asChild className="lg:hidden">
-            <Link href="/more">
-              <ChevronLeft />
-            </Link>
-          </Button>
-          <h1 className="text-lg font-bold">계정관리</h1>
-        </div>
-      </header>
+    <>
+      <PageHeader
+        title="내 계정"
+        leading={
+          <div className="lg:hidden">
+            <BackButton fallbackHref="/more" />
+          </div>
+        }
+      />
 
-      <div className="p-4 space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">내 정보</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">이름</span>
-              <span className="font-medium">{profile.full_name}</span>
+      <div className="mx-auto max-w-md md:max-w-2xl flex flex-col gap-3 p-4 lg:px-6">
+        {/* 내 정보 */}
+        <section className="rounded-2xl bg-card p-5 ring-1 ring-border">
+          <div className="flex items-center gap-3.5">
+            <span className="grid size-14 shrink-0 place-items-center rounded-full bg-primary/10 text-xl font-bold text-primary">
+              {userName?.charAt(0) ?? "?"}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-xl font-extrabold tracking-tight">{userName}</p>
+              <p className="text-[13px] text-muted-foreground">이름으로 로그인해요</p>
             </div>
-            <Separator />
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">권한</span>
-              <Badge variant={isAdmin ? "default" : "secondary"}>
-                {ROLE_LABEL[profile.role] ?? profile.role}
-              </Badge>
+          </div>
+          <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4">
+            <div>
+              <dt className="text-xs text-muted-foreground">권한</dt>
+              <dd className="mt-0.5 text-[15px] font-medium">{roleText}</dd>
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <dt className="text-xs text-muted-foreground">직책</dt>
+              <dd className="mt-0.5 text-[15px] font-medium">{positionText ?? <span className="text-muted-foreground">없음</span>}</dd>
+            </div>
+          </dl>
+          <p className="mt-4 text-[13px] text-muted-foreground">이름·권한·직책은 관리자가 직원 관리에서 바꿔요.</p>
+        </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">비밀번호 변경</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={formAction} className="space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="newPassword">새 비밀번호</Label>
+        {/* 비밀번호 바꾸기 */}
+        <section className="rounded-2xl bg-card p-5 ring-1 ring-border">
+          <h2 className="text-lg font-extrabold tracking-tight">비밀번호 바꾸기</h2>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">숫자·영문·특수문자 조합 4자리 이상</p>
+
+          <form ref={formRef} action={formAction} className="mt-4 flex flex-col gap-3">
+            <label className="grid gap-1.5">
+              <span className="text-[13px] font-semibold text-subtle-foreground">새 비밀번호</span>
+              <div className="relative">
                 <Input
                   id="newPassword"
                   name="newPassword"
-                  type="password"
-                  placeholder="4자 이상"
+                  type={show ? "text" : "password"}
+                  autoComplete="new-password"
                   required
+                  className="h-11 pr-11 text-base"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShow((v) => !v)}
+                  aria-label={show ? "비밀번호 숨기기" : "비밀번호 보기"}
+                  className="absolute right-1 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">비밀번호 확인</Label>
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  required
-                />
-              </div>
-              {state.error && (
-                <p className="text-sm text-destructive">{state.error}</p>
-              )}
-              {state.success && (
-                <p className="text-sm text-green-600">
-                  비밀번호가 변경되었습니다.
-                </p>
-              )}
-              <Button type="submit" className="w-full" disabled={isPending}>
-                {isPending ? "변경 중..." : "변경하기"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-[13px] font-semibold text-subtle-foreground">한 번 더</span>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type={show ? "text" : "password"}
+                autoComplete="new-password"
+                required
+                className="h-11 text-base"
+              />
+            </label>
+
+            {state.error && (
+              <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">
+                {state.error}
+              </p>
+            )}
+            {state.success && (
+              <p role="status" className="flex items-center gap-2 rounded-lg bg-status-done-bg px-3 py-2.5 text-sm font-medium text-status-done">
+                <CheckCircle2 className="size-4" />
+                비밀번호를 바꿨어요. 다음 로그인부터 새 비밀번호를 쓰세요.
+              </p>
+            )}
+
+            <Button type="submit" className="mt-1 h-11 w-full rounded-xl text-base font-bold" disabled={isPending}>
+              {isPending ? "바꾸는 중…" : "비밀번호 바꾸기"}
+            </Button>
+          </form>
+        </section>
       </div>
-    </div>
+    </>
   );
 }

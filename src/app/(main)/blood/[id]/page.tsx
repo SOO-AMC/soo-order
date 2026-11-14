@@ -2,14 +2,16 @@ export const dynamic = "force-dynamic";
 
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Pencil, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { createClient, getSessionProfile } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Tag } from "@/components/list-parts";
 import { BloodStatusBadge } from "@/components/blood/blood-status-badge";
 import { BloodConfirmButton } from "@/components/blood/blood-confirm-button";
-import { formatDate, formatDateTime } from "@/lib/utils/format";
 import { DeleteBloodButton } from "@/components/blood/blood-delete-button";
+import { DetailPage, DetailHero, DetailCard, InfoGrid, DetailActions } from "@/components/workspace/detail-page";
+import { Timeline } from "@/components/workspace/detail-panel";
+import { formatDate, formatDateTime } from "@/lib/utils/format";
 import {
   BLOOD_TYPE_LABEL,
   ANIMAL_TYPE_LABEL,
@@ -20,11 +22,7 @@ import {
   type SettlementType,
 } from "@/lib/types/blood";
 
-export default async function BloodDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function BloodDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { userId, isAdmin } = await getSessionProfile();
   if (!userId) redirect("/login");
@@ -32,9 +30,7 @@ export default async function BloodDetailPage({
   const supabase = await createClient();
   const { data: record } = await supabase
     .from("blood_records")
-    .select(
-      "*, creator:profiles!created_by(full_name), confirmer:profiles!confirmed_by(full_name)"
-    )
+    .select("*, creator:profiles!created_by(full_name), confirmer:profiles!confirmed_by(full_name)")
     .eq("id", id)
     .single();
 
@@ -43,162 +39,92 @@ export default async function BloodDetailPage({
   const isOwner = record.created_by === userId;
   const canEdit = isAdmin || isOwner;
   const canDelete = isAdmin || isOwner;
+  const canConfirm = isAdmin && record.status === "pending";
+  const isReceived = record.type === "received";
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/blood">
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <h1 className="text-lg font-bold">혈액 상세</h1>
-      </header>
-
-      <div className="p-4">
-        <div className="space-y-6 rounded-2xl bg-card p-5 shadow-card">
-          <div className="flex items-center gap-2">
+    <DetailPage
+      title="혈액 상세"
+      backHref="/blood"
+      aside={
+        <>
+          {(canConfirm || canEdit || canDelete) && (
+            <DetailActions hint={canConfirm ? "결제 방식을 정해 확인하면 확인완료로 바뀌어요." : undefined}>
+              {canConfirm && <BloodConfirmButton recordId={record.id} hospitalName={record.hospital_name} recordType={record.type} />}
+              {canEdit && (
+                <Button variant="outline" className="w-full" asChild>
+                  <Link href={`/blood/${record.id}/edit`}>
+                    <Pencil className="size-4" />
+                    수정
+                  </Link>
+                </Button>
+              )}
+              {canDelete && <DeleteBloodButton recordId={record.id} hospitalName={record.hospital_name} />}
+            </DetailActions>
+          )}
+          <DetailCard title="처리 이력">
+            <Timeline
+              items={[
+                ...(record.confirmed_at
+                  ? [{ key: "conf", text: <><b className="font-semibold text-foreground">확인</b> · {record.confirmer?.full_name ?? "—"}</>, at: formatDateTime(record.confirmed_at) }]
+                  : []),
+                { key: "created", text: <><b className="font-semibold text-foreground">등록</b> · {record.creator?.full_name ?? "—"}</>, at: formatDateTime(record.created_at) },
+              ]}
+            />
+          </DetailCard>
+        </>
+      }
+    >
+      <DetailHero
+        badges={
+          <>
             <BloodStatusBadge status={record.status as BloodStatus} />
-            <span className="text-sm font-medium text-muted-foreground">
-              {BLOOD_TYPE_LABEL[record.type as BloodType]}
-            </span>
-          </div>
+            <Tag>{BLOOD_TYPE_LABEL[record.type as BloodType]}</Tag>
+          </>
+        }
+        title={record.hospital_name}
+        summary={
+          <>
+            {ANIMAL_TYPE_LABEL[record.animal_type as AnimalType]} <b className="font-semibold text-foreground">{record.blood_type}</b> ·{" "}
+            <b className="font-semibold text-foreground tabular-nums">{record.volume_ml} mL</b> · {formatDate(record.record_date)}
+          </>
+        }
+      />
 
-          <Separator />
+      <DetailCard title="혈액 정보">
+        <InfoGrid
+          items={[
+            { label: isReceived ? "수령일" : "출고일", value: formatDate(record.record_date) },
+            { label: "병원", value: record.hospital_name },
+            { label: "동물", value: ANIMAL_TYPE_LABEL[record.animal_type as AnimalType] },
+            { label: "혈액형", value: record.blood_type },
+            { label: "용량", value: `${record.volume_ml} mL` },
+            { label: "채혈일", value: formatDate(record.collection_date) },
+            isReceived && record.receiver && { label: "수령인", value: record.receiver },
+            !isReceived && record.shipper && { label: "출고인", value: record.shipper },
+            record.notes && { label: "비고", value: record.notes, wide: true },
+          ]}
+        />
+      </DetailCard>
 
-          <div>
-            <h2 className="font-semibold">기본 정보</h2>
-            <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
-              <div>
-                <dt className="text-sm text-muted-foreground">
-                  {record.type === "received" ? "수령일자" : "출고일자"}
-                </dt>
-                <dd className="mt-0.5 font-medium">{formatDate(record.record_date)}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">병원이름</dt>
-                <dd className="mt-0.5 font-medium">{record.hospital_name}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">동물</dt>
-                <dd className="mt-0.5 font-medium">
-                  {ANIMAL_TYPE_LABEL[record.animal_type as AnimalType]}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">혈액형</dt>
-                <dd className="mt-0.5 font-medium">{record.blood_type}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">용량</dt>
-                <dd className="mt-0.5 font-medium">{record.volume_ml}mL</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">채혈일</dt>
-                <dd className="mt-0.5 font-medium">{formatDate(record.collection_date)}</dd>
-              </div>
-              {record.type === "received" && record.receiver && (
-                <div>
-                  <dt className="text-sm text-muted-foreground">수령인</dt>
-                  <dd className="mt-0.5 font-medium">{record.receiver}</dd>
-                </div>
-              )}
-              {record.type === "sent" && record.shipper && (
-                <div>
-                  <dt className="text-sm text-muted-foreground">출고인</dt>
-                  <dd className="mt-0.5 font-medium">{record.shipper}</dd>
-                </div>
-              )}
-              {record.notes && (
-                <div>
-                  <dt className="text-sm text-muted-foreground">비고</dt>
-                  <dd className="mt-0.5 font-medium">{record.notes}</dd>
-                </div>
-              )}
-            </dl>
-          </div>
-
-          <Separator />
-
-          <div>
-            <h2 className="font-semibold">등록/확인 정보</h2>
-            <dl className="mt-3 space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-4 md:space-y-0">
-              <div>
-                <dt className="text-sm text-muted-foreground">등록자</dt>
-                <dd className="mt-0.5 font-medium">
-                  {record.creator?.full_name ?? "알 수 없음"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted-foreground">등록일시</dt>
-                <dd className="mt-0.5 font-medium">{formatDateTime(record.created_at)}</dd>
-              </div>
-              {record.status === "confirmed" && (
-                <>
-                  <div>
-                    <dt className="text-sm text-muted-foreground">결제 방식</dt>
-                    <dd className="mt-0.5 font-medium">
-                      {record.settlement_type
-                        ? SETTLEMENT_TYPE_LABEL[record.settlement_type as SettlementType]
-                        : "-"}
-                    </dd>
-                  </div>
-                  {record.confirmer && (
-                    <div>
-                      <dt className="text-sm text-muted-foreground">확인자</dt>
-                      <dd className="mt-0.5 font-medium">
-                        {record.confirmer.full_name ?? "알 수 없음"}
-                      </dd>
-                    </div>
-                  )}
-                  {record.confirmed_at && (
-                    <div>
-                      <dt className="text-sm text-muted-foreground">확인일시</dt>
-                      <dd className="mt-0.5 font-medium">
-                        {formatDateTime(record.confirmed_at)}
-                      </dd>
-                    </div>
-                  )}
-                </>
-              )}
-            </dl>
-          </div>
-
-          {/* Actions */}
-          {(isAdmin && record.status === "pending") && (
-            <>
-              <Separator />
-              <BloodConfirmButton
-                recordId={record.id}
-                hospitalName={record.hospital_name}
-                recordType={record.type}
-              />
-            </>
-          )}
-
-          {canEdit && (
-            <>
-              <Separator />
-              <Button variant="outline" className="w-full" asChild>
-                <Link href={`/blood/${record.id}/edit`}>
-                  <Pencil className="h-4 w-4" />
-                  수정
-                </Link>
-              </Button>
-            </>
-          )}
-
-          {canDelete && (
-            <>
-              <Separator />
-              <DeleteBloodButton
-                recordId={record.id}
-                hospitalName={record.hospital_name}
-              />
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+      <DetailCard title="등록·확인">
+        <InfoGrid
+          items={[
+            { label: "등록자", value: record.creator?.full_name ?? "알 수 없음" },
+            { label: "등록 일시", value: formatDateTime(record.created_at) },
+            {
+              label: "결제 방식",
+              value: record.settlement_type ? (
+                SETTLEMENT_TYPE_LABEL[record.settlement_type as SettlementType]
+              ) : (
+                <span className="text-status-ask">아직 안 정함</span>
+              ),
+            },
+            record.confirmer && { label: "확인자", value: record.confirmer.full_name ?? "알 수 없음" },
+            record.confirmed_at && { label: "확인 일시", value: formatDateTime(record.confirmed_at) },
+          ]}
+        />
+      </DetailCard>
+    </DetailPage>
   );
 }

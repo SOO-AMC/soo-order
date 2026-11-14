@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
 import { Spinner } from "@/components/ui/spinner";
 import { StatCards } from "./stat-cards";
 import { StatusDonut } from "./status-donut";
@@ -29,18 +30,18 @@ export function DashboardPage({ initialData }: { initialData?: DashboardData }) 
   }, []);
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <Button variant="ghost" size="icon" asChild className="lg:hidden">
-          <Link href="/more">
-            <ChevronLeft />
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-lg font-bold leading-tight">대시보드</h1>
-          <p className="hidden text-xs text-muted-foreground sm:block">오늘의 주문·검수 현황과 주요 지표를 한눈에</p>
-        </div>
-      </header>
+    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-[1400px]">
+      <PageHeader
+        title="대시보드"
+        description={<span className="hidden sm:inline">주문·검수 현황과 주요 지표</span>}
+        leading={
+          <Button variant="ghost" size="icon" asChild className="lg:hidden">
+            <Link href="/more" aria-label="더보기로">
+              <ChevronLeft />
+            </Link>
+          </Button>
+        }
+      />
 
       {error ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -52,7 +53,7 @@ export function DashboardPage({ initialData }: { initialData?: DashboardData }) 
           <Spinner text="불러오는 중..." />
         </div>
       ) : (
-        <div className="space-y-4 p-4">
+        <div className="space-y-4 p-4 lg:px-6">
           <StatCards summary={data.summary} spend={data.spend} />
 
           <div className="grid gap-4 lg:grid-cols-3 lg:items-start">

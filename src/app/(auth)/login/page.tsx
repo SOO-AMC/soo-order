@@ -73,20 +73,19 @@ export default function LoginPage() {
           <div className="absolute -top-6 -left-10 w-36 h-36 rounded-full bg-white/10" />
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-white/5" />
 
-          {/* 로고 */}
-          <div className="relative z-10 animate-in zoom-in-75 duration-500">
+          {/* 로고 (다크 바탕용 가로형) */}
+          <h1 className="relative z-10 m-0 animate-in zoom-in-75 duration-500">
             <Image
-              src="/icons/logo.png"
-              alt="수오더 로고"
-              width={96}
-              height={96}
+              src="/sooorder-brand/logo-horizontal-on-dark.webp"
+              alt="수오더"
+              width={1231}
+              height={440}
               priority
+              className="h-16 w-auto"
             />
-          </div>
+          </h1>
 
-          {/* 텍스트 */}
-          <h1 className="relative z-10 mt-5 text-3xl font-extrabold text-white tracking-tight animate-in slide-in-from-bottom-2 duration-500 delay-100">수오더</h1>
-          <p className="relative z-10 mt-1.5 text-sm text-white/70 animate-in slide-in-from-bottom-2 duration-500 delay-150">SOO Animal Medical Center</p>
+          <p className="relative z-10 mt-3 text-sm text-white/75 animate-in slide-in-from-bottom-2 duration-500 delay-150">SOO Animal Medical Center</p>
 
           {/* 하단 구분선 장식 */}
           <div className="relative z-10 mt-6 flex items-center gap-2">
@@ -109,12 +108,12 @@ export default function LoginPage() {
       <div className="hidden lg:block animate-in fade-in-0 duration-500">
         <div className="mb-8">
           <Image
-            src="/icons/logo.png"
-            alt="수오더 로고"
-            width={48}
-            height={48}
+            src="/sooorder-brand/logo-horizontal.webp"
+            alt="수오더"
+            width={1231}
+            height={440}
             priority
-            className="mb-4"
+            className="mb-6 h-10 w-auto"
           />
           <h2 className="text-2xl font-bold text-foreground">환영합니다</h2>
           <p className="mt-1 text-sm text-muted-foreground">로그인하여 시작하세요</p>

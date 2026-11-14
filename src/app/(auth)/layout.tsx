@@ -8,14 +8,14 @@ export default function AuthLayout({
   return (
     <>
       {/* 모바일: 풀스크린 */}
-      <div className="flex min-h-svh flex-col bg-gradient-to-b from-[#2563EB] to-[#1D4ED8] lg:hidden">
+      <div className="flex min-h-svh flex-col bg-[#082344] lg:hidden">
         {children}
       </div>
 
       {/* PC: 왼쪽 영상 + 오른쪽 폼 */}
       <div className="hidden lg:flex min-h-svh">
         {/* 왼쪽: YouTube 영상 배경 */}
-        <div className="relative flex-1 overflow-hidden bg-[#1a0a2e]">
+        <div className="relative flex-1 overflow-hidden bg-[#082344]">
           {/* YouTube iframe - 화면 꽉 채움 */}
           <div className="absolute inset-0">
             <iframe
@@ -28,16 +28,13 @@ export default function AuthLayout({
             />
           </div>
           {/* 오버레이 + 브랜드 */}
-          <div className="absolute inset-0 bg-[#1a0a2e]/40" />
+          <div className="absolute inset-0 bg-[#082344]/55" />
           <div className="relative z-10 flex h-full flex-col justify-between p-10">
-            <div className="flex items-center gap-3">
-              <img
-                src="/icons/logo.png"
-                alt="수오더 로고"
-                className="h-10 w-10"
-              />
-              <span className="text-xl font-bold text-white">수오더</span>
-            </div>
+            <img
+              src="/sooorder-brand/logo-horizontal-on-dark.webp"
+              alt="수오더"
+              className="h-12 w-auto self-start object-contain"
+            />
             <div>
               <h1 className="text-4xl font-extrabold text-white tracking-tight">
                 의약품 주문 및<br />검수 관리

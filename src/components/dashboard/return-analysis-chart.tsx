@@ -33,7 +33,7 @@ export function ReturnAnalysisChart({ data }: ReturnAnalysisChartProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">반품 분석</CardTitle>
+          <CardTitle className="text-[15px] font-bold">반품 분석</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">데이터가 없습니다.</p>
@@ -45,7 +45,7 @@ export function ReturnAnalysisChart({ data }: ReturnAnalysisChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">반품 분석</CardTitle>
+        <CardTitle className="text-[15px] font-bold">반품 분석</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* 반품률 도넛 */}
@@ -104,10 +104,10 @@ export function ReturnAnalysisChart({ data }: ReturnAnalysisChartProps) {
                 <div key={i} className="rounded-lg border p-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="font-medium truncate flex-1">{r.itemName}</span>
-                    <span className="text-[10px] text-muted-foreground ml-2 shrink-0">{r.date}</span>
+                    <span className="text-xs text-muted-foreground ml-2 shrink-0">{r.date}</span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{r.reason}</p>
-                  <p className="text-[10px] text-muted-foreground">{r.requester}</p>
+                  <p className="text-xs text-muted-foreground">{r.requester}</p>
                 </div>
               ))}
             </div>

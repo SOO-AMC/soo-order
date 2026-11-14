@@ -17,12 +17,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { type SearchFilters, type StatusValue, type UrgentValue, type InvoiceValue, defaultFilters } from "@/lib/utils/search-params";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/types/order";
+import { cn } from "@/lib/utils";
+
+/** 켜고 끄는 칩 (디자인 시스템 FilterChip 모양) */
+const chipCls = (on: boolean) =>
+  cn(
+    "h-8 rounded-full px-3 text-[13px] transition-colors",
+    on ? "bg-foreground font-semibold text-background" : "bg-muted text-subtle-foreground ring-1 ring-border hover:text-foreground"
+  );
 
 interface SearchFilterSheetProps {
   open: boolean;
@@ -65,13 +71,13 @@ export function SearchFilterSheet({
         className={isDesktop ? "w-96 flex flex-col" : "max-h-[85vh] flex flex-col"}
       >
         <SheetHeader>
-          <SheetTitle>필터</SheetTitle>
+          <SheetTitle>상세 필터</SheetTitle>
           <SheetDescription className="sr-only">주문 필터 옵션</SheetDescription>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto space-y-3 px-4">
           {/* 주문 상태 + 긴급 여부 */}
-          <div className="rounded-xl bg-card p-4 shadow-card space-y-4">
+          <div className="space-y-4 rounded-xl bg-card p-4 ring-1 ring-border">
             <div className="space-y-2">
               <Label className="text-sm font-medium">주문 상태</Label>
               <div className="flex flex-wrap gap-2">
@@ -79,10 +85,11 @@ export function SearchFilterSheet({
                   const label = ORDER_STATUS_LABEL[value as OrderStatus];
                   const isSelected = local.status.includes(value);
                   return (
-                    <Badge
+                    <button
                       key={value}
-                      variant={isSelected ? "default" : "outline"}
-                      className="cursor-pointer"
+                      type="button"
+                      aria-pressed={isSelected}
+                      className={chipCls(isSelected)}
                       onClick={() => setLocal((p) => {
                         const next = isSelected
                           ? p.status.filter((s) => s !== value)
@@ -91,7 +98,7 @@ export function SearchFilterSheet({
                       })}
                     >
                       {label}
-                    </Badge>
+                    </button>
                   );
                 })}
               </div>
@@ -102,10 +109,11 @@ export function SearchFilterSheet({
                 {(["urgent", "normal"] as const).map((value) => {
                   const isSelected = local.urgent.includes(value);
                   return (
-                    <Badge
+                    <button
                       key={value}
-                      variant={isSelected ? "default" : "outline"}
-                      className="cursor-pointer"
+                      type="button"
+                      aria-pressed={isSelected}
+                      className={chipCls(isSelected)}
                       onClick={() => setLocal((p) => {
                         const next = isSelected
                           ? p.urgent.filter((u) => u !== value)
@@ -114,7 +122,7 @@ export function SearchFilterSheet({
                       })}
                     >
                       {value === "urgent" ? "긴급" : "일반"}
-                    </Badge>
+                    </button>
                   );
                 })}
               </div>
@@ -122,7 +130,7 @@ export function SearchFilterSheet({
           </div>
 
           {/* 주문 요청자 + 요청 날짜 범위 */}
-          <div className="rounded-xl bg-card p-4 shadow-card space-y-4">
+          <div className="space-y-4 rounded-xl bg-card p-4 ring-1 ring-border">
             <div className="space-y-2">
               <Label className="text-sm font-medium">주문 요청자</Label>
               <Select
@@ -149,21 +157,21 @@ export function SearchFilterSheet({
                   type="date"
                   value={local.dateFrom}
                   onChange={(e) => setLocal((p) => ({ ...p, dateFrom: e.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
                 />
                 <span className="shrink-0 text-muted-foreground">~</span>
                 <input
                   type="date"
                   value={local.dateTo}
                   onChange={(e) => setLocal((p) => ({ ...p, dateTo: e.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
                 />
               </div>
             </div>
           </div>
 
           {/* 발주자 + 발주 날짜 범위 */}
-          <div className="rounded-xl bg-card p-4 shadow-card space-y-4">
+          <div className="space-y-4 rounded-xl bg-card p-4 ring-1 ring-border">
             <div className="space-y-2">
               <Label className="text-sm font-medium">발주자</Label>
               <Select
@@ -190,21 +198,21 @@ export function SearchFilterSheet({
                   type="date"
                   value={local.ordDateFrom}
                   onChange={(e) => setLocal((p) => ({ ...p, ordDateFrom: e.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
                 />
                 <span className="shrink-0 text-muted-foreground">~</span>
                 <input
                   type="date"
                   value={local.ordDateTo}
                   onChange={(e) => setLocal((p) => ({ ...p, ordDateTo: e.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
                 />
               </div>
             </div>
           </div>
 
           {/* 검수자 + 검수 날짜 범위 + 거래명세서 수령 */}
-          <div className="rounded-xl bg-card p-4 shadow-card space-y-4">
+          <div className="space-y-4 rounded-xl bg-card p-4 ring-1 ring-border">
             <div className="space-y-2">
               <Label className="text-sm font-medium">검수자</Label>
               <Select
@@ -231,14 +239,14 @@ export function SearchFilterSheet({
                   type="date"
                   value={local.inspDateFrom}
                   onChange={(e) => setLocal((p) => ({ ...p, inspDateFrom: e.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
                 />
                 <span className="shrink-0 text-muted-foreground">~</span>
                 <input
                   type="date"
                   value={local.inspDateTo}
                   onChange={(e) => setLocal((p) => ({ ...p, inspDateTo: e.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
                 />
               </div>
             </div>
@@ -248,10 +256,11 @@ export function SearchFilterSheet({
                 {(["received", "not_received"] as const).map((value) => {
                   const isSelected = local.invoice.includes(value);
                   return (
-                    <Badge
+                    <button
                       key={value}
-                      variant={isSelected ? "default" : "outline"}
-                      className="cursor-pointer"
+                      type="button"
+                      aria-pressed={isSelected}
+                      className={chipCls(isSelected)}
                       onClick={() => setLocal((p) => {
                         const next = isSelected
                           ? p.invoice.filter((i) => i !== value)
@@ -260,7 +269,7 @@ export function SearchFilterSheet({
                       })}
                     >
                       {value === "received" ? "수령" : "미수령"}
-                    </Badge>
+                    </button>
                   );
                 })}
               </div>
@@ -268,7 +277,7 @@ export function SearchFilterSheet({
           </div>
 
           {/* 반품 신청자 + 반품 신청 날짜 범위 */}
-          <div className="rounded-xl bg-card p-4 shadow-card space-y-4">
+          <div className="space-y-4 rounded-xl bg-card p-4 ring-1 ring-border">
             <div className="space-y-2">
               <Label className="text-sm font-medium">반품 신청자</Label>
               <Select
@@ -295,14 +304,14 @@ export function SearchFilterSheet({
                   type="date"
                   value={local.retDateFrom}
                   onChange={(e) => setLocal((p) => ({ ...p, retDateFrom: e.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
                 />
                 <span className="shrink-0 text-muted-foreground">~</span>
                 <input
                   type="date"
                   value={local.retDateTo}
                   onChange={(e) => setLocal((p) => ({ ...p, retDateTo: e.target.value }))}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm tabular-nums"
                 />
               </div>
             </div>

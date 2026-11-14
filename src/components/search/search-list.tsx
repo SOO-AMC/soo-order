@@ -1,39 +1,28 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  Camera,
-  ChevronLeft,
-  ChevronRight,
-  CircleAlert,
-  Download,
-  Loader2,
-  Search,
-  SlidersHorizontal,
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Camera, ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, SearchX, SlidersHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { BackButton } from "@/components/back-button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { OrderStatusBadge, StatusLegend } from "@/components/orders/order-status-badge";
+import { PageHeader } from "@/components/page-header";
+import { Tag } from "@/components/list-parts";
+import { SavedViews } from "@/components/workspace/saved-views";
+import { FilterBar, SearchField, FilterChip, ClearFilters } from "@/components/workspace/filter-bar";
+import { DetailPanel, WorkspaceSplit, DetailFields, Timeline } from "@/components/workspace/detail-panel";
+import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
+import { OrderStatusBadge } from "@/components/orders/order-status-badge";
+import { PhotoGallery } from "@/components/orders/photo-gallery";
 import { formatDate, toKSTDateString } from "@/lib/utils/format";
 import { SearchFilterSheet } from "@/components/search/search-filter-sheet";
-import { Spinner } from "@/components/ui/spinner";
 import type { OrderWithRequester } from "@/lib/types/order";
 import { ORDER_TYPE_LABEL, ORDER_STATUS_LABEL } from "@/lib/types/order";
 import {
   type SearchFilters,
+  type StatusValue,
   defaultFilters,
   filtersToSearchString,
   countActiveFilters,
@@ -44,14 +33,46 @@ import { searchOrders, fetchPersonNames } from "@/lib/actions/search-action";
 import { exportFilteredOrders } from "@/lib/actions/export-orders";
 import type ExcelJS from "exceljs";
 
+/** 상태 묶음 보기 — filters.status와 정확히 같을 때만 그 보기가 켜진다 */
+type ViewKey = "all" | "progress" | "done" | "returns" | "oos" | "custom";
+const VIEW_STATUSES: Record<Exclude<ViewKey, "custom">, StatusValue[]> = {
+  all: defaultFilters.status,
+  progress: ["pending", "ordered"],
+  done: ["inspecting"],
+  returns: ["return_requested", "return_pending", "return_completed"],
+  oos: ["out_of_stock"],
+};
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((v) => b.includes(v));
+
+/** 요청일 빠른 기간 (오늘 포함 N일) */
+type PeriodKey = "7" | "30" | "90" | "365";
+const PERIODS: { value: PeriodKey; label: string }[] = [
+  { value: "7", label: "최근 7일" },
+  { value: "30", label: "최근 30일" },
+  { value: "90", label: "최근 3개월" },
+  { value: "365", label: "최근 1년" },
+];
+const daysAgoKST = (today: string, n: number) => {
+  const d = new Date(`${today}T00:00:00+09:00`);
+  d.setDate(d.getDate() - (n - 1));
+  return toKSTDateString(d.toISOString());
+};
+
+const at = (iso: string | null | undefined) =>
+  iso
+    ? new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "2-digit", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })
+    : undefined;
+
 export function SearchList() {
   const { isAdmin } = useAuth();
   const [personNames, setPersonNames] = useState<string[]>([]);
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showExportOverlay, setShowExportOverlay] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [today] = useState(() => toKSTDateString(new Date().toISOString()));
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const [filters, setFilters] = useState<SearchFilters>(defaultFilters);
@@ -60,7 +81,9 @@ export function SearchList() {
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
 
   // 데이터 fetch
   const fetchData = useCallback(async (f: SearchFilters) => {
@@ -78,6 +101,7 @@ export function SearchList() {
   const applyFilters = useCallback(
     (newFilters: SearchFilters) => {
       setFilters(newFilters);
+      filtersRef.current = newFilters;
       const url = `/search${filtersToSearchString(newFilters)}`;
       window.history.replaceState(null, "", url);
       fetchData(newFilters);
@@ -114,7 +138,12 @@ export function SearchList() {
     [applyFilters]
   );
 
-  // 필터 적용
+  const patch = useCallback(
+    (p: Partial<SearchFilters>) => applyFilters({ ...filtersRef.current, ...p, page: 1 }),
+    [applyFilters]
+  );
+
+  // 필터 시트 적용
   const handleFilterApply = useCallback(
     (newFilters: SearchFilters) => {
       setSearchInput(newFilters.q);
@@ -123,25 +152,45 @@ export function SearchList() {
     [applyFilters]
   );
 
-  // 페이지 변경
   const handlePageChange = useCallback(
     (page: number) => {
-      applyFilters({ ...filters, page });
+      applyFilters({ ...filtersRef.current, page });
     },
-    [filters, applyFilters]
+    [applyFilters]
   );
 
   const activeFilterCount = countActiveFilters(filters);
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
+  const view: ViewKey = useMemo(() => {
+    for (const [k, v] of Object.entries(VIEW_STATUSES)) if (sameSet(filters.status, v)) return k as ViewKey;
+    return "custom";
+  }, [filters.status]);
+
+  const period: PeriodKey | null = useMemo(() => {
+    if (filters.dateTo) return null;
+    return PERIODS.find((p) => filters.dateFrom === daysAgoKST(today, Number(p.value)))?.value ?? null;
+  }, [filters.dateFrom, filters.dateTo, today]);
+
+  const personOptions = useMemo(() => personNames.map((n) => ({ value: n, label: n })), [personNames]);
+
+  const clearAll = () => {
+    setSearchInput("");
+    applyFilters({ ...defaultFilters });
+  };
+
+  const detailOrder = detailId ? orders.find((o) => o.id === detailId) ?? null : null;
+  const detailIndex = detailOrder ? orders.findIndex((o) => o.id === detailOrder.id) : -1;
+
   // 엑셀 다운로드
   const handleExcelDownload = useCallback(async () => {
     setIsExporting(true);
+    setActionError("");
     setShowExportOverlay(true);
     try {
       const { orders: allOrders, error } = await exportFilteredOrders(filters);
       if (error) {
-        alert(error);
+        setActionError(error);
         return;
       }
 
@@ -179,7 +228,7 @@ export function SearchList() {
         cell.fill = {
           type: "pattern",
           pattern: "solid",
-          fgColor: { argb: "FF2563EB" },
+          fgColor: { argb: "FF1166A7" },
         };
         cell.alignment = { horizontal: "center", vertical: "middle" };
         cell.border = {
@@ -258,245 +307,264 @@ export function SearchList() {
     }
   }, [filters]);
 
+  const excelButton = isAdmin ? (
+    <Button variant="outline" className="h-9 rounded-lg px-3 text-[13px]" onClick={handleExcelDownload} disabled={isExporting}>
+      {isExporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+      <span className="hidden sm:inline">엑셀</span>
+    </Button>
+  ) : undefined;
+
+  const rangeStart = (filters.page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(filters.page * PAGE_SIZE, totalCount);
+
   return (
     <>
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="조회"
+        description={isLoading ? undefined : `${totalCount.toLocaleString()}건`}
+        leading={
           <div className="lg:hidden">
             <BackButton fallbackHref="/more" />
           </div>
-          <h1 className="text-lg font-bold">조회</h1>
-        </div>
-        {isAdmin && (
-          <Button
-            variant="outline"
-            size="icon"
-            className="hidden md:flex bg-card"
-            onClick={handleExcelDownload}
-            disabled={isExporting}
-          >
-            {isExporting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-          </Button>
-        )}
-      </header>
+        }
+        action={excelButton}
+      />
       {/* 엑셀 다운로드 로딩 오버레이 */}
       {showExportOverlay && (
-        <ExportOverlay
-          totalCount={totalCount}
-          isDone={!isExporting}
-          onClose={() => setShowExportOverlay(false)}
-        />
+        <ExportOverlay totalCount={totalCount} isDone={!isExporting} onClose={() => setShowExportOverlay(false)} />
       )}
-      <div className="space-y-4 p-4">
-        {/* 검색 + 필터 */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="품목명 / 업체명 검색"
-              value={searchInput}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="pl-9 bg-card"
-            />
-          </div>
-          <Button
-            variant="outline"
-            size="icon"
-            className="relative shrink-0 bg-card"
+
+      <div className="space-y-3 p-4 lg:px-6">
+        <SavedViews<ViewKey>
+          value={view}
+          onValueChange={(v) => {
+            if (v !== "custom") patch({ status: [...VIEW_STATUSES[v]] });
+          }}
+          views={[
+            { value: "all", label: "전체" },
+            { value: "progress", label: "진행 중" },
+            { value: "done", label: "검수완료" },
+            { value: "returns", label: "반품" },
+            { value: "oos", label: "품절" },
+          ]}
+        />
+
+        <FilterBar>
+          <SearchField id="search-q" value={searchInput} onChange={handleSearchChange} placeholder="품목명·업체명 검색" />
+          <FilterChip<PeriodKey>
+            label="요청일"
+            options={PERIODS}
+            value={period}
+            onChange={(v) => patch({ dateFrom: v ? daysAgoKST(today, Number(v)) : "", dateTo: "" })}
+          />
+          <FilterChip
+            label="요청자"
+            options={personOptions}
+            value={filters.requester || null}
+            onChange={(v) => patch({ requester: v ?? "" })}
+          />
+          <FilterChip
+            label="긴급"
+            options={[
+              { value: "urgent", label: "긴급만" },
+              { value: "normal", label: "일반만" },
+            ]}
+            value={filters.urgent.length === 1 ? filters.urgent[0] : null}
+            onChange={(v) => patch({ urgent: v ? [v] : [...defaultFilters.urgent] })}
+          />
+          <button
+            type="button"
             onClick={() => setSheetOpen(true)}
+            className={cn(
+              "inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[13px] transition-colors",
+              activeFilterCount > 0
+                ? "bg-foreground font-semibold text-background"
+                : "border border-input bg-card text-subtle-foreground hover:text-foreground"
+            )}
           >
-            <SlidersHorizontal className="h-4 w-4" />
-            {activeFilterCount > 0 && (
-              <Badge className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 text-[10px] flex items-center justify-center">
-                {activeFilterCount}
-              </Badge>
-            )}
-          </Button>
-          {isAdmin && (
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0 md:hidden bg-card"
-              onClick={handleExcelDownload}
-              disabled={isExporting}
-            >
-              {isExporting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-            </Button>
-          )}
-        </div>
+            <SlidersHorizontal className="size-3.5" />
+            상세 필터
+            {activeFilterCount > 0 && <span className="tabular-nums">{activeFilterCount}</span>}
+          </button>
+          <ClearFilters show={activeFilterCount > 0 || !!filters.q} onClear={clearAll} />
+        </FilterBar>
 
-        {/* 결과 건수 + 상태 범례 */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            {totalCount}건
-            {totalPages > 1 && (
-              <span className="ml-1">
-                (페이지 {filters.page}/{totalPages})
-              </span>
-            )}
+        {actionError && (
+          <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">
+            {actionError}
           </p>
-          <StatusLegend />
-        </div>
-
-        {/* 로딩 */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <Spinner text="불러오는 중..." />
-          </div>
-        ) : orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-muted-foreground">
-              조건에 맞는 항목이 없습니다.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* PC 테이블 뷰 */}
-            <div className="hidden lg:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>상태</TableHead>
-                    <TableHead>품목명</TableHead>
-                    <TableHead>수량</TableHead>
-                    <TableHead>요청자</TableHead>
-                    <TableHead>요청일</TableHead>
-                    <TableHead>업체명</TableHead>
-                    <TableHead>검수자</TableHead>
-                    <TableHead className="w-12">사진</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => (
-                    <TableRow
-                      key={order.id}
-                      className="cursor-pointer"
-                      onClick={() => router.push(`/search/${order.id}`)}
-                    >
-                      <TableCell>
-                        <OrderStatusBadge status={order.status} />
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <span className="flex items-center gap-1.5">
-                          {order.is_urgent && (
-                            <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />
-                          )}
-                          {order.item_name}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {order.quantity > 0 ? (
-                          `${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
-                        ) : (
-                          <span className="text-muted-foreground">
-                            (사진 참고)
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {order.requester?.full_name ?? "-"}
-                      </TableCell>
-                      <TableCell>{formatDate(order.created_at)}</TableCell>
-                      <TableCell>{order.vendor_name || "-"}</TableCell>
-                      <TableCell>
-                        {order.inspector?.full_name ?? "-"}
-                      </TableCell>
-                      <TableCell>
-                        {order.photo_urls?.length > 0 && (
-                          <span className="flex items-center gap-1 text-muted-foreground">
-                            <Camera className="h-3.5 w-3.5" />
-                            {order.photo_urls.length}
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* 모바일/태블릿 카드 뷰 */}
-            <div className="lg:hidden space-y-2">
-              {orders.map((order) => (
-                <Link
-                  key={order.id}
-                  href={`/search/${order.id}`}
-                  className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-card transition-colors active:opacity-70"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <OrderStatusBadge status={order.status} />
-                      {order.is_urgent && (
-                        <CircleAlert className="h-4 w-4 text-red-500 shrink-0" />
-                      )}
-                      <span className="truncate font-medium">
-                        {order.item_name}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>
-                        {order.quantity > 0
-                          ? `수량: ${order.quantity}${order.unit ? ` ${order.unit}` : ""}`
-                          : "(사진 참고)"}
-                      </span>
-                      <span>·</span>
-                      <span>{formatDate(order.created_at)}</span>
-                      {order.photo_urls?.length > 0 && (
-                        <>
-                          <span>·</span>
-                          <span className="flex items-center gap-0.5">
-                            <Camera className="h-3 w-3" />
-                            {order.photo_urls.length}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </Link>
-              ))}
-            </div>
-
-            {/* 페이지네이션 */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="bg-white"
-                  disabled={filters.page <= 1}
-                  onClick={() => handlePageChange(filters.page - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  이전
-                </Button>
-                <span className="text-sm text-muted-foreground px-2">
-                  {filters.page} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="bg-white"
-                  disabled={filters.page >= totalPages}
-                  onClick={() => handlePageChange(filters.page + 1)}
-                >
-                  다음
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </>
         )}
 
-        {/* 필터 Sheet */}
+        {isLoading ? (
+          <ListSkeleton rows={8} />
+        ) : orders.length === 0 ? (
+          <div className="rounded-xl bg-card ring-1 ring-border">
+            <EmptyState
+              icon={SearchX}
+              title="조건에 맞는 주문이 없어요"
+              description="검색어나 필터를 바꿔 보세요."
+              action={
+                activeFilterCount > 0 || filters.q ? (
+                  <Button variant="outline" size="sm" onClick={clearAll}>
+                    필터 지우기
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
+        ) : (
+          <WorkspaceSplit>
+            <div className="min-w-0 flex-1 space-y-3">
+              {/* PC 표 */}
+              <section className="hidden overflow-hidden rounded-xl bg-card ring-1 ring-border lg:block">
+                <table className="w-full table-fixed border-separate border-spacing-0 text-[13px]">
+                  <thead>
+                    <tr className="text-left text-xs font-semibold text-muted-foreground">
+                      <th className="w-[108px] border-b border-border py-2 pl-4 font-semibold">상태</th>
+                      <th className="border-b border-border px-3 py-2 font-semibold">품목</th>
+                      <th className="w-24 border-b border-border px-3 py-2 text-right font-semibold">수량</th>
+                      <th className="w-[18%] border-b border-border px-3 py-2 font-semibold">업체</th>
+                      <th className="w-[96px] border-b border-border px-3 py-2 font-semibold">요청</th>
+                      <th className="w-[96px] border-b border-border px-3 py-2 pr-4 font-semibold">검수</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((order) => {
+                      const isOpen = detailId === order.id;
+                      return (
+                        <tr
+                          key={order.id}
+                          onClick={() => setDetailId(order.id)}
+                          className={cn(
+                            "cursor-pointer",
+                            isOpen ? "bg-row-selected shadow-[inset_3px_0_0_var(--primary)]" : "hover:bg-muted/60"
+                          )}
+                        >
+                          <td className="border-b border-border py-2.5 pl-4">
+                            <OrderStatusBadge status={order.status} />
+                          </td>
+                          <td className="min-w-0 border-b border-border px-3 py-2.5">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate text-sm font-semibold">{order.item_name}</span>
+                              {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+                              {order.type === "return" && <Tag>직접 반품</Tag>}
+                              {order.photo_urls?.length > 0 && (
+                                <span className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+                                  <Camera className="size-3.5" aria-label="사진" />
+                                  {order.photo_urls.length}
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap border-b border-border px-3 py-2.5 text-right tabular-nums">
+                            {order.quantity > 0 ? (
+                              <>
+                                <b className="text-sm">{order.quantity}</b>
+                                {order.unit ? <span className="text-subtle-foreground"> {order.unit}</span> : null}
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">사진 참고</span>
+                            )}
+                          </td>
+                          <td className="truncate border-b border-border px-3 py-2.5 text-subtle-foreground">{order.vendor_name || "—"}</td>
+                          <td className="whitespace-nowrap border-b border-border px-3 py-2.5">
+                            <span className="block truncate">{order.requester?.full_name ?? "—"}</span>
+                            <span className="text-xs tabular-nums text-muted-foreground">{formatDate(order.created_at)}</span>
+                          </td>
+                          <td className="whitespace-nowrap border-b border-border px-3 py-2.5 pr-4">
+                            {order.inspected_at ? (
+                              <>
+                                <span className="block truncate">{order.inspector?.full_name ?? "—"}</span>
+                                <span className="text-xs tabular-nums text-muted-foreground">{formatDate(order.inspected_at)}</span>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </section>
+
+              {/* 모바일/태블릿 */}
+              <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border lg:hidden">
+                {orders.map((order, i) => (
+                  <button
+                    key={order.id}
+                    type="button"
+                    onClick={() => setDetailId(order.id)}
+                    className={cn("flex w-full items-start gap-3 px-4 py-3 text-left active:bg-muted", i > 0 && "border-t border-border")}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate text-[15px] font-semibold leading-snug">{order.item_name}</span>
+                        {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+                      </span>
+                      <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
+                        <OrderStatusBadge status={order.status} />
+                        <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                          {order.quantity > 0 ? `${order.quantity}${order.unit ? ` ${order.unit}` : ""}` : "사진 참고"}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span className="truncate">{order.requester?.full_name ?? "—"}</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="shrink-0 tabular-nums">{formatDate(order.created_at)}</span>
+                      </span>
+                    </span>
+                    <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  </button>
+                ))}
+              </section>
+
+              {/* 페이지 */}
+              <div className="flex items-center justify-between gap-2 px-1 pt-1">
+                <span className="text-[13px] tabular-nums text-muted-foreground">
+                  {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} / {totalCount.toLocaleString()}건
+                </span>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg bg-card"
+                      disabled={filters.page <= 1}
+                      onClick={() => handlePageChange(filters.page - 1)}
+                    >
+                      <ChevronLeft className="size-4" />
+                      이전
+                    </Button>
+                    <span className="px-2 text-[13px] tabular-nums text-subtle-foreground">
+                      {filters.page} / {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg bg-card"
+                      disabled={filters.page >= totalPages}
+                      onClick={() => handlePageChange(filters.page + 1)}
+                    >
+                      다음
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {detailOrder && (
+              <SearchDetail
+                order={detailOrder}
+                onClose={() => setDetailId(null)}
+                onPrev={detailIndex > 0 ? () => setDetailId(orders[detailIndex - 1].id) : undefined}
+                onNext={detailIndex >= 0 && detailIndex < orders.length - 1 ? () => setDetailId(orders[detailIndex + 1].id) : undefined}
+              />
+            )}
+          </WorkspaceSplit>
+        )}
+
+        {/* 상세 필터 시트 */}
         <SearchFilterSheet
           open={sheetOpen}
           onOpenChange={setSheetOpen}
@@ -506,6 +574,104 @@ export function SearchList() {
         />
       </div>
     </>
+  );
+}
+
+/** 상세 패널(읽기 전용) — 검수 취소·반품 신청·삭제는 "전체 보기"에서 */
+function SearchDetail({
+  order,
+  onClose,
+  onPrev,
+  onNext,
+}: {
+  order: OrderWithRequester;
+  onClose: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+}) {
+  const isReturnish = order.status.startsWith("return");
+  return (
+    <DetailPanel
+      open
+      onClose={onClose}
+      onPrev={onPrev}
+      onNext={onNext}
+      title={
+        <span className="flex items-center gap-2">
+          {order.item_name}
+          {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+        </span>
+      }
+      badge={<OrderStatusBadge status={order.status} />}
+      footer={
+        <Button asChild className="h-10 w-full rounded-lg lg:h-9">
+          <Link href={`/search/${order.id}`}>
+            <ExternalLink className="size-4" />
+            전체 보기 · 처리
+          </Link>
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <DetailFields
+          items={[
+            { label: "유형", value: ORDER_TYPE_LABEL[order.type] },
+            {
+              label: "수량",
+              value:
+                order.quantity > 0 ? (
+                  <span className="tabular-nums">
+                    <b>{order.quantity}</b> {order.unit}
+                    {order.confirmed_quantity != null && order.confirmed_quantity !== order.quantity && (
+                      <span className="text-muted-foreground"> (확인 {order.confirmed_quantity})</span>
+                    )}
+                  </span>
+                ) : (
+                  "사진 참고"
+                ),
+            },
+            { label: "업체", value: order.vendor_name || <span className="text-muted-foreground">없음</span> },
+            ...(order.status === "inspecting" || order.invoice_received != null
+              ? [{ label: "명세서", value: order.invoice_received ? "수령" : <span className="text-status-ask">미수령</span> }]
+              : []),
+            ...(order.notes ? [{ label: "요청 비고", value: order.notes }] : []),
+            ...(order.order_notes ? [{ label: "발주 비고", value: order.order_notes }] : []),
+            ...(order.inspection_notes ? [{ label: "검수 비고", value: order.inspection_notes }] : []),
+            ...(isReturnish
+              ? [
+                  { label: "반품 수량", value: `${order.return_quantity ?? order.quantity} ${order.unit ?? ""}` },
+                  { label: "반품 사유", value: order.return_reason || <span className="text-muted-foreground">없음</span> },
+                ]
+              : []),
+          ]}
+        />
+
+        {order.photo_urls?.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <h3 className="text-[13px] font-semibold text-subtle-foreground">사진 {order.photo_urls.length}</h3>
+            <PhotoGallery photoUrls={order.photo_urls} />
+          </section>
+        )}
+
+        <section className="flex flex-col gap-2">
+          <h3 className="text-[13px] font-semibold text-subtle-foreground">처리 이력</h3>
+          <Timeline
+            items={[
+              ...(order.return_requested_at
+                ? [{ key: "ret", text: <><b className="font-semibold text-foreground">반품 신청</b> · {order.return_requester?.full_name ?? "—"}</>, at: at(order.return_requested_at) }]
+                : []),
+              ...(order.inspected_at
+                ? [{ key: "insp", text: <><b className="font-semibold text-foreground">검수 완료</b> · {order.inspector?.full_name ?? "—"}</>, at: at(order.inspected_at) }]
+                : []),
+              ...(order.dispatched_at
+                ? [{ key: "disp", text: <><b className="font-semibold text-foreground">발주</b> · {order.vendor_name || "업체 미지정"}</>, at: at(order.dispatched_at) }]
+                : []),
+              { key: "created", text: <><b className="font-semibold text-foreground">주문 등록</b> · {order.requester?.full_name ?? "—"}</>, at: at(order.created_at) },
+            ]}
+          />
+        </section>
+      </div>
+    </DetailPanel>
   );
 }
 

@@ -17,18 +17,10 @@ export default async function OutOfStockPage() {
     .order("created_at", { ascending: false });
   const initialOrders = (data as OrderWithRequester[] | null) ?? [];
 
+  // 상단바(PageHeader)는 탭 건수가 필요해 OutOfStockList 안에서 그린다
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <div>
-          <h1 className="text-lg font-bold leading-tight">품절</h1>
-          <p className="hidden text-xs text-muted-foreground sm:block">품절 처리된 품목 목록</p>
-        </div>
-        <AdminOutOfStockCreateDialog />
-      </header>
-      <div className="p-4">
-        <OutOfStockList initialOrders={initialOrders} />
-      </div>
+      <OutOfStockList initialOrders={initialOrders} headerAction={<AdminOutOfStockCreateDialog />} />
     </div>
   );
 }
