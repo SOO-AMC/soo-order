@@ -223,6 +223,8 @@ export function PriceAnalysisPage() {
     // 금액 영향: 단가 변화 × 이번 기간에 산 수량 = 가격이 바뀌어서 더 낸(덜 낸) 돈
     // 급변(확인 필요)한 줄은 금액을 믿을 수 없으므로 맨 아래로 보낸다
     if (sortBy === "impact") rows = [...rows].sort((x, y) => Number(x.suspect) - Number(y.suspect) || y.deltaAbs * y.bQty - x.deltaAbs * x.bQty);
+    // 변화율 순(서버가 준 순서)에서도 확인 필요 줄은 맨 아래로
+    else rows = [...rows.filter((r) => !r.suspect), ...rows.filter((r) => r.suspect)];
     return rows;
   }, [result, rowView, rowQuery, sortBy]);
 
