@@ -185,7 +185,24 @@ export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<vo
   // 단가 불일치 갱신
   for (const row of payload.rows) {
     if (row.updatePrice && row.vendorProductId) {
+      // 고치기 전 값 — 같은 값으로 중복 저장된 줄을 찾는 데 쓴다
+      const { data: before } = await supabase
+        .from("vendor_products")
+        .select("vendor_id, unified_product_id, unit_price")
+        .eq("id", row.vendorProductId)
+        .maybeSingle();
       await supabase.from("vendor_products").update({ unit_price: row.unitPrice }).eq("id", row.vendorProductId);
+      // 같은 업체·같은 표준 품목에 **같은 값**으로 중복 저장된 줄이 있으면 함께 고친다.
+      // 안 그러면 가격 비교표에는 고치지 않은 줄이 보여 "단가가 안 바뀐" 것처럼 된다.
+      // 값이 다른 줄은 포장이 다른 품목일 수 있어 건드리지 않는다.
+      if (before?.unified_product_id && before.unit_price != null) {
+        await supabase
+          .from("vendor_products")
+          .update({ unit_price: row.unitPrice })
+          .eq("vendor_id", before.vendor_id)
+          .eq("unified_product_id", before.unified_product_id)
+          .eq("unit_price", before.unit_price);
+      }
     }
   }
 

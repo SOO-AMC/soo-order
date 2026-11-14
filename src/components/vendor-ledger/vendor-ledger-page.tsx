@@ -20,6 +20,9 @@ import type { LedgerRow, InvoiceDoc } from "@/lib/types/invoice";
 const won = (n: number) => `${Math.round(n).toLocaleString()}원`;
 const num = (n: number) => Math.round(n).toLocaleString();
 
+/** 월별 합계(첫 화면) · 거래 내역 · 명세서 원본 */
+type LedgerView = "monthly" | "lines" | "docs";
+
 /** 거래 내역 표에 한 번에 그리는 줄 수 */
 const LINE_STEP = 300;
 
@@ -40,7 +43,7 @@ export function VendorLedgerPage() {
   const [docs, setDocs] = useState<InvoiceDoc[] | null>(null);
   /** 마지막으로 조회한 조건(결과 위에 표시) */
   const [queried, setQueried] = useState<{ vendor: string; range: DateRange } | null>(null);
-  const [view, setView] = useState<"lines" | "docs">("lines");
+  const [view, setView] = useState<LedgerView>("monthly");
   const [lineQuery, setLineQuery] = useState("");
   /** 한 번에 그리는 줄 수. 합계는 항상 전체 줄로 계산하고, 표만 나눠 그린다 (수천 줄을 한꺼번에 그리면 느려짐) */
   const [lineLimit, setLineLimit] = useState(LINE_STEP);
@@ -82,6 +85,37 @@ export function VendorLedgerPage() {
     }
     return [...m.values()].sort((a, b) => b.amount - a.amount);
   }, [rows]);
+
+  /** 월별 × 업체별 지급액 (세금계산서·입금 대조용). 업체는 금액 큰 순 */
+  const monthly = useMemo(() => {
+    const months = new Set<string>();
+    const byVendorMonth = new Map<string, Map<string, number>>();
+    for (const r of rows ?? []) {
+      const m = r.invoiceDate ? r.invoiceDate.slice(0, 7) : "날짜 없음";
+      const v = r.vendorName || "(미지정)";
+      months.add(m);
+      const row = byVendorMonth.get(v) ?? new Map<string, number>();
+      row.set(m, (row.get(m) ?? 0) + r.amount);
+      byVendorMonth.set(v, row);
+    }
+    const monthList = [...months].sort();
+    const vendorRows = [...byVendorMonth.entries()]
+      .map(([vendor, cells]) => ({ vendor, cells, total: [...cells.values()].reduce((a, b) => a + b, 0) }))
+      .sort((a, b) => b.total - a.total);
+    const monthTotals = new Map(monthList.map((m) => [m, vendorRows.reduce((sum, v) => sum + (v.cells.get(m) ?? 0), 0)] as const));
+    return { months: monthList, vendors: vendorRows, monthTotals };
+  }, [rows]);
+
+  /** 같은 업체·같은 날짜·같은 금액의 명세서가 둘 이상 → 두 번 올렸을 수 있다 */
+  const duplicateIds = useMemo(() => {
+    const groups = new Map<string, string[]>();
+    for (const d of docs ?? []) {
+      if (!d.invoiceDate || !d.totalAmount) continue;
+      const key = `${d.vendorName}|${d.invoiceDate}|${Math.round(d.totalAmount)}`;
+      groups.set(key, [...(groups.get(key) ?? []), d.id]);
+    }
+    return new Set([...groups.values()].filter((ids) => ids.length > 1).flat());
+  }, [docs]);
 
   const shownRows = useMemo(() => {
     if (!rows) return [];
@@ -279,13 +313,14 @@ export function VendorLedgerPage() {
         }
         tabs={
           hasResult ? (
-            <UnderlineTabs<"lines" | "docs">
+            <UnderlineTabs<LedgerView>
               ariaLabel="보기"
               value={view}
               onValueChange={setView}
               items={[
+                { value: "monthly", label: "월별 합계" },
                 { value: "lines", label: "거래 내역", count: rows?.length },
-                { value: "docs", label: "명세서 원본", count: docs?.length },
+                { value: "docs", label: duplicateIds.size > 0 ? `명세서 원본 · 중복 의심 ${duplicateIds.size}` : "명세서 원본", count: docs?.length },
               ]}
             />
           ) : undefined
@@ -345,7 +380,7 @@ export function VendorLedgerPage() {
                     명세서 {totals.invoices}장 · 거래 {totals.count}줄 · 수량 {num(totals.qty)}
                   </p>
                 </div>
-                {view === "lines" ? (
+                {view !== "docs" ? (
                   <Button variant="outline" className="h-9 rounded-lg" onClick={handleExport} disabled={!rows || rows.length === 0}>
                     <Download className="size-4" /> 엑셀
                   </Button>
@@ -376,7 +411,56 @@ export function VendorLedgerPage() {
               )}
             </section>
 
-            {view === "lines" ? (
+            {view === "monthly" ? (
+              rows!.length === 0 ? (
+                <div className="rounded-xl bg-card ring-1 ring-border">
+                  <EmptyState icon={BookText} title="이 조건의 거래가 없어요" description="기간을 넓히거나 업체를 바꿔 보세요." />
+                </div>
+              ) : (
+                <>
+                  <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+                    <div className="max-h-[calc(100dvh-22rem)] min-h-[14rem] overflow-auto">
+                      <table className="w-full border-separate border-spacing-0 text-[13px]">
+                        <thead className="sticky top-0 z-10">
+                          <tr className="text-xs font-semibold text-muted-foreground">
+                            <th className="sticky left-0 z-10 min-w-[10rem] border-b border-border bg-muted py-2 pl-4 pr-3 text-left font-semibold">업체</th>
+                            {monthly.months.map((m) => (
+                              <th key={m} className="whitespace-nowrap border-b border-border bg-muted px-3 py-2 text-right font-semibold tabular-nums">{m}</th>
+                            ))}
+                            <th className="whitespace-nowrap border-b border-border bg-muted px-3 py-2 pr-4 text-right font-semibold">합계</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {monthly.vendors.map((v) => (
+                            <tr key={v.vendor} className="hover:bg-muted/60">
+                              <td className="sticky left-0 border-b border-border bg-card py-2 pl-4 pr-3 text-sm font-medium">{v.vendor}</td>
+                              {monthly.months.map((m) => (
+                                <td key={m} className="whitespace-nowrap border-b border-border px-3 py-2 text-right tabular-nums text-subtle-foreground">
+                                  {v.cells.has(m) ? num(v.cells.get(m)!) : <span className="text-muted-foreground">—</span>}
+                                </td>
+                              ))}
+                              <td className="whitespace-nowrap border-b border-border px-3 py-2 pr-4 text-right font-semibold tabular-nums">{num(v.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="sticky bottom-0">
+                          <tr className="font-bold">
+                            <td className="sticky left-0 border-t border-border bg-muted py-2 pl-4 pr-3 text-sm">합계</td>
+                            {monthly.months.map((m) => (
+                              <td key={m} className="whitespace-nowrap border-t border-border bg-muted px-3 py-2 text-right tabular-nums">{num(monthly.monthTotals.get(m) ?? 0)}</td>
+                            ))}
+                            <td className="whitespace-nowrap border-t border-border bg-muted px-3 py-2 pr-4 text-right tabular-nums">{num(totals.amount)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </section>
+                  <p className="px-1 text-[13px] text-muted-foreground">
+                    업체 {num(monthly.vendors.length)}곳 · 명세서 거래일 기준 · 금액은 원, 할인후 기준 · 업체는 명세서에 연결된 업체 이름으로 묶어요
+                  </p>
+                </>
+              )
+            ) : view === "lines" ? (
               rows!.length === 0 ? (
                 <div className="rounded-xl bg-card ring-1 ring-border">
                   <EmptyState icon={BookText} title="이 조건의 거래가 없어요" description="기간을 넓히거나 업체를 바꿔 보세요." />
@@ -451,6 +535,11 @@ export function VendorLedgerPage() {
               </div>
             ) : (
               <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+                {duplicateIds.size > 0 && (
+                  <p className="border-b border-border bg-status-ask-bg px-4 py-2.5 text-[13px] font-medium text-status-ask">
+                    같은 업체·날짜·금액의 명세서가 {duplicateIds.size}장 있어요. 같은 명세서를 두 번 올렸다면 금액이 두 번 더해져요. 아래 &quot;중복 의심&quot; 표시를 확인해 주세요.
+                  </p>
+                )}
                 {docs!.map((d, i) => (
                   <div key={d.id} className={cn("flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center", i > 0 && "border-t border-border")}>
                     <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -461,6 +550,7 @@ export function VendorLedgerPage() {
                         <b className="block truncate text-[15px] font-semibold">
                           {d.vendorName || "업체 미지정"}
                           <span className="ml-2 text-[13px] font-normal tabular-nums text-muted-foreground">{d.invoiceDate ?? "날짜 없음"}</span>
+                          {duplicateIds.has(d.id) && <span className="ml-2 rounded-full bg-status-ask-bg px-2 py-0.5 text-xs font-semibold text-status-ask">중복 의심</span>}
                         </b>
                         <span className="text-[13px] tabular-nums text-muted-foreground">
                           품목 {d.itemCount}개 · {won(d.totalAmount)}

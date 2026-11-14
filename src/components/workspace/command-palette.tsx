@@ -116,7 +116,7 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
     const out: Entry[] = [...themeHit, ...menus.filter((m) => m.label.toLowerCase().includes(term))];
     if (res) {
       for (const p of res.products)
-        out.push({ key: `p:${p.name}`, group: "약품", label: p.name, hint: p.price != null ? `최저 ${won(p.price)}` : undefined, href: `/price-compare?q=${encodeURIComponent(p.name)}` });
+        out.push({ key: `p:${p.name}`, group: "약품", label: p.name, hint: p.price != null ? `최저 ${won(p.price)}` : undefined, href: `/items?name=${encodeURIComponent(p.name)}` });
       for (const o of res.orders)
         out.push({ key: `o:${o.id}`, group: "주문·검수·반품", label: o.itemName, hint: [o.vendorName, o.requesterName].filter(Boolean).join(" · ") || undefined, href: `/search?q=${encodeURIComponent(o.itemName)}` });
       for (const v of res.vendors)

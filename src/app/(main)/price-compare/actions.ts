@@ -436,21 +436,27 @@ export async function upsertVendorPrice(
   vendorId: string,
   price: number | null,
   productName: string,
+  /** 고치기 전에 화면에 보이던 저장값(할인후). 같은 값의 중복 줄만 함께 고치는 데 쓴다 */
+  previousPrice?: number | null,
 ): Promise<ActionState> {
   const { supabase } = await requireAdmin();
 
-  const { data: existing } = await supabase
+  // 같은 업체·같은 표준 품목의 줄이 여러 개 있을 수 있다(예전 저장 방식 때문에 중복이 쌓였다).
+  // 한 줄만 찾으려 하면(maybeSingle) 여러 줄일 때 "없음"으로 보고 **또 한 줄을 더해** 중복이 늘고,
+  // 화면에는 고치기 전 줄이 보여 "바꿨는데 안 바뀐" 것처럼 된다.
+  const { data: existing, error: findError } = await supabase
     .from("vendor_products")
-    .select("id")
+    .select("id, unit_price")
     .eq("vendor_id", vendorId)
-    .eq("unified_product_id", unifiedProductId)
-    .maybeSingle();
+    .eq("unified_product_id", unifiedProductId);
+  if (findError) return { error: `가격 조회 실패: ${findError.message}` };
 
-  if (existing) {
-    const { error } = await supabase
-      .from("vendor_products")
-      .update({ unit_price: price })
-      .eq("id", existing.id);
+  if (existing && existing.length > 0) {
+    // 고칠 줄: 화면에 보이던 값과 같은 줄(진짜 중복)만. 값이 다른 줄은 포장이 다른 품목이
+    // 한 표준 품목에 묶인 것일 수 있어 건드리지 않는다. 같은 값의 줄이 없으면 전부 고친다.
+    const same = previousPrice === undefined ? [] : existing.filter((r) => (r.unit_price == null ? null : Number(r.unit_price)) === previousPrice);
+    const ids = (same.length > 0 ? same : existing).map((r) => r.id);
+    const { error } = await supabase.from("vendor_products").update({ unit_price: price }).in("id", ids);
     if (error) return { error: `가격 수정 실패: ${error.message}` };
   } else {
     const { error } = await supabase.from("vendor_products").insert({

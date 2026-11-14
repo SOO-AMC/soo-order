@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ChevronDown, ChevronUp, Loader2, Search, TrendingUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPriceAnalysis, fetchItemPriceTrend, fetchTrendProducts } from "@/lib/actions/price-analysis-action";
@@ -34,6 +35,19 @@ function Kpi({ label, value, hint, className }: { label: string; value: React.Re
       <div className="mt-1 text-[22px] font-extrabold leading-7 tracking-tight tabular-nums">{value}</div>
       {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </div>
+  );
+}
+
+/** 그 품목의 가격 추이·주문 이력 화면으로 */
+function ItemLink({ row }: { row: { name: string; unifiedProductId: string | null; suspect: boolean } }) {
+  const href = row.unifiedProductId ? `/items?product=${row.unifiedProductId}` : `/items?name=${encodeURIComponent(row.name)}`;
+  return (
+    <p className="mt-2 text-[13px]">
+      {row.suspect && <span className="mr-2 text-status-ask">단가가 2배 넘게 달라졌어요. 명세서의 자릿수나 묶음 단위를 확인해 보세요.</span>}
+      <Link href={href} className="font-semibold text-primary hover:underline">
+        가격 추이·주문 이력 보기 →
+      </Link>
+    </p>
   );
 }
 
@@ -313,7 +327,7 @@ export function PriceAnalysisPage() {
                     className="col-span-2 lg:col-span-1"
                     label="체감 인상률"
                     value={<span className={deltaColor(result.weightedInflationPct)}>{pct(result.weightedInflationPct)}</span>}
-                    hint="A 기간에 많이 산 품목일수록 크게 반영"
+                    hint={result.suspectCount > 0 ? `급변한 ${result.suspectCount}개(확인 필요)는 빼고 계산` : "A 기간에 많이 산 품목일수록 크게 반영"}
                   />
                   <Kpi label="단순 평균" value={<span className={deltaColor(result.simpleAvgPct)}>{pct(result.simpleAvgPct)}</span>} hint="품목마다 똑같이 계산(참고)" />
                   <Kpi label="비교한 품목" value={`${result.comparedCount}개`} hint={`오름 ${viewCounts.up} · 내림 ${viewCounts.down}`} />
@@ -377,6 +391,7 @@ export function PriceAnalysisPage() {
                                     className={cn("cursor-pointer", open ? "bg-row-selected" : "hover:bg-muted/60")}
                                   >
                                     <td className="truncate border-b border-border py-2.5 pl-4 text-sm font-medium" title={row.name}>
+                                      {row.suspect && <span className="mr-1.5 rounded-full bg-status-ask-bg px-1.5 py-0.5 text-xs font-semibold text-status-ask">확인 필요</span>}
                                       {row.name}
                                     </td>
                                     <td className="border-b border-border px-3 py-2.5 text-right tabular-nums text-subtle-foreground">{won(row.aPrice)}</td>
@@ -400,6 +415,7 @@ export function PriceAnalysisPage() {
                                       <td colSpan={6} className="border-b border-border bg-muted/60 px-4 py-3">
                                         <p className="mb-1.5 text-xs font-semibold text-muted-foreground">명세서 날짜별 단가</p>
                                         <TrendChips trend={trends[row.key]} />
+                                        <ItemLink row={row} />
                                       </td>
                                     </tr>
                                   )}
@@ -419,7 +435,10 @@ export function PriceAnalysisPage() {
                           <div key={row.key} className={cn(i > 0 && "border-t border-border")}>
                             <button type="button" onClick={() => toggleRow(row)} className="flex w-full items-start gap-3 px-4 py-3 text-left active:bg-muted">
                               <span className="min-w-0 flex-1">
-                                <b className="block truncate text-[15px] font-semibold">{row.name}</b>
+                                <b className="block truncate text-[15px] font-semibold">
+                                  {row.suspect && <span className="mr-1.5 rounded-full bg-status-ask-bg px-1.5 py-0.5 text-xs font-semibold text-status-ask">확인 필요</span>}
+                                  {row.name}
+                                </b>
                                 <span className="mt-0.5 block text-[13px] tabular-nums text-muted-foreground">
                                   {won(row.aPrice)} → {won(row.bPrice)} · 수량 {row.aQty}·{row.bQty}
                                 </span>
@@ -429,6 +448,7 @@ export function PriceAnalysisPage() {
                             {open && (
                               <div className="bg-muted/60 px-4 py-3">
                                 <TrendChips trend={trends[row.key]} />
+                                <ItemLink row={row} />
                               </div>
                             )}
                           </div>

@@ -116,6 +116,8 @@ export interface PriceAnalysisRow {
   bQty: number;
   deltaAbs: number; // bPrice - aPrice
   deltaPct: number | null; // %
+  /** 단가가 2배 이상 뛰었거나 절반 이하로 떨어짐 — 입력 오류일 수 있어 인상률 계산에서 뺀다 */
+  suspect: boolean;
 }
 
 /** 단가 분석 결과 */
@@ -126,6 +128,8 @@ export interface PriceAnalysisResult {
   basketBase: number; // Σ aQty×aPrice
   basketNow: number; // Σ aQty×bPrice
   comparedCount: number;
+  /** 급변해서 인상률 계산에서 뺀 품목 수 */
+  suspectCount: number;
   newItems: { name: string; bPrice: number; bQty: number }[]; // B 기간에만
   droppedItems: { name: string; aPrice: number; aQty: number }[]; // A 기간에만
 }

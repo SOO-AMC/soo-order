@@ -209,7 +209,10 @@ export function ComparisonTable({
       const priceUpdates: ReturnType<typeof upsertVendorPrice>[] = [];
       for (const vendor of vendors) {
         const plan = priceToSave(editForm.prices[vendor.id], editForm.initialPrices?.[vendor.id], vendor.discount_rate ?? 0);
-        if (plan.changed) priceUpdates.push(upsertVendorPrice(unified.id, vendor.id, plan.price, editForm.name));
+        if (!plan.changed) continue;
+        // 고치기 전 저장값(할인후) — 같은 값으로 중복 저장된 줄을 함께 고치는 데 쓴다
+        const previous = applyDiscount(parsePriceInput(editForm.initialPrices?.[vendor.id]), vendor.discount_rate ?? 0);
+        priceUpdates.push(upsertVendorPrice(unified.id, vendor.id, plan.price, editForm.name, previous));
       }
 
       const results = await Promise.all([

@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/supabase/server";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import { fetchInvoiceLines } from "@/lib/invoices/lines";
 import { fetchAllPages } from "@/lib/supabase/paginate";
+import { isSuspectChange } from "@/lib/utils/price-outlier";
 import type { PriceAnalysisResult, PriceAnalysisRow, ItemTrendPoint } from "@/lib/types/invoice";
 
 const EMPTY: PriceAnalysisResult = {
@@ -13,6 +14,7 @@ const EMPTY: PriceAnalysisResult = {
   basketBase: 0,
   basketNow: 0,
   comparedCount: 0,
+  suspectCount: 0,
   newItems: [],
   droppedItems: [],
 };
@@ -85,10 +87,15 @@ export async function fetchPriceAnalysis(opts: {
     if (aPrice != null && bPrice != null) {
       const deltaAbs = bPrice - aPrice;
       const deltaPct = aPrice > 0 ? (deltaAbs / aPrice) * 100 : null;
-      rows.push({ key, name: g.name, unifiedProductId: g.unifiedProductId, aPrice, bPrice, aQty: g.aQty, bQty: g.bQty, deltaAbs, deltaPct });
-      basketBase += g.aQty * aPrice;
-      basketNow += g.aQty * bPrice;
-      if (deltaPct != null) pctList.push(deltaPct);
+      // 2배 이상·절반 이하로 바뀐 단가는 실제 인상보다 입력 오류(자릿수·묶음 단위)일 가능성이 크다.
+      // 목록에는 "확인 필요"로 보여 주되 인상률 계산에서는 뺀다 — 한 품목이 전체 숫자를 끌고 가지 않게.
+      const suspect = isSuspectChange(aPrice, bPrice);
+      rows.push({ key, name: g.name, unifiedProductId: g.unifiedProductId, aPrice, bPrice, aQty: g.aQty, bQty: g.bQty, deltaAbs, deltaPct, suspect });
+      if (!suspect) {
+        basketBase += g.aQty * aPrice;
+        basketNow += g.aQty * bPrice;
+        if (deltaPct != null) pctList.push(deltaPct);
+      }
     } else if (aPrice == null && bPrice != null) {
       newItems.push({ name: g.name, bPrice, bQty: g.bQty });
     } else if (aPrice != null && bPrice == null) {
@@ -105,6 +112,7 @@ export async function fetchPriceAnalysis(opts: {
     basketBase,
     basketNow,
     comparedCount: rows.length,
+    suspectCount: rows.filter((r) => r.suspect).length,
     newItems,
     droppedItems,
   };
