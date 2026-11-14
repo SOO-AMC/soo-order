@@ -340,6 +340,7 @@ export function RoundingScreen({
               </button>
               <p className="mt-4 text-sm text-white/55">누르면 전체화면으로 바뀌고 논문 {todayTotal}건이 끝없이 반복돼요.</p>
               <p className="mt-1 text-[13px] text-white/45">← → 이전·다음 논문 · Space 멈춤/재생 · F 전체화면 · Esc 끝내기</p>
+              {pastList.length === 0 && <NoPastHint />}
               {pastList.length > 0 && (
                 <div className="mt-8 w-full max-w-2xl">
                   <button
@@ -380,6 +381,7 @@ export function RoundingScreen({
                     : `매일 ${publishTime}에 발행돼요. 발행되면 이 화면에 자동으로 나타나요.`}
               </p>
               <p className="mt-2 text-[13px] text-white/45">지난 논문을 오늘 것처럼 틀지 않아요 · 1분마다 다시 확인 중</p>
+              {pastList.length === 0 && <NoPastHint />}
               {pastList.length > 0 && (
                 <div className="mt-8 w-full max-w-2xl">
                   <p className="flex items-center justify-center gap-1.5 text-sm font-semibold text-white/70">
@@ -520,5 +522,14 @@ function PastBriefingList({ issues, onPick }: { issues: ReaderIssue[]; onPick: (
         </li>
       ))}
     </ul>
+  );
+}
+
+/** 지난 발행분이 아직 없을 때 — 기능이 있다는 것만 알려 준다 */
+function NoPastHint() {
+  return (
+    <p className="mt-8 flex items-center justify-center gap-1.5 text-[13px] text-white/40">
+      <History className="size-4" aria-hidden="true" /> 지난 브리핑: 오늘 이전에 발행된 날이 생기면 여기서 골라 틀 수 있어요
+    </p>
   );
 }
