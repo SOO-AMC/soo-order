@@ -78,6 +78,7 @@ git push origin main  # 배포 (GitHub → Vercel 자동 배포)
 - `/api/vendor-ledger-zip` (POST): 거래처원장 "업체별 PDF·ZIP" 다운로드. 클라이언트가 ZIP 만들면 base64+JSZip 내부복사+blob까지 **~5배 메모리**로 브라우저 OOM 발생 → 서버에서 mupdf+JSZip 처리해 스트림 응답.
   - 클라는 **form POST + `target="_blank"`** 로 호출(form data 또는 JSON body 둘 다 처리) → 브라우저 네이티브 다운로드 매니저가 디스크로 직접 저장(fetch+blob의 메모리·연결 끊김 회피).
   - mupdf-wasm은 **병렬 호출 안전하지 않음** — vendor 별로 `await mergeVendor()` 순차 처리(병렬이면 WASM 메모리 충돌로 vendor PDF에 다른 vendor 페이지 섞임).
+- `/api/arrival-delay` (GET): 입고 지연 자동 알림 **Vercel Cron**(하루 1회, 아직 `vercel.json`에 등록 안 함 — 배포 때 `"0 0 * * *"`=KST 09:00). 발주 7일 넘은 검수대기 주문을 주문자·관리자에게 알린다(7일째, 그 뒤 7일마다). 규칙은 `lib/orders/arrival-delay.ts`(순수 함수), 실행은 `lib/orders/run-arrival-delay.ts`(service_role). `order_delay_notices`(주문+며칠째 열쇠)에 **기록을 먼저 넣고 들어간 것만 알려서** 여러 번 불려도 한 번만 나간다. `ARRIVAL_DELAY_NOTIFY=on`이 아니면 건수만 세는 시험 실행. `supabase/migrate-arrival-delay.sql` 필요.
 - `/api/leave-rollover` (GET): 연차 주기 롤오버 **Vercel Cron**. `vercel.json`의 `"10 15 * * *"`(=KST 00:10) 하루 1회. `CRON_SECRET`이 설정돼 있으면 `Authorization: Bearer` 검증(로컬은 미설정이라 그냥 호출 가능).
   - 월말이면 팀별 연차표 스냅샷 → 만료 주기 개인 스냅샷·마감(잔여 소멸)·다음 주기 자동 생성(`confirmed=false`)·관리자 알림 → 만료 30일 전 사전 알림.
   - service_role 클라이언트로 돌므로 `buildLeaveGrid()`를 `lib/utils/leave-grid.ts`(**"use server" 밖**)에 두고 Server Action과 공유한다.

@@ -1,7 +1,22 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/** 예약 실행(Vercel Cron)이 부르는 주소. 로그인한 사람 없이 호출된다 */
+const CRON_PATHS = ["/api/arrival-delay", "/api/briefing-publish", "/api/leave-rollover"];
+
 export async function middleware(request: NextRequest) {
+  // 예약 실행은 로그인 쿠키 없이 온다. 그대로 두면 아래에서 /login 으로 돌려보내져 한 번도 실행되지 않는다.
+  // CRON_SECRET 이 설정돼 있고 요청의 비밀값이 맞을 때만 로그인 검사를 건너뛴다.
+  // (비밀값이 없으면 건너뛰지 않는다 — 로그인하지 않은 사람이 이 주소들을 부를 수 없게)
+  const cronSecret = process.env.CRON_SECRET;
+  if (
+    cronSecret &&
+    CRON_PATHS.includes(request.nextUrl.pathname) &&
+    request.headers.get("authorization") === `Bearer ${cronSecret}`
+  ) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
