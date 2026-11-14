@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { LogOut, Settings, UserCog } from "lucide-react";
 import { NAV_GROUPS } from "@/components/nav-config";
 import { QuickActionButton } from "@/components/workspace/command-palette";
+import { AskButton } from "@/components/assistant/assistant-panel";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useTabCounts } from "@/hooks/use-tab-counts";
@@ -83,6 +84,7 @@ export function AppSidebar() {
 
       <div className="shrink-0 px-2.5 pt-1">
         <QuickActionButton />
+        <AskButton />
       </div>
 
       <nav aria-label="주 메뉴" className="flex-1 overflow-y-auto px-2.5 pb-3">

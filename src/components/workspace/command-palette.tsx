@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { NAV_GROUPS } from "@/components/nav-config";
 import { globalSearch, type GlobalSearchResult } from "@/lib/actions/global-search-action";
 import { POSITION_LABEL, type Position } from "@/lib/types/member";
+import { MobileAskButton } from "@/components/assistant/assistant-panel";
 
 /**
  * 빠른 실행 (디자인 시스템 CommandPalette).
@@ -231,15 +232,16 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
 export function MobileSearchButton() {
   const { open } = useCommandPalette();
   return (
-    <div className="sticky top-0 z-50 flex h-12 items-center border-b border-border bg-card/95 px-3 backdrop-blur-sm lg:hidden print:hidden">
+    <div className="sticky top-0 z-50 flex h-12 items-center gap-2 border-b border-border bg-card/95 px-3 backdrop-blur-sm lg:hidden print:hidden">
       <button
         type="button"
         onClick={open}
-        className="flex h-9 w-full items-center gap-2 rounded-full bg-card px-3 text-sm text-muted-foreground shadow-[inset_0_0_0_1px_var(--input)]"
+        className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full bg-card px-3 text-sm text-muted-foreground shadow-[inset_0_0_0_1px_var(--input)]"
       >
         <Search className="size-4" aria-hidden="true" />
         검색 · 직원·약품·업체·주문
       </button>
+      <MobileAskButton />
     </div>
   );
 }
