@@ -312,3 +312,21 @@ export async function mergeVendors(fromId: string, intoId: string): Promise<Vend
   });
   return ok({ orders: r.orders ?? 0, invoices: r.invoices ?? 0, products: r.products ?? 0 });
 }
+
+/**
+ * 업체별 품목 이름 기억: "이 업체의 명세서에 이 이름으로 찍힌 품목 = 가격표의 이 줄".
+ * 명세서를 확정할 때 쌓이고(DB 함수 confirm_invoice), 다음 명세서부터 이름을 추측하지 않고 그대로 연결한다.
+ * 표가 아직 없으면(supabase/migrate-invoice-confirm.sql 미실행) 빈 목록.
+ */
+export async function fetchVendorItemMemory(): Promise<{ vendorId: string; nameKey: string; vendorProductId: string }[]> {
+  const { supabase } = await requireAdmin();
+  try {
+    const rows = await fetchAllPages<{ vendor_id: string; name_key: string; vendor_product_id: string }>(
+      (from, to) => supabase.from("vendor_item_memory").select("vendor_id, name_key, vendor_product_id").order("vendor_id").order("name_key").range(from, to),
+      { label: "품목 이름 기억" },
+    );
+    return rows.map((r) => ({ vendorId: r.vendor_id, nameKey: r.name_key, vendorProductId: r.vendor_product_id }));
+  } catch {
+    return [];
+  }
+}

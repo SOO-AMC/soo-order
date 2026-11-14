@@ -13,6 +13,8 @@ const RULES = `규칙:
   - name: 품목명(규격 포함, 보이는 그대로).
   - quantity: 수량(숫자만). 콤마 제거.
   - listPrice: 단가(unit price)의 숫자만. '원', 콤마 제거. 이는 한 개당 가격이며, 라인 합계(공급가액/금액)가 아님.
+  - amount: 그 줄의 금액(공급가액) 칸에 인쇄된 숫자를 **보이는 그대로**. 수량×단가로 계산해서 채우지 말 것(검산에 쓰므로 인쇄된 값이어야 함). 금액 칸이 없거나 읽을 수 없으면 0.
+- totalAmount: 명세서 하단에 인쇄된 합계(공급가액 합계. 세액 포함 합계만 있으면 그 값). 보이는 그대로. 없거나 읽을 수 없으면 0.
 - 숫자는 반드시 number 타입. 읽기 애매하면 가장 가능성 높은 값으로.`;
 
 const SYSTEM_SINGLE = `당신은 한국 의약품 도매업체의 거래명세서(인보이스)를 정확히 읽어내는 OCR 전문가입니다.
@@ -39,17 +41,19 @@ const INVOICE_PROPS = {
         name: { type: "string" },
         quantity: { type: "number" },
         listPrice: { type: "number" },
+        amount: { type: "number" },
       },
-      required: ["name", "quantity", "listPrice"],
+      required: ["name", "quantity", "listPrice", "amount"],
       additionalProperties: false,
     },
   },
+  totalAmount: { type: "number" },
 } as const;
 
 const SCHEMA_SINGLE = {
   type: "object",
   properties: INVOICE_PROPS,
-  required: ["vendorName", "invoiceDate", "items"],
+  required: ["vendorName", "invoiceDate", "items", "totalAmount"],
   additionalProperties: false,
 } as const;
 
@@ -67,7 +71,7 @@ const SCHEMA_MULTI = {
       items: {
         type: "object",
         properties: INVOICE_PROPS_MULTI,
-        required: ["vendorName", "invoiceDate", "items", "pageStart", "pageEnd"],
+        required: ["vendorName", "invoiceDate", "items", "totalAmount", "pageStart", "pageEnd"],
         additionalProperties: false,
       },
     },

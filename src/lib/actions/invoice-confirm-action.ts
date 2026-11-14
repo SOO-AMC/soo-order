@@ -3,7 +3,7 @@
 import { requireAdmin } from "@/lib/supabase/server";
 import { buildVendorIndex, looksLikeOwnHospital, vendorKey } from "@/lib/utils/vendor-name";
 import { arrivalNotifications, partialNotifications } from "@/lib/utils/order-notify";
-import type { ConfirmInvoicePayload } from "@/lib/types/invoice";
+import type { ConfirmInvoicePayload, ConfirmInvoiceResult } from "@/lib/types/invoice";
 
 /**
  * 미리보기에서 확정된 명세서를 처리한다. 관리자 전용.
@@ -12,7 +12,20 @@ import type { ConfirmInvoicePayload } from "@/lib/types/invoice";
  * - 단가 불일치 갱신, 신규 품목 추가
  * - invoices / invoice_items 기록(거래처원장 원천)
  */
-export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<void> {
+export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<ConfirmInvoiceResult> {
+  try {
+    return await confirmInvoiceInner(payload);
+  } catch (e) {
+    // 서버에서 던진 오류 문구는 배포판에서 가려진다 → 값으로 돌려줘서 화면이 이유를 보여 줄 수 있게 한다
+    return { ok: false, code: "error", message: e instanceof Error ? e.message : "확정 처리 중 오류가 발생했습니다." };
+  }
+}
+
+/** DB 함수가 아직 없는 경우 (supabase/migrate-invoice-confirm.sql 미실행) */
+const isMissingFunction = (e: { code?: string; message?: string }) =>
+  e.code === "PGRST202" || e.code === "42883" || /could not find the function|does not exist/i.test(e.message ?? "");
+
+async function confirmInvoiceInner(payload: ConfirmInvoicePayload): Promise<ConfirmInvoiceResult> {
   const { supabase, userId } = await requireAdmin();
   const now = new Date().toISOString();
 
@@ -60,6 +73,59 @@ export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<vo
   }
   /** 이 명세서로 만들어지는 주문에 넣을 업체 이름 */
   const orderVendorName = canonicalName || (ownHospital ? "" : vName);
+
+  // ── 한 묶음으로 처리 (DB 함수 confirm_invoice) ──
+  // 검수 · 단가 갱신 · 새 품목 · 원장 기록이 전부 되거나 전부 안 된다. 같은 명세서를 두 번 올리는 것도 여기서 막는다.
+  const rpc = await supabase.rpc("confirm_invoice", {
+    p: {
+      vendor_id: vendorId,
+      vendor_name: payload.vendorName,
+      order_vendor_name: orderVendorName,
+      invoice_date: payload.invoiceDate,
+      image_path: payload.imagePath,
+      page_start: payload.pageStart ?? null,
+      page_end: payload.pageEnd ?? null,
+      allow_duplicate: payload.allowDuplicate === true,
+      rows: payload.rows.map((r) => ({
+        item_name: r.itemName,
+        quantity: r.quantity,
+        list_price: r.listPrice,
+        unit_price: r.unitPrice,
+        amount: r.amount,
+        allocations: r.allocations.map((a) => ({ order_id: a.orderId, quantity: a.quantity })),
+        leftover_action: r.leftoverAction,
+        unified_product_id: r.unifiedProductId,
+        vendor_product_id: r.vendorProductId,
+        update_price: r.updatePrice,
+        is_new_product: r.isNewProduct,
+      })),
+    },
+  });
+
+  if (!rpc.error) {
+    // 주문자에게 알림 (실패해도 확정은 이미 끝났다)
+    const touched = ((rpc.data as { touched?: Record<string, { requester_id: string | null; item_name: string; unit: string | null; quantity: number; received: number }> } | null)?.touched) ?? {};
+    const arrived = [];
+    const partial = [];
+    for (const [id, o] of Object.entries(touched)) {
+      const base = { id, requester_id: o.requester_id, item_name: o.item_name, unit: o.unit };
+      if (o.quantity > 0 && o.received < o.quantity) partial.push({ ...base, received: o.received, quantity: o.quantity });
+      else arrived.push({ ...base, quantity: o.received, note: "" });
+    }
+    const notifications = [...arrivalNotifications(arrived, userId), ...partialNotifications(partial, userId)];
+    if (notifications.length > 0) {
+      const { error: notifyError } = await supabase.from("notifications").insert(notifications);
+      if (notifyError) console.error("[invoice-confirm] 알림 저장 실패:", notifyError.message);
+    }
+    return { ok: true };
+  }
+  if (/DUPLICATE_INVOICE/.test(rpc.error.message)) {
+    return { ok: false, code: "duplicate", message: "같은 업체 · 같은 날짜 · 같은 금액의 명세서가 이미 있어요." };
+  }
+  if (!isMissingFunction(rpc.error)) {
+    return { ok: false, code: "error", message: `명세서를 확정하지 못했어요. 아무것도 저장되지 않았어요. (${rpc.error.message})` };
+  }
+  // DB 함수가 아직 없으면 예전 방식으로 차례로 저장한다 (중간에 실패하면 일부만 저장될 수 있다)
 
   // 배분 대상 기존 주문 정보 선조회
   const allocIds = payload.rows.flatMap((r) => r.allocations.map((a) => a.orderId));
@@ -254,4 +320,5 @@ export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<vo
   }));
   const { error: itemsErr } = await supabase.from("invoice_items").insert(itemsToInsert);
   if (itemsErr) throw new Error(`명세서 라인 기록에 실패했습니다. (${itemsErr.message})`);
+  return { ok: true };
 }

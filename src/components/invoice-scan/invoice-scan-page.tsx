@@ -9,7 +9,8 @@ import { scanInvoice, renderInvoiceThumbnail, renderInvoicePages } from "@/lib/a
 import { confirmInvoice } from "@/lib/actions/invoice-confirm-action";
 import { createScanVendor } from "@/app/(main)/price-compare/actions";
 import { setItemAlias } from "@/lib/actions/item-alias-actions";
-import { fetchVendorOptions } from "@/lib/actions/vendor-actions";
+import { fetchVendorItemMemory, fetchVendorOptions } from "@/lib/actions/vendor-actions";
+import { isPriceJump, lineIssues, totalCheck, type MatchSource } from "@/lib/invoices/checks";
 import { buildVendorIndex, looksLikeOwnHospital, type VendorAliasLite } from "@/lib/utils/vendor-name";
 import { genId } from "@/lib/utils/uid";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
@@ -64,7 +65,10 @@ interface Row {
   listPrice: number;
   allocations: Alloc[];
   leftoverAction: UnmatchedAction;
-  updatePrice: boolean;
+  /** 단가 갱신 여부. null = 자동(급변한 단가는 갱신하지 않고, 그 밖에는 갱신) */
+  updatePrice: boolean | null;
+  /** 명세서에 인쇄된 그 줄의 금액 (검산용. 못 읽었으면 0) */
+  printedAmount: number;
 }
 
 type Step = "upload" | "scanning" | "grouping" | "preview";
@@ -94,6 +98,9 @@ interface QueueMeta {
 
 const won = (n: number) => `${Math.round(n).toLocaleString()}원`;
 
+/** 다른 업체로 발주한 주문에 맞출 때 필요한 이름 유사도 */
+const OTHER_VENDOR_MIN_SCORE = 0.8;
+
 /** 업체명 느슨한 일치 ("브이에스팜(주)" ↔ "브이에스팜" 등 표기차 허용) */
 function vendorNameMatches(a: string, b: string): boolean {
   const norm = (s: string) => s.replace(/\(주\)|주식회사|㈜|\s|·/g, "").toLowerCase();
@@ -115,11 +122,18 @@ function autoAllocate(
   availById: Map<string, number>,
   vendorName?: string | null,
 ): Alloc[] {
-  const candidates = orderList
-    .filter((o) => !vendorName || vendorNameMatches(o.vendor_name ?? "", vendorName))
-    .map((o) => ({ o, score: nameSimilarity(name, o.item_name) }))
-    .filter((x) => x.score >= 0.5)
-    .sort((a, b) => b.score - a.score);
+  const scored = orderList.map((o) => ({
+    o,
+    score: nameSimilarity(name, o.item_name),
+    sameVendor: !vendorName || vendorNameMatches(o.vendor_name ?? "", vendorName),
+  }));
+  // 업체가 휴무라 다른 업체에서 산 경우: 주문은 원래 업체로 발주돼 있다.
+  // 같은 업체 주문에 다 맞추고도 수량이 남으면, 이름이 아주 비슷한(0.8 이상) 다른 업체 주문에도 맞춰 본다.
+  // 이렇게 맞춘 줄은 "다른 업체 주문"으로 표시돼 사람이 확인한다.
+  const candidates = [
+    ...scored.filter((x) => x.sameVendor && x.score >= 0.5).sort((a, b) => b.score - a.score),
+    ...scored.filter((x) => !x.sameVendor && x.score >= OTHER_VENDOR_MIN_SCORE).sort((a, b) => b.score - a.score),
+  ];
   const allocs: Alloc[] = [];
   let remaining = quantity;
   for (const { o } of candidates) {
@@ -196,6 +210,14 @@ export function InvoiceScanPage() {
   const [vendorName, setVendorName] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
+  /** 명세서에 인쇄된 합계 (검산용. 못 읽었으면 0) */
+  const [printedTotal, setPrintedTotal] = useState(0);
+  /** 문제없는 줄도 펼쳐 보기 */
+  const [showOk, setShowOk] = useState(false);
+  /** 같은 명세서가 이미 있을 때 "그래도 확정할까요?" */
+  const [dupAsk, setDupAsk] = useState(false);
+  /** 업체별 품목 이름 기억: "업체id|이름열쇠" → 가격표 줄 id */
+  const [memory, setMemory] = useState<Map<string, string>>(() => new Map());
 
   // 신규 업체 등록(인라인)
   const [regOpen, setRegOpen] = useState(false);
@@ -232,7 +254,23 @@ export function InvoiceScanPage() {
     let unifiedProductId: string | null = null;
     let learnUnifiedId: string | null = null; // 확정 시 학습할 통합제품(별칭 없을 때만)
 
-    if (alias) {
+    // 어떻게 찾았는가 (확인이 필요한지 가르는 기준)
+    let matchSource: MatchSource | null = null;
+    const rememberedId = vendorId ? memory.get(`${vendorId}|${key}`) : undefined;
+    const byMemory = rememberedId ? vendorProductsOfVendor.find((p) => p.id === rememberedId) ?? null : null;
+    const byName = vendorProductsOfVendor.find((p) => normalizeItemName(p.product_name) === key) ?? null;
+
+    if (byMemory) {
+      // 1) 이 업체의 이 이름을 전에 확정한 적이 있다 → 추측하지 않고 그대로
+      vendorProduct = byMemory;
+      unifiedProductId = byMemory.unified_product_id;
+      matchSource = "memory";
+    } else if (!alias && byName) {
+      // 3) 가격표의 이름과 띄어쓰기만 다르다
+      vendorProduct = byName;
+      unifiedProductId = byName.unified_product_id;
+      matchSource = "exact";
+    } else if (alias) {
       unifiedProductId = alias.unified_product_id;
       vendorProduct = vendorProductsOfVendor.find((p) => p.unified_product_id === alias.unified_product_id) ?? null;
     } else {
@@ -244,13 +282,43 @@ export function InvoiceScanPage() {
       if (vp && vp.score >= AUTO_LEARN_MIN_SCORE && unifiedProductId) learnUnifiedId = unifiedProductId;
     }
 
+    if (!matchSource && vendorProduct) matchSource = alias ? "alias" : "guess";
+
     const currentUnitPrice = vendorProduct?.unit_price ?? null;
     const isNewProduct = !vendorProduct;
     const priceMismatch =
       !!vendorProduct && currentUnitPrice !== null && currentUnitPrice !== computedUnitPrice;
     const allocated = row.allocations.reduce((s, a) => s + (a.quantity || 0), 0);
     const leftover = row.quantity - allocated;
+    // 다른 업체로 발주했던 주문에 맞춘 건수 (업체 휴무 등으로 바꿔 산 경우)
+    const selectedVendorName = selectedVendor?.name ?? null;
+    const otherVendorOrders = selectedVendorName
+      ? row.allocations.filter((a) => {
+          const o = orders.find((x) => x.id === a.orderId);
+          return !!o && a.quantity > 0 && !vendorNameMatches(o.vendor_name ?? "", selectedVendorName);
+        }).length
+      : 0;
+    // 단가가 2배 넘게 달라지면 자릿수·묶음 단위 오류일 수 있다 → 사람이 켜기 전에는 갱신하지 않는다
+    const priceJump = !isNewProduct && isPriceJump(currentUnitPrice, computedUnitPrice);
+    const effectiveUpdatePrice = row.updatePrice ?? !priceJump;
+    const issues = lineIssues({
+      quantity: row.quantity,
+      listPrice: row.listPrice,
+      printedAmount: row.printedAmount,
+      discountRate,
+      computedUnitPrice,
+      currentUnitPrice,
+      matchSource,
+      isNewProduct,
+      leftover,
+      otherVendorOrders,
+    });
+
     return {
+      matchSource,
+      issues,
+      priceJump,
+      effectiveUpdatePrice,
       computedUnitPrice,
       vendorProduct,
       unifiedProductId,
@@ -339,9 +407,10 @@ export function InvoiceScanPage() {
 
   // 가격/주문 참조 데이터 로드 (업체 매칭·배분용)
   const loadRefData = async () => {
-    const [priceData, vendorOptions, ordersRes] = await Promise.all([
+    const [priceData, vendorOptions, memoryRows, ordersRes] = await Promise.all([
       fetchPriceCompareData(),
       fetchVendorOptions().catch(() => []), // 업체의 "다른 이름" — 못 읽어도 이름 추측으로 동작한다
+      fetchVendorItemMemory().catch(() => []), // 전에 확정한 "이 업체의 이 이름 = 이 품목"
       supabase
         .from("orders")
         .select("id, item_name, quantity, received_quantity, vendor_name, requester:profiles!requester_id(full_name)")
@@ -354,6 +423,7 @@ export function InvoiceScanPage() {
     setVendorProducts(priceData.vendorProducts);
     setAliases(priceData.itemAliases);
     setOrders(orderList);
+    setMemory(new Map(memoryRows.map((m) => [`${m.vendorId}|${m.nameKey}`, m.vendorProductId] as const)));
     vendorAliasesRef.current = vendorOptions.flatMap((v) => v.aliases.map((alias) => ({ vendorId: v.id, alias })));
     return { vendors: priceData.vendors, orderList };
   };
@@ -647,12 +717,14 @@ export function InvoiceScanPage() {
     setRegOpen(false);
     setShowOriginal(false);
 
-    const merged = new Map<string, { name: string; quantity: number; listPrice: number }>();
+    const merged = new Map<string, { name: string; quantity: number; listPrice: number; amount: number }>();
     for (const it of extracted.items) {
       const key = normalizeItemName(it.name) + "|" + it.listPrice;
       const ex = merged.get(key);
-      if (ex) ex.quantity += it.quantity;
-      else merged.set(key, { name: it.name, quantity: it.quantity, listPrice: it.listPrice });
+      if (ex) {
+        ex.quantity += it.quantity;
+        ex.amount += it.amount ?? 0;
+      } else merged.set(key, { name: it.name, quantity: it.quantity, listPrice: it.listPrice, amount: it.amount ?? 0 });
     }
     const availById = new Map<string, number>();
     for (const o of orderList) availById.set(o.id, Math.max(0, o.quantity - o.received_quantity));
@@ -665,9 +737,13 @@ export function InvoiceScanPage() {
         listPrice: m.listPrice,
         allocations: autoAllocate(m.name, m.quantity, orderList, availById, vName),
         leftoverAction: "inspect" as UnmatchedAction,
-        updatePrice: true,
+        updatePrice: null,
+        printedAmount: m.amount,
       })),
     );
+    setPrintedTotal(extracted.totalAmount ?? 0);
+    setShowOk(false);
+    setDupAsk(false);
   };
 
   // 검수대기 주문 재조회 (건별 확정 후 다음 명세서 매칭 갱신용)
@@ -738,7 +814,7 @@ export function InvoiceScanPage() {
     }
   };
 
-  const handleConfirm = async () => {
+  const handleConfirm = async (allowDuplicate = false) => {
     setSaving(true);
     setError("");
     try {
@@ -757,11 +833,11 @@ export function InvoiceScanPage() {
           leftoverAction: leftover > 0 ? row.leftoverAction : null,
           unifiedProductId: d.unifiedProductId,
           vendorProductId: d.vendorProduct?.id ?? null,
-          updatePrice: row.updatePrice && d.priceMismatch,
+          updatePrice: d.effectiveUpdatePrice && d.priceMismatch,
           isNewProduct: d.isNewProduct,
         };
       });
-      await confirmInvoice({
+      const result = await confirmInvoice({
         vendorId,
         vendorName: vendorName.trim(),
         invoiceDate: invoiceDate || null,
@@ -771,7 +847,16 @@ export function InvoiceScanPage() {
         pageStart: currentPageStart,
         pageEnd: currentPageEnd,
         rows: payloadRows,
+        allowDuplicate,
       });
+      if (!result.ok) {
+        // 한 묶음으로 처리되므로 실패하면 아무것도 저장되지 않았다
+        setSaving(false);
+        if (result.code === "duplicate") setDupAsk(true);
+        else setError(result.message);
+        return;
+      }
+      setDupAsk(false);
 
       // 별칭 자동 학습 (퍼지 매칭 고신뢰 + 기존 별칭 없을 때)
       for (const row of rows) {
@@ -823,9 +908,10 @@ export function InvoiceScanPage() {
             if (d.isNewProduct) acc.newCount++;
             if (d.priceMismatch) acc.mismatch++;
             if (d.leftover !== 0) acc.leftover++;
+            if (d.issues.length > 0) acc.review++;
             return acc;
           },
-          { newCount: 0, mismatch: 0, leftover: 0 },
+          { newCount: 0, mismatch: 0, leftover: 0, review: 0 },
         )
       : null;
 
@@ -1343,16 +1429,35 @@ export function InvoiceScanPage() {
                     {rowSummary.leftover > 0 && (
                       <span className="font-medium text-status-late">배분 남음 {rowSummary.leftover}</span>
                     )}
-                    {rowSummary.newCount + rowSummary.mismatch + rowSummary.leftover === 0 && rows.length > 0 && (
-                      <span className="font-medium text-status-done">모두 맞음</span>
+                    {rowSummary.review === 0 && rows.length > 0 && <span className="font-medium text-status-done">모두 맞음 · 바로 확정할 수 있어요</span>}
+                    {rowSummary.review > 0 && <span className="font-semibold text-status-late">확인할 줄 {rowSummary.review}</span>}
+                    {rows.length - rowSummary.review > 0 && (
+                      <button type="button" onClick={() => setShowOk((v) => !v)} className="ml-auto font-semibold text-primary hover:underline">
+                        문제없는 {rows.length - rowSummary.review}줄 {showOk ? "접기" : "보기"}
+                      </button>
                     )}
                   </div>
                 )}
+                {(() => {
+                  // 줄 합계가 명세서에 인쇄된 합계와 맞는지 (한 줄을 빠뜨렸거나 숫자를 잘못 읽으면 어긋난다)
+                  const t = totalCheck(rows.map((r) => ({ quantity: r.quantity, listPrice: r.listPrice })), printedTotal, discountRate);
+                  if (t.ok !== false) return null;
+                  return (
+                    <p className="flex items-start gap-1.5 rounded-xl bg-status-late-bg px-3.5 py-2.5 text-[13px] text-status-late">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                      <span>
+                        <b className="font-semibold">합계가 안 맞아요</b> · 읽은 줄의 합계는 {won(t.computed)}인데 명세서에 인쇄된 합계는 {won(t.printed)}이에요. 빠진 줄이 있거나 수량·단가를 잘못 읽었을 수 있어요. 원본과 비교해 주세요.
+                      </span>
+                    </p>
+                  );
+                })()}
 
                 {rows.map((row) => {
                   const d = derive(row);
                   const hasMatch = row.allocations.length > 0;
                   const leftover = d.leftover;
+                  // 문제없는 줄은 접어 둔다 (위의 "문제없는 줄 보기"로 펼친다)
+                  if (!showOk && d.issues.length === 0) return null;
                   return (
                     <div
                       key={row.id}
@@ -1411,6 +1516,21 @@ export function InvoiceScanPage() {
                         </label>
                       </div>
 
+                      {d.matchSource === "memory" && (
+                        <p className="mt-2 text-[13px] text-status-done">전에 확정한 이름이라 그대로 연결했어요 · {d.vendorProduct?.product_name}</p>
+                      )}
+                      {d.issues
+                        .filter((x) => x.code === "amount" || x.code === "price-jump" || x.code === "guess" || x.code === "other-vendor" || x.code === "zero")
+                        .map((x) => (
+                          <p key={x.code} className="mt-2 flex items-start gap-1.5 rounded-lg bg-status-late-bg px-3 py-2 text-[13px] text-status-late">
+                            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                            <span>
+                              <b className="font-semibold">{x.label}</b> · {x.detail}
+                              {x.code === "guess" && d.vendorProduct ? ` (연결한 품목: ${d.vendorProduct.product_name})` : ""}
+                            </span>
+                          </p>
+                        ))}
+
                       {/* 단가 비교 — 신규/불일치일 때만 */}
                       {d.isNewProduct ? (
                         <p className="mt-2.5 rounded-lg bg-status-doing-bg px-3 py-2 text-[13px] text-status-doing">
@@ -1428,7 +1548,7 @@ export function InvoiceScanPage() {
                           </div>
                           <label className="mt-2 flex cursor-pointer items-center gap-2 border-t border-status-ask/20 pt-2 font-medium">
                             <Checkbox
-                              checked={row.updatePrice}
+                              checked={d.effectiveUpdatePrice}
                               onCheckedChange={(c) => updateRow(row.id, { updatePrice: c === true })}
                             />
                             앱 단가를 <b className="tabular-nums">{won(d.computedUnitPrice)}</b>로 갱신
@@ -1532,11 +1652,25 @@ export function InvoiceScanPage() {
               </div>
             </div>
 
+            {dupAsk && (
+              <div className="mx-4 mb-3 rounded-xl bg-status-ask-bg px-4 py-3 text-[13px] lg:mx-6">
+                <p className="font-semibold text-status-ask">같은 업체 · 같은 날짜 · 같은 금액의 명세서가 이미 있어요</p>
+                <p className="mt-0.5 text-subtle-foreground">같은 명세서를 두 번 올린 것이라면 금액이 두 번 더해져요. 아직 아무것도 저장되지 않았어요.</p>
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" variant="outline" className="h-8" disabled={saving} onClick={() => handleConfirm(true)}>
+                    다른 명세서가 맞아요 · 그래도 확정
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-8" onClick={() => setDupAsk(false)}>
+                    닫기
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className={stickyBar}>
               <Button variant="outline" className="h-10 flex-1 rounded-lg" onClick={skipCurrent} disabled={saving}>
                 {queueIndex + 1 < queue.length ? "이 명세서 건너뛰기" : "건너뛰기"}
               </Button>
-              <Button className="h-10 flex-[2] rounded-lg" onClick={handleConfirm} disabled={saving || rows.length === 0}>
+              <Button className="h-10 flex-[2] rounded-lg" onClick={() => handleConfirm()} disabled={saving || rows.length === 0}>
                 <Check className="h-4 w-4" />
                 {saving
                   ? "처리 중…"

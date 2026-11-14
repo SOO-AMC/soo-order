@@ -6,6 +6,8 @@ export interface ExtractedItem {
   quantity: number;
   /** 할인전 정가(명세서에 적힌 단가) */
   listPrice: number;
+  /** 그 줄에 인쇄된 금액 (읽은 그대로 — 계산한 값이 아니다). 칸이 없거나 못 읽으면 0. 확정 전 검사에 쓴다 */
+  amount?: number;
 }
 
 /** Claude Vision OCR 추출 결과 */
@@ -13,6 +15,8 @@ export interface ExtractedInvoice {
   vendorName: string;
   invoiceDate: string;
   items: ExtractedItem[];
+  /** 명세서에 인쇄된 합계(공급가액 합계). 못 읽으면 0. 줄 합계와 맞는지 검사하는 데 쓴다 */
+  totalAmount?: number;
   /** 합본 PDF에서 이 명세서가 차지하는 페이지(1부터). 묶음(multi) 추출 시만 채워짐 */
   pageStart?: number;
   pageEnd?: number;
@@ -67,7 +71,14 @@ export interface ConfirmInvoicePayload {
   pageStart?: number;
   pageEnd?: number;
   rows: ConfirmRowInput[];
+  /** 같은 업체·날짜·금액의 명세서가 이미 있어도 확정한다 (사용자가 확인한 뒤에만 true) */
+  allowDuplicate?: boolean;
 }
+
+/** confirmInvoice 결과. 서버 오류 문구는 배포판에서 가려지므로 던지지 않고 값으로 돌려준다 */
+export type ConfirmInvoiceResult =
+  | { ok: true }
+  | { ok: false; code: "duplicate" | "error"; message: string };
 
 /** invoice_items 테이블 행 */
 export interface InvoiceItem {
