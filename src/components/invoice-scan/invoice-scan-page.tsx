@@ -14,6 +14,7 @@ import { buildVendorIndex, looksLikeOwnHospital, type VendorAliasLite } from "@/
 import { genId } from "@/lib/utils/uid";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import { bestMatch, nameSimilarity } from "@/lib/utils/item-match";
+import { bestMatchSameSpec } from "@/lib/utils/item-spec";
 import { logClientAction } from "@/app/(main)/log-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -235,7 +236,9 @@ export function InvoiceScanPage() {
       unifiedProductId = alias.unified_product_id;
       vendorProduct = vendorProductsOfVendor.find((p) => p.unified_product_id === alias.unified_product_id) ?? null;
     } else {
-      const vp = bestMatch(row.name, vendorProductsOfVendor, (p) => p.product_name, 0.55);
+      // 이름이 비슷해도 용량(100mg↔300mg)이나 포장(10V↔1V)이 다르면 다른 물건이다.
+      // 그런 품목에 붙이면 그 품목의 단가가 엉뚱한 값으로 덮어써진다 → 후보에서 뺀다(새 품목으로 처리).
+      const vp = bestMatchSameSpec(row.name, vendorProductsOfVendor, (p) => p.product_name, 0.55, { pack: true });
       vendorProduct = vp?.item ?? null;
       unifiedProductId = vendorProduct?.unified_product_id ?? null;
       if (vp && vp.score >= AUTO_LEARN_MIN_SCORE && unifiedProductId) learnUnifiedId = unifiedProductId;

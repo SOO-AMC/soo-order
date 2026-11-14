@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { UnderlineTabs } from "@/components/list-parts";
 import { ComparisonTable } from "./comparison-table";
 import { AliasManagement } from "./alias-management";
+import { ItemCleanup } from "./item-cleanup";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 import type {
   Vendor,
@@ -22,10 +23,12 @@ interface PriceCompareData {
   itemAliases: ItemNameAlias[];
 }
 
+type Tab = "compare" | "cleanup" | "aliases";
+
 export function PriceComparePage() {
   const [data, setData] = useState<PriceCompareData | null>(null);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"compare" | "aliases">("compare");
+  const [tab, setTab] = useState<Tab>("compare");
 
   const loadData = useCallback(() => {
     fetchPriceCompareData()
@@ -47,12 +50,14 @@ export function PriceComparePage() {
           </div>
         }
         tabs={
-          <UnderlineTabs<"compare" | "aliases">
+          <UnderlineTabs<Tab>
             ariaLabel="가격 비교 보기"
             value={tab}
             onValueChange={setTab}
             items={[
               { value: "compare", label: "가격 비교표" },
+              // 정리함: 표준 품목과 연결 안 된 주문 이름 + 비교표에 안 보이는 업체 품목
+              { value: "cleanup", label: "정리함", count: data ? data.vendorProducts.filter((p) => !p.unified_product_id).length : undefined },
               { value: "aliases", label: "품목 매칭", count: data?.itemAliases.length },
             ]}
           />
@@ -78,6 +83,13 @@ export function PriceComparePage() {
               vendorProducts={data.vendorProducts}
               unifiedProducts={data.unifiedProducts}
               onDataChange={loadData}
+            />
+          ) : tab === "cleanup" ? (
+            <ItemCleanup
+              vendors={data.vendors}
+              vendorProducts={data.vendorProducts}
+              unifiedProducts={data.unifiedProducts}
+              onChange={loadData}
             />
           ) : (
             <AliasManagement

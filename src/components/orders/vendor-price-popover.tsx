@@ -14,6 +14,7 @@ import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
 import { setItemAlias, removeItemAlias } from "@/lib/actions/item-alias-actions";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import { tokenize, similarity } from "@/lib/utils/item-match";
+import { doseConflict } from "@/lib/utils/item-spec";
 import { genId } from "@/lib/utils/uid";
 import type { Vendor, VendorProduct, UnifiedProduct, ItemNameAlias } from "@/lib/types/price-compare";
 
@@ -126,6 +127,7 @@ function findFuzzyMatch(
   let bestDirectProduct: VendorProduct | null = null;
 
   for (const up of unifiedProducts) {
+    if (doseConflict(itemName, up.name)) continue; // 용량이 다르면 다른 품목 (추정·자동 학습 금지)
     const bTokens = tokenize(up.name);
     const score = similarity(aTokens, aNorm, bTokens, bTokens.join(""));
     if (score > bestScore) {
@@ -136,6 +138,7 @@ function findFuzzyMatch(
   }
 
   for (const vp of vendorProducts) {
+    if (doseConflict(itemName, vp.product_name)) continue;
     const bTokens = tokenize(vp.product_name);
     const score = similarity(aTokens, aNorm, bTokens, bTokens.join(""));
     if (score > bestScore) {

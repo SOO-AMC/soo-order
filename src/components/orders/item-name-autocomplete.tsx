@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { CircleCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,8 @@ export function ItemNameAutocomplete({
 }: ItemNameAutocompleteProps) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
+  /** 지금 적힌 이름에 연결된 표준 품목 (없으면 null) */
+  const [linked, setLinked] = useState<{ forName: string; name: string } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +41,7 @@ export function ItemNameAutocomplete({
       timerRef.current = setTimeout(() => {
         setSuggestions([]);
         setOpen(false);
+        setLinked(null);
       }, 0);
       return () => {
         if (timerRef.current) clearTimeout(timerRef.current);
@@ -45,13 +49,18 @@ export function ItemNameAutocomplete({
     }
 
     timerRef.current = setTimeout(async () => {
-      const [unifiedRes, ordersRes] = await Promise.all([
-        supabase
-          .from("unified_products")
-          .select("name, notes")
-          .ilike("name", `%${q}%`)
-          .order("name")
-          .limit(25),
+      // 표준 품목은 직원도 찾을 수 있는 DB 함수로 (이름·구분만 돌려준다. 가격 없음).
+      // 띄어쓰기를 무시하므로 "메로페넴 주" 로 "메로페넴주500mg 10V" 를 찾는다.
+      const searchStandard = async () => {
+        const viaRpc = await supabase.rpc("search_standard_products", { p_q: q, p_limit: 25 });
+        if (!viaRpc.error) return (viaRpc.data ?? []) as { name: string; notes: string | null }[];
+        // 함수가 아직 없으면(마이그레이션 전) 예전처럼 표를 직접 읽는다 — 관리자만 결과가 나온다
+        const direct = await supabase.from("unified_products").select("name, notes").ilike("name", `%${q}%`).order("name").limit(25);
+        return (direct.data ?? []) as { name: string; notes: string | null }[];
+      };
+      const [unifiedRows, linkedRes, ordersRes] = await Promise.all([
+        searchStandard(),
+        supabase.rpc("standard_product_for", { p_name: q }),
         supabase
           .from("orders")
           .select("item_name")
@@ -69,12 +78,15 @@ export function ItemNameAutocomplete({
       };
 
       const unifiedMap = new Map<string, Suggestion>();
-      for (const d of unifiedRes.data ?? []) {
+      for (const d of unifiedRows) {
         if (!unifiedMap.has(d.name)) {
           unifiedMap.set(d.name, { name: d.name, isUnified: true, notes: (d.notes as string) || undefined });
         }
       }
-      const unified = [...unifiedMap.values()].sort(byRelevance);
+      // DB 함수가 이미 알맞은 순서(앞부분 일치 → 짧은 이름)로 준다
+      const unified = [...unifiedMap.values()];
+      const linkedProduct = (linkedRes.error ? null : linkedRes.data) as { name: string } | null;
+      setLinked(linkedProduct?.name ? { forName: q, name: linkedProduct.name } : null);
 
       const seen = new Set(unified.map((u) => u.name));
       const orderNames: Suggestion[] = [];
@@ -126,6 +138,40 @@ export function ItemNameAutocomplete({
           if (suggestions.length > 0) setOpen(true);
         }}
       />
+      {(() => {
+        const typed = value.trim();
+        if (!typed || open) return null;
+        // 이미 표준 품목과 묶이는 이름
+        if (linked && linked.forName === typed) {
+          return (
+            <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-status-done">
+              <CircleCheck className="size-4 shrink-0" />
+              <span className="min-w-0 truncate">표준 품목 · {linked.name}</span>
+            </p>
+          );
+        }
+        // 아직 묶이지 않는 이름인데 비슷한 표준 품목이 있으면 권한다 (막지는 않는다)
+        const similar = suggestions.filter((x) => x.isUnified && x.name !== typed).slice(0, 2);
+        if (similar.length === 0 || suggestions.some((x) => x.isUnified && x.name === typed)) return null;
+        return (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[13px] text-muted-foreground">
+            <span>혹시 이 품목인가요?</span>
+            {similar.map((x) => (
+              <button
+                key={x.name}
+                type="button"
+                className="max-w-full truncate rounded-full bg-primary/10 px-2.5 py-1 font-semibold text-primary"
+                onClick={() => {
+                  pickedRef.current = x.name;
+                  onChange(x.name);
+                }}
+              >
+                {x.name}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
       {open && suggestions.length > 0 && (
         <ul className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border bg-popover p-1 shadow-lg">
           {suggestions.map((s) => (
