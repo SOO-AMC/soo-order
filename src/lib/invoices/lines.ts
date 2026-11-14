@@ -17,7 +17,10 @@ export interface InvoiceLine {
   listPrice: number;
   amount: number;
   vendorId: string | null;
+  /** 연결된 업체의 표준 이름. 업체가 연결되지 않은 명세서는 명세서에 찍힌 글자 */
   vendorName: string;
+  /** 명세서에 찍힌 글자 그대로 (OCR 결과) */
+  vendorNameOnInvoice: string;
   invoiceDate: string | null;
 }
 
@@ -30,7 +33,7 @@ interface RawLine {
   unit_price: number | string;
   list_price: number | string | null;
   amount: number | string;
-  invoices: { vendor_id: string | null; vendor_name: string | null; invoice_date: string | null } | null;
+  invoices: { vendor_id: string | null; vendor_name: string | null; invoice_date: string | null; vendors: { name: string } | null } | null;
 }
 
 export interface InvoiceLineFilter {
@@ -44,7 +47,7 @@ export interface InvoiceLineFilter {
 }
 
 const SELECT =
-  "id, invoice_id, unified_product_id, item_name, quantity, unit_price, list_price, amount, invoices!inner(vendor_id, vendor_name, invoice_date)";
+  "id, invoice_id, unified_product_id, item_name, quantity, unit_price, list_price, amount, invoices!inner(vendor_id, vendor_name, invoice_date, vendors(name))";
 
 const num = (v: number | string | null | undefined): number => (v == null ? 0 : Number(v) || 0);
 
@@ -77,7 +80,8 @@ export async function fetchInvoiceLines(supabase: SupabaseClient, filter: Invoic
     listPrice: num(r.list_price),
     amount: num(r.amount),
     vendorId: r.invoices?.vendor_id ?? null,
-    vendorName: r.invoices?.vendor_name ?? "",
+    vendorName: r.invoices?.vendors?.name ?? r.invoices?.vendor_name ?? "",
+    vendorNameOnInvoice: r.invoices?.vendor_name ?? "",
     invoiceDate: r.invoices?.invoice_date ?? null,
   }));
 }

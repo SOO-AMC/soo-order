@@ -9,6 +9,8 @@ import { scanInvoice, renderInvoiceThumbnail, renderInvoicePages } from "@/lib/a
 import { confirmInvoice } from "@/lib/actions/invoice-confirm-action";
 import { createScanVendor } from "@/app/(main)/price-compare/actions";
 import { setItemAlias } from "@/lib/actions/item-alias-actions";
+import { fetchVendorOptions } from "@/lib/actions/vendor-actions";
+import { buildVendorIndex, looksLikeOwnHospital, type VendorAliasLite } from "@/lib/utils/vendor-name";
 import { genId } from "@/lib/utils/uid";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import { bestMatch, nameSimilarity } from "@/lib/utils/item-match";
@@ -183,6 +185,8 @@ export function InvoiceScanPage() {
   }, [showOriginal, fileKind, uploadedPath, currentPageStart, currentPageEnd]);
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  /** 업체의 "다른 이름" (명세서 글자 → 업체 자동 고르기에 씀) */
+  const vendorAliasesRef = useRef<VendorAliasLite[]>([]);
   const [vendorProducts, setVendorProducts] = useState<VendorProduct[]>([]);
   const [aliases, setAliases] = useState<ItemNameAlias[]>([]);
   const [orders, setOrders] = useState<OrderLite[]>([]);
@@ -332,8 +336,9 @@ export function InvoiceScanPage() {
 
   // 가격/주문 참조 데이터 로드 (업체 매칭·배분용)
   const loadRefData = async () => {
-    const [priceData, ordersRes] = await Promise.all([
+    const [priceData, vendorOptions, ordersRes] = await Promise.all([
       fetchPriceCompareData(),
+      fetchVendorOptions().catch(() => []), // 업체의 "다른 이름" — 못 읽어도 이름 추측으로 동작한다
       supabase
         .from("orders")
         .select("id, item_name, quantity, received_quantity, vendor_name, requester:profiles!requester_id(full_name)")
@@ -346,6 +351,7 @@ export function InvoiceScanPage() {
     setVendorProducts(priceData.vendorProducts);
     setAliases(priceData.itemAliases);
     setOrders(orderList);
+    vendorAliasesRef.current = vendorOptions.flatMap((v) => v.aliases.map((alias) => ({ vendorId: v.id, alias })));
     return { vendors: priceData.vendors, orderList };
   };
 
@@ -362,8 +368,16 @@ export function InvoiceScanPage() {
     return { path, kind, previewUrl };
   };
 
-  const matchVendorId = (name: string, vendorsList: Vendor[]) =>
-    bestMatch(name, vendorsList, (v) => v.name, 0.4)?.item.id ?? null;
+  /** 명세서에 찍힌 업체 글자 → 업체 */
+  const matchVendorId = (name: string, vendorsList: Vendor[]) => {
+    // 1) 등록된 이름 · 다른 이름 · (주)/띄어쓰기만 다른 이름 → 확실한 일치
+    const sure = buildVendorIndex(vendorsList, vendorAliasesRef.current).resolve(name);
+    if (sure) return sure.id;
+    // 2) 우리 병원 이름을 업체로 읽은 경우 → 추측하지 않고 관리자가 고르게 둔다
+    if (looksLikeOwnHospital(name)) return null;
+    // 3) 비슷한 이름으로 추측
+    return bestMatch(name, vendorsList, (v) => v.name, 0.4)?.item.id ?? null;
+  };
 
   // 단일 명세서 (1건)
   const handleSingle = async (file: File) => {
@@ -613,7 +627,7 @@ export function InvoiceScanPage() {
     vendorsList: Vendor[],
     meta?: QueueMeta,
   ) => {
-    const matchedId = meta ? meta.vendorId : bestMatch(extracted.vendorName, vendorsList, (v) => v.name, 0.4)?.item.id ?? null;
+    const matchedId = meta ? meta.vendorId : matchVendorId(extracted.vendorName, vendorsList);
     setVendorId(matchedId);
     if (meta) {
       setUploadedPath(meta.path);

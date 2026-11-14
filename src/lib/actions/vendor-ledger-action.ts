@@ -44,6 +44,7 @@ interface InvoiceDocRow {
   total_amount: number;
   image_urls: string[] | null;
   invoice_items: { count: number }[] | null;
+  vendors: { name: string } | null;
 }
 
 /** 거래처원장 — 업체+기간별 명세서 원본 문서 목록(품목 수 포함). 관리자 전용. */
@@ -53,7 +54,7 @@ export async function fetchInvoiceDocs(opts: LedgerFilter): Promise<InvoiceDoc[]
   const invList = await fetchAllPages<InvoiceDocRow>(
     (from, to) => {
       // 품목 수는 명세서마다 DB가 세어 준다 (id 목록을 다시 보내지 않는다)
-      let q = supabase.from("invoices").select("id, vendor_name, invoice_date, total_amount, image_urls, invoice_items(count)");
+      let q = supabase.from("invoices").select("id, vendor_name, invoice_date, total_amount, image_urls, invoice_items(count), vendors(name)");
       if (opts.vendorId) q = q.eq("vendor_id", opts.vendorId);
       if (opts.start) q = q.gte("invoice_date", opts.start);
       if (opts.end) q = q.lte("invoice_date", opts.end);
@@ -64,7 +65,8 @@ export async function fetchInvoiceDocs(opts: LedgerFilter): Promise<InvoiceDoc[]
 
   return invList.map((i) => ({
     id: i.id,
-    vendorName: i.vendor_name,
+    // 연결된 업체의 표준 이름 (없으면 명세서에 찍힌 글자)
+    vendorName: i.vendors?.name ?? i.vendor_name,
     invoiceDate: i.invoice_date,
     totalAmount: Number(i.total_amount) || 0,
     itemCount: i.invoice_items?.[0]?.count ?? 0,

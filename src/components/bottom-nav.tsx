@@ -28,7 +28,7 @@ const ADMIN_TABS: Tab[] = [
 ];
 
 // 탭바를 표시할 루트 경로들
-const TAB_ROUTES = ["/orders", "/out-of-stock", "/returns", "/inspection", "/search", "/blood", "/more", "/account", "/price-compare", "/dashboard", "/members", "/logs", "/dashboard/admin", "/todo", "/invoice-scan", "/vendor-ledger", "/price-analysis", "/briefing", "/briefing/archive", "/briefing/bookmarks"];
+const TAB_ROUTES = ["/orders", "/out-of-stock", "/returns", "/inspection", "/search", "/blood", "/more", "/account", "/price-compare", "/dashboard", "/members", "/logs", "/dashboard/admin", "/todo", "/invoice-scan", "/vendor-ledger", "/vendors", "/price-analysis", "/briefing", "/briefing/archive", "/briefing/bookmarks"];
 
 export function useShowBottomNav() {
   const pathname = usePathname();

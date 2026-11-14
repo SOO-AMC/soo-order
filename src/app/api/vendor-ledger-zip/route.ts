@@ -19,6 +19,7 @@ type InvoiceRow = {
   image_urls: string[] | null;
   page_start: number | null;
   page_end: number | null;
+  vendors: { name: string } | null;
 };
 
 /** vendor 안의 한 명세서 = 한 파일 경로 + (옵션) 그 파일에서의 페이지 범위 (1-indexed, inclusive) */
@@ -53,10 +54,10 @@ export async function POST(req: NextRequest) {
     for (const ids of chunk(docIds, 100)) {
       const { data, error } = await supabase
         .from("invoices")
-        .select("id, vendor_name, invoice_date, image_urls, page_start, page_end")
+        .select("id, vendor_name, invoice_date, image_urls, page_start, page_end, vendors(name)")
         .in("id", ids);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      rows.push(...((data ?? []) as InvoiceRow[]));
+      rows.push(...((data ?? []) as unknown as InvoiceRow[]));
     }
 
     // 업체별로 명세서 항목(파일+페이지범위)을 모음. 합본 PDF면 같은 파일 + 다른 페이지 범위.
@@ -64,7 +65,8 @@ export async function POST(req: NextRequest) {
     type VGroup = { vname: string; items: InvoiceItem[] };
     const groupMap = new Map<string, VGroup>();
     for (const r of rows) {
-      const k = r.vendor_name || "(미지정)";
+      // 같은 업체가 명세서마다 다른 글자로 찍혀도 한 파일로 묶이도록 연결된 업체 이름을 쓴다
+      const k = r.vendors?.name || r.vendor_name || "(미지정)";
       const entry = groupMap.get(k) ?? { vname: k, items: [] };
       for (const path of r.image_urls ?? []) {
         if ((path.toLowerCase().split(".").pop() ?? "") !== "pdf") continue;

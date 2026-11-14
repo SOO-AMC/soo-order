@@ -18,6 +18,7 @@ import {
   Newspaper,
   NotebookPen,
   Settings,
+  Building2,
 } from "lucide-react";
 
 /** 앱 메뉴 구성. 사이드바와 빠른 실행(Ctrl K)이 같이 쓴다. 인사(연차·근무표)는 앱에서 빠짐. */
@@ -56,6 +57,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/admin", label: "대시보드", icon: LayoutDashboard },
       { href: "/invoice-scan", label: "명세서 스캔", icon: ScanLine },
       { href: "/price-compare", label: "가격 비교", icon: Scale },
+      { href: "/vendors", label: "업체 관리", icon: Building2 },
       { href: "/vendor-ledger", label: "거래처원장", icon: BookText },
       { href: "/price-analysis", label: "단가 분석", icon: TrendingUp },
       { href: "/briefing/admin", label: "논문 브리핑 관리", icon: NotebookPen },

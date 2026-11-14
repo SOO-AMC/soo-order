@@ -46,6 +46,9 @@ import { copyText } from "@/lib/utils/clipboard";
 import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 import { bulkDispatchAll, bulkDispatchIndividual } from "@/lib/actions/order-mutations";
+import { fetchVendorOptions } from "@/lib/actions/vendor-actions";
+import { VendorPicker } from "@/components/vendors/vendor-picker";
+import type { VendorOption } from "@/lib/types/vendor";
 
 /** 저장된 보기 (디자인 시스템 SavedViews) */
 type ViewKey = "all" | "novendor" | "urgent" | "photo" | "mine";
@@ -91,9 +94,20 @@ export function OrderList({
   if (initialPriceData) initPriceCache(initialPriceData);
   const { isAdmin, userId: currentUserId } = useAuth();
   // 가격표는 관리자만 미리 받는다(일반 직원 기기로 가격이 내려가지 않게)
+  /** 발주 창의 업체 고르기 목록 (등록된 업체 + 다른 이름) */
+  const [vendorOptions, setVendorOptions] = useState<VendorOption[]>([]);
   useEffect(() => {
-    if (isAdmin) prefetchPriceData();
+    if (!isAdmin) return;
+    prefetchPriceData();
+    let active = true;
+    fetchVendorOptions()
+      .then((list) => { if (active) setVendorOptions(list); })
+      .catch(() => {});
+    return () => { active = false; };
   }, [isAdmin]);
+  const addVendorOption = useCallback((v: VendorOption) => {
+    setVendorOptions((prev) => (prev.some((x) => x.id === v.id) ? prev : [...prev, v].sort((a, b) => a.name.localeCompare(b.name, "ko"))));
+  }, []);
   const [orders, setOrders] = useState<OrderWithRequester[]>(initialOrders ?? []);
   const [isLoading, setIsLoading] = useState(!initialOrders);
   const [error, setError] = useState("");
@@ -892,12 +906,13 @@ export function OrderList({
             {bulkMode === "all" ? (
               <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="bulk-vendor">업체명</Label>
-                  <Input
-                    id="bulk-vendor"
-                    placeholder="업체명 입력"
+                  <Label>업체</Label>
+                  <VendorPicker
+                    ariaLabel="업체"
                     value={bulkVendorName}
-                    onChange={(e) => setBulkVendorName(e.target.value)}
+                    onChange={setBulkVendorName}
+                    options={vendorOptions}
+                    onRegistered={addVendorOption}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -937,17 +952,18 @@ export function OrderList({
                       <Label className="text-sm font-medium">
                         {order?.item_name ?? id}
                       </Label>
-                      <Input
-                        placeholder="업체명 입력"
-                        aria-label={`${order?.item_name ?? ""} 업체명`}
+                      <VendorPicker
+                        ariaLabel={`${order?.item_name ?? ""} 업체`}
                         value={individualVendors.get(id) ?? ""}
-                        onChange={(e) =>
+                        onChange={(name) =>
                           setIndividualVendors((prev) => {
                             const next = new Map(prev);
-                            next.set(id, e.target.value);
+                            next.set(id, name);
                             return next;
                           })
                         }
+                        options={vendorOptions}
+                        onRegistered={addVendorOption}
                       />
                       <Input
                         placeholder="비고 (선택)"

@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdmin } from "@/lib/supabase/server";
+import { buildVendorIndex, looksLikeOwnHospital, vendorKey } from "@/lib/utils/vendor-name";
 import type { ConfirmInvoicePayload } from "@/lib/types/invoice";
 
 /**
@@ -14,22 +15,50 @@ export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<vo
   const { supabase, userId } = await requireAdmin();
   const now = new Date().toISOString();
 
-  // 미등록 업체면 자동 등록 (가격비교엔 숨김, 거래처원장/검색엔 노출)
+  // ── 업체 정하기 ──
+  // vName = 명세서에 찍힌 글자(OCR). 주문에는 이 글자가 아니라 업체의 표준 이름을 넣는다.
   let vendorId = payload.vendorId;
   const vName = payload.vendorName.trim();
-  if (!vendorId && vName) {
-    const { data: existing } = await supabase.from("vendors").select("id").eq("name", vName).maybeSingle();
-    if (existing) {
-      vendorId = existing.id;
-    } else {
+  const ownHospital = looksLikeOwnHospital(vName); // 공급받는자(우리 병원)를 업체로 읽은 경우
+  let canonicalName = "";
+
+  const [vendorsRes, aliasRes] = await Promise.all([
+    supabase.from("vendors").select("id, name"),
+    supabase.from("vendor_aliases").select("vendor_id, alias"), // 표가 아직 없으면 error → 빈 목록으로 둔다
+  ]);
+  const vendorList = (vendorsRes.data ?? []) as { id: string; name: string }[];
+  const index = buildVendorIndex(
+    vendorList,
+    ((aliasRes.data ?? []) as { vendor_id: string; alias: string }[]).map((a) => ({ vendorId: a.vendor_id, alias: a.alias })),
+  );
+
+  if (vendorId) {
+    canonicalName = vendorList.find((v) => v.id === vendorId)?.name ?? "";
+    // 관리자가 고른 업체와 명세서 글자가 다르면 "다른 이름"으로 기억 → 다음 명세서부터 바로 맞는다.
+    // 우리 병원 이름은 기억하지 않는다(어느 업체 명세서에서든 나올 수 있다).
+    if (canonicalName && vName && !ownHospital && vendorKey(vName) && !index.resolve(vName)) {
+      await supabase.from("vendor_aliases").insert({ vendor_id: vendorId, alias: vName });
+    }
+  } else if (vName) {
+    // 표기만 다른 이름·다른 이름으로 이미 있는 업체인지 먼저 본다 (같은 업체가 또 등록되지 않게)
+    const known = index.resolve(vName);
+    if (known) {
+      vendorId = known.id;
+      canonicalName = known.name;
+    } else if (!ownHospital) {
+      // 처음 보는 업체 → 자동 등록 (가격비교엔 숨김, 거래처원장/검색엔 노출)
       const { data: created } = await supabase
         .from("vendors")
         .insert({ name: vName, discount_rate: 0, show_in_compare: false })
         .select("id")
         .single();
       vendorId = created?.id ?? null;
+      canonicalName = vendorId ? vName : "";
     }
+    // 우리 병원 이름인데 업체를 고르지 않았으면 업체 없이 기록한다 (우리 병원이 업체로 등록되지 않게)
   }
+  /** 이 명세서로 만들어지는 주문에 넣을 업체 이름 */
+  const orderVendorName = canonicalName || (ownHospital ? "" : vName);
 
   // 배분 대상 기존 주문 정보 선조회
   const allocIds = payload.rows.flatMap((r) => r.allocations.map((a) => a.orderId));
@@ -49,7 +78,7 @@ export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<vo
       .from("orders")
       .insert({
         type: "order", status: "inspecting", item_name: itemName, quantity: qty, unit: "",
-        requester_id: userId, vendor_name: payload.vendorName,
+        requester_id: userId, vendor_name: orderVendorName,
         confirmed_quantity: qty, received_quantity: qty, invoice_received: true,
         inspected_by: userId, inspected_at: now,
         notes: "", order_notes: "", inspection_notes: "",
@@ -64,7 +93,7 @@ export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<vo
       .from("orders")
       .insert({
         type: "return", status: "return_requested", item_name: itemName, quantity: qty, unit: "",
-        requester_id: userId, vendor_name: payload.vendorName,
+        requester_id: userId, vendor_name: orderVendorName,
         return_quantity: qty, return_reason: "명세서에 있으나 주문 내역 없음(오류건)",
         return_requested_by: userId, return_requested_at: now,
         notes: "", order_notes: "", inspection_notes: "",
