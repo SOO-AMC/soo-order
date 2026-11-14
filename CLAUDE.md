@@ -113,6 +113,7 @@ git push origin main  # 배포 (GitHub → Vercel 자동 배포)
 **성능·기능 핵심 마이그레이션**(미실행 시 런타임 오류 또는 성능 저하):
 - `migrate-orders-indexes.sql`: orders(10k+ 행) 인덱스 — `(status, created_at desc)`, `(created_at desc)`, item_name/vendor_name pg_trgm GIN, requester_id. tab-counts·리스트·조회탭 풀스캔 방지.
 - `migrate-latest-vendor-rpc.sql`: `latest_vendor_by_item()` RPC — 주문탭 "품목별 최근 업체" 힌트를 **jsonb 객체 1개로** 반환(PostgREST max-rows=1000 우회). orders/page.tsx가 호출하며 구버전(행 반환)·신버전(객체) 모두 처리.
+- `migrate-display-account.sql`: 세미나실 화면 계정(`role = display`) 차단 — public 모든 표에 restrictive 정책 `block_display_account`(+profiles 자기 행만, briefing 읽기만, storage). **표를 새로 만들면 다시 실행.**
 - `migrate-invoice-page-range.sql`: invoices에 `page_start`/`page_end` 추가. 안 돌리면 명세서 확정 INSERT가 "column does not exist"로 실패.
 - **연차 3종은 순서대로 실행**: `migrate-leave-periods-grants-snapshots.sql`(주기 다회차화 + leave_grants + 스냅샷) → `migrate-leave-quota-guards.sql`(중복 유니크 + status 'scheduled') → `migrate-leave-borrowed-charge.sql`(`balance_id` 선사용). 앞 단계를 건너뛰면 뒤가 실패한다. 미실행 시 `.eq("status","active")`가 없는 컬럼을 참조해 **잔여가 전부 0으로 보인다**(에러가 아니라 조용히 틀림).
 

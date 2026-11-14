@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionProfile } from "@/lib/supabase/server";
-import { fetchTodayBriefing } from "@/lib/actions/briefing-reader-actions";
+import { fetchRecentPastBriefings, fetchTodayBriefing } from "@/lib/actions/briefing-reader-actions";
 import { RoundingScreen } from "@/components/briefing/rounding/rounding-screen";
 import { isPastPublishTime, kstDate } from "@/lib/briefing/kst";
 
@@ -17,7 +17,27 @@ export default async function BriefingRoundingPage() {
   const { session, role } = await getSessionProfile();
   if (!session) redirect("/login");
 
-  const result = await fetchTodayBriefing().catch(() => null);
+  // 쿠키에는 로그인이 남아 있어도 서버에서 이미 끝난 로그인일 수 있다(다른 기기에서 로그아웃 등).
+  // 그때는 "불러오지 못했어요"가 아니라 "다시 로그인"을 보여 준다.
+  let result: Awaited<ReturnType<typeof fetchTodayBriefing>> | null = null;
+  let sessionExpired = false;
+  try {
+    result = await fetchTodayBriefing();
+  } catch (e) {
+    sessionExpired = e instanceof Error && e.message === "Unauthorized";
+  }
   const today = result?.today ?? kstDate();
-  return <RoundingScreen today={today} issue={result?.issue ?? null} past={isPastPublishTime(today)} loadFailed={!result} isDisplayAccount={role === "display"} />;
+  // 오늘 것이 없을 때 골라서 틀 지난 브리핑 (못 불러와도 오늘 화면은 그대로)
+  const pastIssues = sessionExpired ? [] : await fetchRecentPastBriefings().catch(() => []);
+  return (
+    <RoundingScreen
+      today={today}
+      issue={result?.issue ?? null}
+      past={isPastPublishTime(today)}
+      loadFailed={!result && !sessionExpired}
+      sessionExpired={sessionExpired}
+      pastIssues={pastIssues}
+      isDisplayAccount={role === "display"}
+    />
+  );
 }

@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/workspace/feedback";
 import { describeLog } from "@/components/briefing/admin/log-text";
 import type { BriefingSettingsData } from "@/lib/actions/briefing-publish-actions";
 import { PUBLISH_HOUR, PUBLISH_MINUTE, formatIssueDate, formatKstDateTime } from "@/lib/briefing/kst";
-import { DEFAULT_INTERVAL, INTERVAL_OPTIONS } from "@/lib/briefing/rounding-loop";
+import { DEFAULT_INTERVAL, MAX_INTERVAL, MIN_INTERVAL } from "@/lib/briefing/rounding-loop";
 import { MAX_PAPERS, MIN_PAPERS } from "@/lib/briefing/types";
 
 const publishTime = `${String(PUBLISH_HOUR).padStart(2, "0")}:${String(PUBLISH_MINUTE).padStart(2, "0")}`;
@@ -51,7 +51,7 @@ export function BriefingSettings({ data }: { data: BriefingSettingsData | null }
             <Group title="운영 규칙 (고정)">
               <Row label="발행 시각" value={`매일 ${publishTime} · 한국시간(Asia/Seoul)`} hint="주말 포함. 예약한 브리핑은 이 시각부터 직원에게 보여요." />
               <Row label="하루 논문 수" value={`${MIN_PAPERS}~${MAX_PAPERS}건 (논문 1건 = 카드 1장)`} hint="수가 맞지 않거나 검수가 덜 됐으면 발행하지 않고 관리자에게 알려요. 대신 골라서 내보내지 않아요." />
-              <Row label="라운딩 화면" value={`기본 ${DEFAULT_INTERVAL}초마다 다음 논문`} hint={`${INTERVAL_OPTIONS.join("·")}초 중에서 라운딩 화면에서 바꿀 수 있어요. 그 PC에 기억돼요.`} />
+              <Row label="라운딩 화면" value={`기본 ${DEFAULT_INTERVAL}초마다 다음 논문`} hint={`라운딩 화면에서 ${MIN_INTERVAL}~${MAX_INTERVAL}초 사이로 직접 입력할 수 있어요. 그 PC에 기억돼요.`} />
             </Group>
 
             <Group title="지금 동작 방식">

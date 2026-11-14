@@ -112,6 +112,35 @@ export async function fetchBriefingByDate(issueDate: string): Promise<ReaderIssu
   return loadIssue(supabase, userId, issue as BriefingIssue);
 }
 
+/**
+ * 라운딩 화면용: 오늘 이전에 발행된 브리핑 (최근 날짜부터, 카드 포함).
+ * 오늘 발행분이 없을 때 골라서 튼다. 화면에는 그 날짜를 분명히 표시한다(오늘 것처럼 보이지 않게).
+ */
+export async function fetchRecentPastBriefings(limit = 7): Promise<ReaderIssue[]> {
+  const { supabase, userId } = await requireUser();
+  const today = kstDate();
+  const n = Math.min(Math.max(Math.trunc(limit) || 7, 1), 14);
+  const issues = must(
+    await supabase.from("briefing_issues").select("id, issue_date, published_at").lt("issue_date", today).or(visibleFilter()).order("issue_date", { ascending: false }).limit(n),
+    "지난 브리핑"
+  );
+  const list = (issues as BriefingIssue[] | null) ?? [];
+  if (list.length === 0) return [];
+  const dateOf = new Map(list.map((i) => [i.id, i.issue_date]));
+  const rows = must(
+    await supabase.from("briefing_papers").select(PAPER_COLS).in("issue_id", list.map((i) => i.id)).eq("review_status", "reviewed").order("display_order"),
+    "논문"
+  );
+  const papers = await attachUserState(supabase, userId, (rows as PaperRow[] | null) ?? [], dateOf);
+  const by = new Map<string, ReaderPaper[]>();
+  for (const p of papers) {
+    const arr = by.get(p.issue_id) ?? [];
+    arr.push(p);
+    by.set(p.issue_id, arr);
+  }
+  return list.filter((i) => by.has(i.id)).map((i) => ({ id: i.id, issue_date: i.issue_date, published_at: i.published_at, papers: by.get(i.id)! }));
+}
+
 /** 논문 1건 + 같은 날 발행된 다른 논문들(이전·다음 이동용). 발행 전이면 null. */
 export async function fetchPaperForReading(paperId: string): Promise<{ issue: ReaderIssue; index: number } | null> {
   const { supabase, userId } = await requireUser();

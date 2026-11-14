@@ -27,6 +27,8 @@ async function getActor() {
   const { supabase, userId } = await requireUser();
   const { data } = await supabase.from("profiles").select("role, full_name, position").eq("id", userId).single();
   const role = (data?.role as string) ?? "user";
+  // 세미나실 화면 전용 계정은 근무표 기능을 쓰지 못한다
+  if (role === "display") throw new Error("Forbidden");
   return {
     supabase,
     userId,

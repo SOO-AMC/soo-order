@@ -61,6 +61,8 @@ async function getViewer(
     .select("role, full_name, position")
     .eq("id", userId)
     .single();
+  // 세미나실 화면 전용 계정은 인사 기능을 쓰지 못한다 (일부 조회가 관리자 클라이언트로 돈다)
+  if (data?.role === "display") throw new Error("Forbidden");
   return {
     userId,
     fullName: data?.full_name ?? "알 수 없음",

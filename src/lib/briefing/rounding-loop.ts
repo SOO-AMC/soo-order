@@ -5,9 +5,10 @@
  * 3건이면 0→1→2→0…, 4건이면 0→1→2→3→0… 으로 끝없이 돈다.
  */
 
-/** 한 장을 보여 주는 시간 선택지 (초) */
-export const INTERVAL_OPTIONS = [15, 20, 30, 45, 60] as const;
-export const DEFAULT_INTERVAL = 30;
+/** 한 장을 보여 주는 시간 (초). 라운딩 화면에서 직접 입력한다. 기본 15초 */
+export const DEFAULT_INTERVAL = 15;
+export const MIN_INTERVAL = 5;
+export const MAX_INTERVAL = 600;
 
 /** 시계가 한 번 울릴 때 흐른 것으로 쳐 주는 최대 시간. 탭이 숨었다 돌아오거나 PC가 잠들었다 깨도 여러 장을 건너뛰지 않게 한다 */
 export const MAX_TICK_MS = 1000;
@@ -21,10 +22,14 @@ export type LoopState = {
 
 export const LOOP_START: LoopState = { index: 0, elapsedMs: 0 };
 
-/** 저장된 값이 선택지에 없으면 기본 30초 */
+/**
+ * 입력·저장된 값을 쓸 수 있는 초로.
+ * 숫자가 아니면 기본 15초, 소수는 반올림, 범위(5~600초)를 벗어나면 가장 가까운 끝값.
+ */
 export function normalizeInterval(value: unknown): number {
-  const n = typeof value === "string" ? Number(value) : value;
-  return (INTERVAL_OPTIONS as readonly number[]).includes(n as number) ? (n as number) : DEFAULT_INTERVAL;
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return DEFAULT_INTERVAL;
+  return Math.min(MAX_INTERVAL, Math.max(MIN_INTERVAL, Math.round(n)));
 }
 
 /**

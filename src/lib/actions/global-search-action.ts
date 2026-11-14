@@ -60,6 +60,8 @@ export async function globalSearch(q: string): Promise<GlobalSearchResult> {
   if (term.length < 1) return EMPTY;
 
   const { data: prof } = await supabase.from("profiles").select("role").eq("id", userId).single();
+  // 세미나실 화면 전용 계정은 검색하지 못한다 (아래에서 관리자 클라이언트로 주문을 읽기 때문)
+  if (prof?.role === "display") return EMPTY;
   const isAdmin = prof?.role === "admin";
   const like = `%${term}%`;
 

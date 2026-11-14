@@ -252,6 +252,8 @@ export type RoundingChrome = {
   /** 이 장에서 흐른 시간 비율 0~1 (자동 넘김 진행바). 없으면 진행바를 채우지 않는다 */
   elapsed?: number;
   paused?: boolean;
+  /** 머리 글자. 없으면 "오늘의 수의학 논문 브리핑" (지난 브리핑을 틀 때 바꾼다) */
+  title?: string;
 };
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -269,7 +271,7 @@ function RoundingFace({ card, chrome, className }: { card: PaperCardContent; chr
           <div className="absolute inset-x-[4cqw] top-[2.9cqw] flex items-center gap-[1.6cqw]">
             <Image src="/sooorder-brand/logo-horizontal-on-dark.webp" alt="수오더" width={1231} height={440} className="h-[2.7cqw] w-auto" />
             <span className="h-[2cqw] w-px bg-white/25" aria-hidden="true" />
-            <span className="text-[1.45cqw] font-semibold tracking-[0.04em] text-[var(--bf-gold-300)]">오늘의 수의학 논문 브리핑</span>
+            <span className="text-[1.45cqw] font-semibold tracking-[0.04em] text-[var(--bf-gold-300)]">{chrome.title ?? "오늘의 수의학 논문 브리핑"}</span>
             <span className="text-[1.3cqw] tabular-nums text-white/60">{chrome.dateLabel}</span>
             <span className="ml-auto flex items-center gap-[0.5cqw]" aria-hidden="true">
               {Array.from({ length: chrome.total }).map((_, i) => (
