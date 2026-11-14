@@ -347,10 +347,11 @@ export function RoundingScreen({
                     type="button"
                     onClick={() => setPastOpen((v) => !v)}
                     aria-expanded={pastOpen}
-                    className="mx-auto flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-white/60 hover:bg-white/10 hover:text-white"
+                    className="mx-auto flex h-12 items-center gap-2 rounded-2xl bg-white/10 px-5 text-base font-semibold text-white ring-1 ring-white/25 transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                   >
-                    <History className="size-4" aria-hidden="true" /> 지난 브리핑 틀기
-                    <ChevronDown className={cn("size-4 transition-transform", pastOpen && "rotate-180")} aria-hidden="true" />
+                    <History className="size-5" aria-hidden="true" /> 지난 브리핑 틀기
+                    <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-sm tabular-nums">{pastList.length}</span>
+                    <ChevronDown className={cn("size-5 transition-transform", pastOpen && "rotate-180")} aria-hidden="true" />
                   </button>
                   {pastOpen && <PastBriefingList issues={pastList} onPick={start} />}
                 </div>
@@ -384,10 +385,10 @@ export function RoundingScreen({
               {pastList.length === 0 && <NoPastHint />}
               {pastList.length > 0 && (
                 <div className="mt-8 w-full max-w-2xl">
-                  <p className="flex items-center justify-center gap-1.5 text-sm font-semibold text-white/70">
-                    <History className="size-4" aria-hidden="true" /> 대신 지난 브리핑 틀기
+                  <p className="flex items-center justify-center gap-2 text-lg font-bold text-white">
+                    <History className="size-5" aria-hidden="true" /> 대신 지난 브리핑 틀기
                   </p>
-                  <p className="mt-1 text-[13px] text-white/45">고른 날짜가 화면 위에 함께 표시돼요. 한 장에 {intervalSec}초씩 넘어가요.</p>
+                  <p className="mt-1 text-sm text-white/55">고른 날짜가 화면 위에 함께 표시돼요. 한 장에 {intervalSec}초씩 넘어가요.</p>
                   <PastBriefingList issues={pastList} onPick={start} />
                 </div>
               )}
@@ -504,13 +505,13 @@ function IntervalInput({
 /** 지난 브리핑 목록 — 누르면 바로 전체화면으로 그 날짜 논문을 튼다 */
 function PastBriefingList({ issues, onPick }: { issues: ReaderIssue[]; onPick: (issue: ReaderIssue) => void }) {
   return (
-    <ul className="mt-3 grid gap-2 text-left">
+    <ul className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-2">
       {issues.map((issue) => (
         <li key={issue.id}>
           <button
             type="button"
             onClick={() => onPick(issue)}
-            className="flex w-full items-center gap-4 rounded-2xl bg-white/[0.06] px-5 py-3.5 ring-1 ring-white/15 transition-colors hover:bg-white/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            className="flex w-full min-w-0 items-center gap-4 rounded-2xl bg-white/[0.08] px-5 py-3.5 text-left ring-1 ring-white/20 transition-colors hover:bg-white/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
           >
             <span className="w-32 shrink-0 text-base font-bold tabular-nums text-[var(--bf-gold-300)]">{formatIssueDate(issue.issue_date)}</span>
             <span className="min-w-0 flex-1">

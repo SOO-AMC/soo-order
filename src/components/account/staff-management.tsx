@@ -381,7 +381,14 @@ function StaffFormDialog({
           {mode === "create" && (
             <label className="grid gap-1.5">
               <FieldLabel>처음 비밀번호</FieldLabel>
-              <Input name="password" type="password" autoComplete="new-password" placeholder="숫자·영문·특수문자 조합 4자리 이상" required className="h-11 text-base" />
+              <Input
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                placeholder={role === "display" ? "세미나실 화면 계정은 1자리부터 가능" : "숫자·영문·특수문자 조합 4자리 이상"}
+                required
+                className="h-11 text-base"
+              />
             </label>
           )}
 
@@ -450,7 +457,14 @@ function ResetPasswordDialog({ member, onClose }: { member: MemberData; onClose:
           <input type="hidden" name="userId" value={member.id} />
           <label className="grid gap-1.5">
             <FieldLabel>새 비밀번호</FieldLabel>
-            <Input name="newPassword" type="password" autoComplete="new-password" placeholder="숫자·영문·특수문자 조합 4자리 이상" required className="h-11 text-base" />
+            <Input
+              name="newPassword"
+              type="password"
+              autoComplete="new-password"
+              placeholder={member.role === "display" ? "세미나실 화면 계정은 1자리부터 가능" : "숫자·영문·특수문자 조합 4자리 이상"}
+              required
+              className="h-11 text-base"
+            />
           </label>
           {state.error && (
             <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">

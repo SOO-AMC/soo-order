@@ -26,7 +26,7 @@ export async function createStaff(
     return { error: "이름과 비밀번호를 입력해주세요." };
   }
 
-  const validationError = validatePassword(password);
+  const validationError = validatePassword(password, role);
   if (validationError) {
     return { error: validationError };
   }
@@ -135,12 +135,14 @@ export async function resetStaffPassword(
     return { error: "비밀번호를 입력해주세요." };
   }
 
-  const validationError = validatePassword(newPassword);
+  const adminClient = createAdminClient();
+
+  // 세미나실 화면 계정은 1자리 비밀번호를 쓸 수 있다 → 대상의 권한을 보고 규칙을 정한다
+  const { data: target } = await adminClient.from("profiles").select("role").eq("id", userId).single();
+  const validationError = validatePassword(newPassword, target?.role as string | undefined);
   if (validationError) {
     return { error: validationError };
   }
-
-  const adminClient = createAdminClient();
 
   const { error } = await adminClient.auth.admin.updateUserById(userId, {
     password: padPassword(newPassword),
