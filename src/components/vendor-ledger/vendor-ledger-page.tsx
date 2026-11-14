@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { BookText, Download, ExternalLink, FileText, Loader2, Search } from "lucide-react";
 import type ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/client";
@@ -49,7 +50,7 @@ export function VendorLedgerPage() {
   const [lineLimit, setLineLimit] = useState(LINE_STEP);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -59,6 +60,23 @@ export function VendorLedgerPage() {
       .order("name")
       .then(({ data }) => setVendors((data as { id: string; name: string }[]) ?? []));
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 처음 열면 이번 달을 바로 보여 준다 (빈 화면에서 조회 버튼을 찾지 않게)
+  useEffect(() => {
+    let active = true;
+    const first = presetRange("thisMonth", kstToday());
+    const opts = { vendorId: null, start: first.start || null, end: first.end || null };
+    Promise.all([fetchVendorLedger(opts), fetchInvoiceDocs(opts)])
+      .then(([lines, docList]) => {
+        if (!active) return;
+        setRows(lines);
+        setDocs(docList);
+        setQueried({ vendor: "전체 업체", range: first });
+      })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "조회하지 못했어요. 잠시 뒤 다시 눌러 주세요."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   const vendorLabel = (id: string | null) => (id ? vendors.find((v) => v.id === id)?.name ?? "업체" : "전체 업체");
@@ -124,15 +142,17 @@ export function VendorLedgerPage() {
   }, [rows, lineQuery]);
   const visibleRows = useMemo(() => shownRows.slice(0, lineLimit), [shownRows, lineLimit]);
 
-  const handleSearch = async () => {
+  /** 조회. vendorOverride 를 주면 그 업체로 바로 조회한다 (월별 합계에서 업체를 눌렀을 때) */
+  const handleSearch = async (vendorOverride?: string | null) => {
+    const vid = vendorOverride === undefined ? vendorId : vendorOverride;
     setLoading(true);
     setError("");
     try {
-      const opts = { vendorId, start: range.start || null, end: range.end || null };
+      const opts = { vendorId: vid, start: range.start || null, end: range.end || null };
       const [lines, docList] = await Promise.all([fetchVendorLedger(opts), fetchInvoiceDocs(opts)]);
       setRows(lines);
       setDocs(docList);
-      setQueried({ vendor: vendorLabel(vendorId), range });
+      setQueried({ vendor: vendorLabel(vid), range });
       setLineQuery("");
       setLineLimit(LINE_STEP);
     } catch (e) {
@@ -344,7 +364,7 @@ export function VendorLedgerPage() {
           <div className="min-w-0 flex-1">
             <PeriodPicker value={range} onChange={setRange} today={today} idPrefix="ledger" />
           </div>
-          <Button onClick={handleSearch} disabled={loading} className="h-9 shrink-0 rounded-lg px-4">
+          <Button onClick={() => handleSearch()} disabled={loading} className="h-9 shrink-0 rounded-lg px-4">
             {loading ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
             {loading ? "조회하는 중…" : "조회"}
           </Button>
@@ -433,7 +453,27 @@ export function VendorLedgerPage() {
                         <tbody>
                           {monthly.vendors.map((v) => (
                             <tr key={v.vendor} className="hover:bg-muted/60">
-                              <td className="sticky left-0 border-b border-border bg-card py-2 pl-4 pr-3 text-sm font-medium">{v.vendor}</td>
+                              <td className="sticky left-0 border-b border-border bg-card py-2 pl-4 pr-3 text-sm font-medium">
+                                <button
+                                  type="button"
+                                  title={`${v.vendor}의 거래 내역 보기`}
+                                  className="text-left hover:text-primary hover:underline"
+                                  onClick={() => {
+                                    // 등록된 업체면 그 업체만 다시 조회하고, 아니면 거래 내역에서 그 이름으로 거른다
+                                    const found = vendors.find((x) => x.name === v.vendor);
+                                    setView("lines");
+                                    if (found) {
+                                      setVendorId(found.id);
+                                      handleSearch(found.id);
+                                    } else {
+                                      setLineQuery(v.vendor);
+                                      setLineLimit(LINE_STEP);
+                                    }
+                                  }}
+                                >
+                                  {v.vendor}
+                                </button>
+                              </td>
                               {monthly.months.map((m) => (
                                 <td key={m} className="whitespace-nowrap border-b border-border px-3 py-2 text-right tabular-nums text-subtle-foreground">
                                   {v.cells.has(m) ? num(v.cells.get(m)!) : <span className="text-muted-foreground">—</span>}
@@ -456,7 +496,7 @@ export function VendorLedgerPage() {
                     </div>
                   </section>
                   <p className="px-1 text-[13px] text-muted-foreground">
-                    업체 {num(monthly.vendors.length)}곳 · 명세서 거래일 기준 · 금액은 원, 할인후 기준 · 업체는 명세서에 연결된 업체 이름으로 묶어요
+                    업체 {num(monthly.vendors.length)}곳 · 업체를 누르면 그 업체의 거래 내역이 나와요 · 명세서 거래일 기준 · 금액은 원, 할인후 기준 · 업체는 명세서에 연결된 업체 이름으로 묶어요
                   </p>
                 </>
               )
@@ -491,7 +531,9 @@ export function VendorLedgerPage() {
                               <td className="whitespace-nowrap border-b border-border py-2 pl-4 tabular-nums text-subtle-foreground">{r.invoiceDate ?? "—"}</td>
                               {multiVendor && <td className="truncate border-b border-border px-3 py-2 text-subtle-foreground">{r.vendorName}</td>}
                               <td className="truncate border-b border-border px-3 py-2 text-sm font-medium" title={r.itemName}>
-                                {r.itemName}
+                                <Link href={`/items?name=${encodeURIComponent(r.itemName)}`} className="hover:text-primary hover:underline" title={`${r.itemName} — 가격 추이·주문 이력 보기`}>
+                                  {r.itemName}
+                                </Link>
                               </td>
                               <td className="border-b border-border px-3 py-2 text-right tabular-nums">{num(r.quantity)}</td>
                               <td className="border-b border-border px-3 py-2 text-right tabular-nums text-subtle-foreground">{num(r.unitPrice)}</td>

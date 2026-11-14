@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useState, useMemo, useCallback, useEffect } from "react";
-import { Upload, FileDown, ChevronUp, Pencil, Plus, Settings2 } from "lucide-react";
+import Link from "next/link";
+import { Upload, FileDown, ChevronUp, Pencil, Plus, Settings2, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -32,6 +33,8 @@ interface ComparisonTableProps {
   vendorProducts: VendorProduct[];
   unifiedProducts: UnifiedProduct[];
   onDataChange: () => void;
+  /** 업체×품목별 가장 최근 명세서 단가 ("업체id|표준품목id"). 저장된 가격이 실제로 산 값과 다른지 표시한다 */
+  invoicePrices?: Record<string, { price: number; date: string }>;
 }
 
 interface ComparisonRow {
@@ -55,6 +58,7 @@ export function ComparisonTable({
   vendorProducts,
   unifiedProducts,
   onDataChange,
+  invoicePrices,
 }: ComparisonTableProps) {
   const { isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState(() =>
@@ -1031,16 +1035,30 @@ export function ComparisonTable({
                               <span className="flex items-center gap-1.5">
                                 {(categoryFilter === "all" || categoryFilter === "empty") && categoryTag(row.unified.notes)}
                                 <span className="font-medium">{row.unified.name}</span>
+                                {isAdmin && (
+                                  <Link
+                                    href={`/items?product=${row.unified.id}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    title="가격 추이·주문 이력 보기"
+                                    aria-label={`${row.unified.name} 가격 추이·주문 이력 보기`}
+                                    className="ml-1 grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+                                  >
+                                    <TrendingUp className="size-3.5" />
+                                  </Link>
+                                )}
                               </span>
                             </td>
                             {vendors.map((vendor) => {
                               const entry = row.prices.get(vendor.id);
                               const shown = cellValue(entry?.price ?? null, vendor.discount_rate ?? 0);
                               const isMin = dmin != null && shown === dmin;
+                              // 저장된 가격이 그 업체의 가장 최근 명세서 단가와 다른가
+                              const inv = invoicePrices?.[`${vendor.id}|${row.unified.id}`];
+                              const stale = !!inv && entry?.price != null && inv.price !== entry.price;
                               return (
                                 <td
                                   key={vendor.id}
-                                  title={entry?.productName}
+                                  title={stale ? `최근 명세서(${inv.date}) 단가는 ${inv.price.toLocaleString()}원이에요 · 저장된 값 ${entry!.price!.toLocaleString()}원` : entry?.productName}
                                   className={`border-b border-border px-3 py-2.5 text-right tabular-nums ${
                                     isMin
                                       ? "bg-status-done-bg font-bold text-status-done"
@@ -1050,6 +1068,7 @@ export function ComparisonTable({
                                   }`}
                                 >
                                   {shown != null ? shown.toLocaleString() : "-"}
+                                  {stale && <span className="ml-1 align-top text-[10px] text-status-ask" aria-label="최근 명세서 단가와 다름">●</span>}
                                 </td>
                               );
                             })}
@@ -1071,7 +1090,7 @@ export function ComparisonTable({
             </div>
           </div>
           <p className="hidden px-1 text-xs text-muted-foreground lg:block">
-            초록 칸 = 그 품목의 최저가 · 업체 칸에 마우스를 올리면 업체 쪽 품목명이 보여요 · 추가·수정 칸에는 할인전(업체 정가)을 넣어요. 할인후는 자동 계산
+            초록 칸 = 그 품목의 최저가 · 주황 점(●) = 최근 명세서 단가와 다른 가격(마우스를 올리면 명세서 단가) · 업체 칸에 마우스를 올리면 업체 쪽 품목명이 보여요 · 추가·수정 칸에는 할인전(업체 정가)을 넣어요. 할인후는 자동 계산
             {isAdmin ? " · 행을 누르면 바로 수정" : ""}
           </p>
         </>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, PackageSearch, Search } from "lucide-react";
+import { AlertTriangle, PackageSearch, PiggyBank, Search } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { BackButton } from "@/components/back-button";
 import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
@@ -11,6 +11,9 @@ import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { cn } from "@/lib/utils";
 import { toKSTDateString } from "@/lib/utils/format";
 import { fetchItemOverview, searchItems } from "@/lib/actions/item-overview-action";
+import { fetchPriceAnalysis } from "@/lib/actions/price-analysis-action";
+import { compareRanges, kstToday } from "@/lib/utils/period";
+import type { PriceAnalysisRow } from "@/lib/types/invoice";
 import type { OrderStatus } from "@/lib/types/order";
 import type { ItemOverview, ItemPricePoint } from "@/lib/types/item-overview";
 
@@ -87,6 +90,18 @@ export function ItemOverviewPage({ productId, name }: { productId: string | null
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const hasTarget = !!(productId || name);
+  /** 첫 화면(품목을 고르기 전)에 보여 줄 "지난달 → 이번 달" 단가 변화 */
+  const [changes, setChanges] = useState<PriceAnalysisRow[] | null>(null);
+
+  useEffect(() => {
+    if (hasTarget) return;
+    let active = true;
+    const r = compareRanges("mom", kstToday());
+    fetchPriceAnalysis({ aStart: r.a.start, aEnd: r.a.end, bStart: r.b.start, bEnd: r.b.end, vendorId: null })
+      .then((res) => { if (active) setChanges(res.rows); })
+      .catch(() => { if (active) setChanges([]); });
+    return () => { active = false; };
+  }, [hasTarget]);
 
   useEffect(() => {
     if (!hasTarget) return;
@@ -175,9 +190,48 @@ export function ItemOverviewPage({ productId, name }: { productId: string | null
         </div>
 
         {!hasTarget ? (
-          <div className="rounded-xl bg-card ring-1 ring-border">
-            <EmptyState icon={PackageSearch} title="약품을 찾아 보세요" description="가격이 어떻게 변했는지, 언제 얼마에 샀는지 한 화면에서 볼 수 있어요." />
-          </div>
+          <>
+            <div className="rounded-xl bg-card ring-1 ring-border">
+              <EmptyState icon={PackageSearch} title="약품을 찾아 보세요" description="가격이 어떻게 변했는지, 언제 얼마에 샀는지 한 화면에서 볼 수 있어요." />
+            </div>
+            {changes == null ? (
+              <ListSkeleton rows={4} />
+            ) : (
+              (() => {
+                // 금액 영향 = 단가 변화 × 이번 달에 산 수량. 급변(확인 필요)한 것은 따로 보여 준다
+                const impact = (r: PriceAnalysisRow) => r.deltaAbs * r.bQty;
+                const ok = changes.filter((r) => !r.suspect);
+                const groups = [
+                  { title: "지난달보다 오른 품목", tone: "text-status-late", rows: ok.filter((r) => r.deltaAbs > 0).sort((x, y) => impact(y) - impact(x)).slice(0, 6) },
+                  { title: "지난달보다 내린 품목", tone: "text-status-done", rows: ok.filter((r) => r.deltaAbs < 0).sort((x, y) => impact(x) - impact(y)).slice(0, 6) },
+                  { title: "단가가 급변해서 확인이 필요한 품목", tone: "text-status-ask", rows: changes.filter((r) => r.suspect).slice(0, 6) },
+                ].filter((g) => g.rows.length > 0);
+                if (groups.length === 0) return null;
+                return (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {groups.map((g) => (
+                      <section key={g.title} className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+                        <h3 className="border-b border-border bg-muted px-4 py-2.5 text-[13px] font-semibold text-subtle-foreground">{g.title}</h3>
+                        {g.rows.map((r, i) => (
+                          <Link
+                            key={r.key}
+                            href={r.unifiedProductId ? `/items?product=${r.unifiedProductId}` : `/items?name=${encodeURIComponent(r.name)}`}
+                            className={cn("flex items-baseline gap-3 px-4 py-2.5 hover:bg-muted/60", i > 0 && "border-t border-border")}
+                          >
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.name}</span>
+                            <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
+                              {won(r.aPrice)} → {won(r.bPrice)}
+                            </span>
+                            <span className={cn("w-16 shrink-0 text-right text-sm font-bold tabular-nums", g.tone)}>{r.deltaPct == null ? "—" : pct(r.deltaPct)}</span>
+                          </Link>
+                        ))}
+                      </section>
+                    ))}
+                  </div>
+                );
+              })()
+            )}
+          </>
         ) : error ? (
           <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">{error}</p>
         ) : !data || !stats ? (
@@ -229,6 +283,21 @@ export function ItemOverviewPage({ productId, name }: { productId: string | null
                 hint={stats.lastOrderAt ? `마지막 주문 ${toKSTDateString(stats.lastOrderAt)}` : undefined}
               />
             </div>
+
+            {data.cheaper && (
+              <p className="flex items-start gap-2.5 rounded-xl bg-status-done-bg px-4 py-3 text-sm text-status-done">
+                <PiggyBank className="mt-0.5 size-5 shrink-0" />
+                <span>
+                  <b className="font-semibold">
+                    {data.cheaper.vendor}이(가) {won(data.cheaper.lastPrice - data.cheaper.price)} 더 싸요
+                  </b>{" "}
+                  ({Math.round(((data.cheaper.lastPrice - data.cheaper.price) / data.cheaper.lastPrice) * 100)}%)
+                  <span className="mt-0.5 block text-[13px] text-subtle-foreground">
+                    최근에는 {data.cheaper.lastVendor}에서 샀어요({won(data.cheaper.lastPrice)}). {data.cheaper.vendor}의 가격표는 {won(data.cheaper.price)}이에요. 가격표 기준이라 재고와 배송 조건은 확인해 주세요.
+                  </span>
+                </span>
+              </p>
+            )}
 
             {data.currentPrices.length > 0 && (
               <section className="rounded-xl bg-card p-4 ring-1 ring-border">

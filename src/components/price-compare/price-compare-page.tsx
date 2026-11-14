@@ -9,6 +9,7 @@ import { ComparisonTable } from "./comparison-table";
 import { AliasManagement } from "./alias-management";
 import { ItemCleanup } from "./item-cleanup";
 import { fetchPriceCompareData } from "@/lib/actions/price-compare-action";
+import { fetchLatestInvoicePrices } from "@/lib/actions/product-link-actions";
 import type {
   Vendor,
   VendorProduct,
@@ -29,6 +30,15 @@ export function PriceComparePage() {
   const [data, setData] = useState<PriceCompareData | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("compare");
+  /** 업체×품목별 최근 명세서 단가 — 표가 뜬 뒤에 따로 읽는다(없어도 표는 동작한다) */
+  const [invoicePrices, setInvoicePrices] = useState<Record<string, { price: number; date: string }>>({});
+  useEffect(() => {
+    let active = true;
+    fetchLatestInvoicePrices()
+      .then((r) => { if (active) setInvoicePrices(r); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const loadData = useCallback(() => {
     fetchPriceCompareData()
@@ -83,6 +93,7 @@ export function PriceComparePage() {
               vendorProducts={data.vendorProducts}
               unifiedProducts={data.unifiedProducts}
               onDataChange={loadData}
+              invoicePrices={invoicePrices}
             />
           ) : tab === "cleanup" ? (
             <ItemCleanup

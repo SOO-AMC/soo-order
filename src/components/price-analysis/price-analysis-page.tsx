@@ -12,7 +12,7 @@ import { BackButton } from "@/components/back-button";
 import { UnderlineTabs } from "@/components/list-parts";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SavedViews } from "@/components/workspace/saved-views";
-import { FilterBar, SearchField } from "@/components/workspace/filter-bar";
+import { FilterBar, SearchField, Segmented } from "@/components/workspace/filter-bar";
 import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
 import { PeriodChip, DateRangeInputs } from "@/components/workspace/period-picker";
 import { COMPARE_LABEL, compareRanges, kstToday, rangeText, type ComparePreset, type DateRange } from "@/lib/utils/period";
@@ -86,9 +86,11 @@ export function PriceAnalysisPage() {
 
   const [result, setResult] = useState<PriceAnalysisResult | null>(null);
   const [resultLabel, setResultLabel] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [rowView, setRowView] = useState<RowView>("all");
+  /** 줄 순서: impact = 이번 기간에 가격 변화로 더 낸(덜 낸) 금액이 큰 순, pct = 변화율 순 */
+  const [sortBy, setSortBy] = useState<"impact" | "pct">("impact");
   const [rowQuery, setRowQuery] = useState("");
 
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -110,6 +112,21 @@ export function PriceAnalysisPage() {
       .then(({ data }) => setVendors((data as { id: string; name: string }[]) ?? []));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 처음 열면 "지난달 → 이번 달"을 바로 보여 준다 (빈 화면에서 분석 버튼을 찾지 않게)
+  useEffect(() => {
+    let active = true;
+    const r = compareRanges("mom", today);
+    fetchPriceAnalysis({ aStart: r.a.start, aEnd: r.a.end, bStart: r.b.start, bEnd: r.b.end, vendorId: null })
+      .then((res) => {
+        if (!active) return;
+        setResult(res);
+        setResultLabel(`전체 업체 · A ${rangeText(r.a)}  →  B ${rangeText(r.b)}`);
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [today]);
 
   const vendorOptions = vendors.map((v) => ({ value: v.id, label: v.name, keywords: v.name }));
   const vendorName = vendorId ? vendors.find((v) => v.id === vendorId)?.name ?? "업체" : "전체 업체";
@@ -202,8 +219,12 @@ export function PriceAnalysisPage() {
     else if (rowView === "down") rows = rows.filter((r) => r.deltaAbs < 0);
     else if (rowView === "same") rows = rows.filter((r) => r.deltaAbs === 0);
     const q = rowQuery.trim().toLowerCase();
-    return q ? rows.filter((r) => r.name.toLowerCase().includes(q)) : rows;
-  }, [result, rowView, rowQuery]);
+    if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q));
+    // 금액 영향: 단가 변화 × 이번 기간에 산 수량 = 가격이 바뀌어서 더 낸(덜 낸) 돈
+    // 급변(확인 필요)한 줄은 금액을 믿을 수 없으므로 맨 아래로 보낸다
+    if (sortBy === "impact") rows = [...rows].sort((x, y) => Number(x.suspect) - Number(y.suspect) || y.deltaAbs * y.bQty - x.deltaAbs * x.bQty);
+    return rows;
+  }, [result, rowView, rowQuery, sortBy]);
 
   const trendStats = useMemo(() => {
     if (!trendData || trendData.length === 0) return null;
@@ -362,6 +383,15 @@ export function PriceAnalysisPage() {
                           { value: "same", label: "그대로", count: viewCounts.same },
                         ]}
                       />
+                      <Segmented<"impact" | "pct">
+                        ariaLabel="줄 순서"
+                        value={sortBy}
+                        onValueChange={setSortBy}
+                        items={[
+                          { value: "impact", label: "금액 영향 큰 순" },
+                          { value: "pct", label: "변화율 순" },
+                        ]}
+                      />
                       <FilterBar>
                         <SearchField id="pa-q" value={rowQuery} onChange={setRowQuery} placeholder="품목 검색" className="lg:w-64" />
                       </FilterBar>
@@ -402,6 +432,12 @@ export function PriceAnalysisPage() {
                                         {row.deltaAbs > 0 ? "+" : ""}
                                         {row.deltaAbs.toLocaleString()}
                                       </span>
+                                      {row.deltaAbs * row.bQty !== 0 && (
+                                        <span className="block text-xs font-normal text-muted-foreground" title="단가 변화 × 이번 기간에 산 수량">
+                                          이번 기간 {row.deltaAbs * row.bQty > 0 ? "+" : ""}
+                                          {(row.deltaAbs * row.bQty).toLocaleString()}원
+                                        </span>
+                                      )}
                                     </td>
                                     <td className="border-b border-border px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                                       {row.aQty} · {row.bQty}

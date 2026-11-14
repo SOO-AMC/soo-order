@@ -84,6 +84,8 @@ export async function fetchPriceAnalysis(opts: {
   for (const [key, g] of groups) {
     const aPrice = g.aQty > 0 ? Math.round(g.aSum / g.aQty) : null;
     const bPrice = g.bQty > 0 ? Math.round(g.bSum / g.bQty) : null;
+    // 단가가 0 이하인 줄(마일리지 차감·할인·반품 같은 줄)은 약품이 아니므로 단가 비교에서 뺀다
+    if ((aPrice != null && aPrice <= 0) || (bPrice != null && bPrice <= 0)) continue;
     if (aPrice != null && bPrice != null) {
       const deltaAbs = bPrice - aPrice;
       const deltaPct = aPrice > 0 ? (deltaAbs / aPrice) * 100 : null;

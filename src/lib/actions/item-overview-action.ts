@@ -48,7 +48,7 @@ export async function fetchItemOverview(opts: { productId?: string | null; name?
     if (!error && data) product = data as { id: string; name: string; notes: string };
   }
   const title = product?.name ?? name ?? "";
-  if (!title) return { ready: true, title: "", product: null, currentPrices: [], trend: [], orders: [], names: [], stats: null };
+  if (!title) return { ready: true, title: "", product: null, currentPrices: [], trend: [], orders: [], names: [], cheaper: null, stats: null };
 
   // 2) 지금 업체별 가격 · 명세서 단가 추이 · 주문 이력
   const [pricesRes, lines, historyRes] = await Promise.all([
@@ -101,6 +101,19 @@ export async function fetchItemOverview(opts: { productId?: string | null; name?
     };
   });
 
+  // 더 싼 업체 안내: 최근에 산 업체의 가격표 값보다 3% 이상 싼 업체가 있는가.
+  // 한 업체에 가격이 둘 이상이면(포장이 섞였을 수 있다) 비교가 믿을 수 없으므로 안내하지 않는다.
+  let cheaper: ItemOverview["cheaper"] = null;
+  const mixedPrices = new Set(currentPrices.map((p) => p.vendor)).size < currentPrices.length;
+  const lastBought = orders.find((o) => o.vendor && o.status !== "pending" && o.status !== "out_of_stock");
+  if (!mixedPrices && lastBought && currentPrices.length >= 2) {
+    const cheapest = currentPrices[0];
+    const lastPrice = currentPrices.find((p) => p.vendor === lastBought.vendor)?.price ?? lastBought.price;
+    if (lastPrice && cheapest.vendor !== lastBought.vendor && lastPrice - cheapest.price >= lastPrice * 0.03) {
+      cheaper = { vendor: cheapest.vendor, price: cheapest.price, lastVendor: lastBought.vendor, lastPrice };
+    }
+  }
+
   const first = good[0]?.unitPrice ?? null;
   const last = good[good.length - 1]?.unitPrice ?? null;
   const prices = good.map((g) => g.unitPrice);
@@ -113,6 +126,7 @@ export async function fetchItemOverview(opts: { productId?: string | null; name?
     trend,
     orders,
     names: history.names ?? [],
+    cheaper,
     stats: {
       orderCount: history.total ?? 0,
       totalQuantity: history.total_quantity ?? 0,

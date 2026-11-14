@@ -38,6 +38,8 @@ export interface ItemOverview {
   orders: ItemOrderRow[];
   /** 이 품목으로 묶인 주문에 실제로 적힌 이름들 */
   names: { name: string; n: number }[];
+  /** 최근에 산 업체보다 가격표가 더 싼 업체가 있을 때 (가격표 기준 3% 이상 차이) */
+  cheaper: { vendor: string; price: number; lastVendor: string; lastPrice: number } | null;
   stats: {
     orderCount: number;
     totalQuantity: number;
