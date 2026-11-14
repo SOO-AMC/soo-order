@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ItemNameAutocomplete } from "./item-name-autocomplete";
+import { LastOrderHint } from "./last-order-hint";
 import { PhotoPicker, photoItemsFromPaths } from "./photo-picker";
 import type { PhotoItem } from "./photo-picker";
 import { itemNamesLooselyMatch } from "@/lib/utils/normalize-item-name";
@@ -123,6 +124,17 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, s
     <form onSubmit={handleSubmit} className="flex flex-col gap-2 pb-28 lg:gap-3 lg:pb-0">
       <Question title="무엇이 필요하세요?" hint="품목 이름 일부만 써도 지난 주문에서 찾아요">
         <ItemNameAutocomplete value={itemName} onChange={setItemName} />
+        {/* 새 주문일 때만: 지난번 주문 + 최저가 (수정 화면에선 자기 자신이 "지난번"이 되므로 뺌) */}
+        {!isEdit && (
+          <LastOrderHint
+            itemName={itemName}
+            onFill={(q, u) => {
+              setQuantity(String(q));
+              setUnit(u);
+              setCustomUnit(!!u && !COMMON_UNITS.includes(u));
+            }}
+          />
+        )}
         {duplicateMatches.length > 0 && (
           <div className="rounded-xl bg-status-ask-bg px-3.5 py-3 text-[13px]">
             <p className="flex items-center gap-1.5 font-semibold text-status-ask">
