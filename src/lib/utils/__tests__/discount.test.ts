@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyDiscount, parsePriceInput, priceToSave, reverseDiscount } from "../discount";
+import { applyDiscount, discountRelations, parsePriceInput, priceToSave, reverseDiscount } from "../discount";
 
 describe("할인율 계산", () => {
   it("할인전 → 할인후", () => {
@@ -50,5 +50,22 @@ describe("수정 화면 저장값", () => {
 
   it("값을 지우면 가격 없음으로 저장한다", () => {
     expect(priceToSave("", "3315", 15)).toEqual({ changed: true, price: null });
+  });
+});
+
+describe("쌓인 가격들의 할인 관계", () => {
+  it("정가 → 할인후 → 두 번 할인된 값 (실제 기록: 세다젝트, 우리엔팜 15%)", () => {
+    const rel = discountRelations([2395, 2818, 3315], 15);
+    expect(rel.get(2818)).toEqual({ of: 3315 });
+    expect(rel.get(2395)).toEqual({ of: 2818 });
+    expect(rel.has(3315)).toBe(false);
+  });
+  it("정가와 할인후 둘뿐 (노비박코로나, 15%)", () => {
+    expect([...discountRelations([1727, 2032], 15)]).toEqual([[1727, { of: 2032 }]]);
+  });
+  it("관계없는 값 · 가격 없음 · 할인율 0", () => {
+    expect(discountRelations([9775, 182487], 15).size).toBe(0);
+    expect(discountRelations([null, 1, 1000, 20000], 0).size).toBe(0);
+    expect(discountRelations([null, 2618, 3154], 17).get(2618)).toEqual({ of: 3154 });
   });
 });

@@ -42,3 +42,20 @@ export function priceToSave(
   if (nowNum === parsePriceInput(before)) return { changed: false }; // "3,315" ↔ "3315" 같은 표기 차이
   return { changed: true, price: applyDiscount(nowNum, rate) };
 }
+
+/**
+ * 한 업체·한 품목에 가격이 여러 개 쌓였을 때, 값들 사이의 할인 관계를 풀어 준다.
+ * 예: 할인율 15% 에서 3,315 · 2,818 · 2,395 → 2,818 은 "3,315 의 할인후", 2,395 는 "2,818 을 한 번 더 할인한 값".
+ * (예전 저장 방식이 정가·할인후·두 번 할인된 값을 따로따로 남겼다)
+ * 어느 값이 맞는지 정하지는 않는다 — 관계만 알려 주고, 판단은 명세서 단가와 함께 사람이 한다.
+ */
+export function discountRelations(prices: (number | null)[], rate: number): Map<number, { of: number }> {
+  const out = new Map<number, { of: number }>();
+  if (!rate) return out;
+  const set = new Set(prices.filter((p): p is number => p != null && p > 0));
+  for (const q of set) {
+    const d = applyDiscount(q, rate);
+    if (d != null && d !== q && set.has(d) && !out.has(d)) out.set(d, { of: q });
+  }
+  return out;
+}

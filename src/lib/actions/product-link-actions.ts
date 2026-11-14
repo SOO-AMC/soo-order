@@ -2,6 +2,8 @@
 
 import { requireAdmin } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/utils/activity-log";
+import { chunk, fetchAllPages } from "@/lib/supabase/paginate";
+import { fetchInvoiceLines } from "@/lib/invoices/lines";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import { bestMatchSameSpec, doseConflict } from "@/lib/utils/item-spec";
 import type {
@@ -236,4 +238,145 @@ export async function fetchHiddenItemNames(): Promise<HiddenItemName[]> {
     throw new Error(`숨긴 이름을 불러오지 못했어요: ${error.message}`);
   }
   return ((data ?? []) as { item_key: string; name: string }[]).map((r) => ({ key: r.item_key, name: r.name }));
+}
+
+/**
+ * 업체 품목을 지금 묶여 있는 표준 품목에서 떼어 낸다 (지우지 않는다 — "비교표에 없는 업체 품목"으로 돌아간다).
+ * 그 업체의 같은 이름 명세서 줄도 함께 떼어 내서, 나중에 다른 표준 품목에 연결하면 단가 추이가 따라간다.
+ */
+async function detach(admin: Admin, vendorProductId: string): Promise<ProductLinkResult<{ productName: string; invoiceLines: number }>> {
+  const { supabase } = admin;
+  const { data: vp, error } = await supabase
+    .from("vendor_products")
+    .select("id, vendor_id, product_name, unified_product_id")
+    .eq("id", vendorProductId)
+    .maybeSingle();
+  if (error || !vp) return fail("품목을 찾을 수 없어요.");
+  if (!vp.unified_product_id) return ok({ productName: vp.product_name ?? "", invoiceLines: 0 });
+
+  const { error: upErr } = await supabase.from("vendor_products").update({ unified_product_id: null }).eq("id", vendorProductId);
+  if (upErr) return fail(`떼어 내지 못했어요: ${upErr.message}`);
+
+  // 명세서 줄: 그 업체의 명세서 중 이 이름으로 적히고 같은 표준 품목에 연결된 줄
+  const invoices = await fetchAllPages<{ id: string }>(
+    (from, to) => supabase.from("invoices").select("id").eq("vendor_id", vp.vendor_id).order("id").range(from, to),
+    { label: "명세서 목록" },
+  );
+  let invoiceLines = 0;
+  for (const ids of chunk(invoices.map((i) => i.id), 100)) {
+    const { data: updated, error: lineErr } = await supabase
+      .from("invoice_items")
+      .update({ unified_product_id: null })
+      .in("invoice_id", ids)
+      .eq("unified_product_id", vp.unified_product_id)
+      .eq("item_name", vp.product_name)
+      .select("id");
+    if (lineErr) return fail(`품목은 떼어 냈지만 명세서 줄을 옮기지 못했어요: ${lineErr.message}`);
+    invoiceLines += updated?.length ?? 0;
+  }
+  return ok({ productName: vp.product_name ?? "", invoiceLines });
+}
+
+/** 업체 품목을 표준 품목에서 떼어 낸다 → "비교표에 없는 업체 품목" 목록으로 돌아간다 */
+export async function detachVendorProduct(vendorProductId: string): Promise<ProductLinkResult<{ productName: string; invoiceLines: number }>> {
+  const admin = await requireAdmin();
+  const res = await detach(admin, vendorProductId);
+  if (res.ok) {
+    void logActivity({
+      userId: admin.userId, userName: admin.userName, category: "price", action: "vendor_product_detach",
+      description: `업체 품목을 표준 품목에서 떼어 냄: ${res.data.productName}`,
+      metadata: { vendorProductId, invoiceLines: res.data.invoiceLines },
+    });
+  }
+  return res;
+}
+
+/**
+ * 업체 품목을 다른 표준 품목으로 옮긴다 (포장이 다른 품목이 한 표준 품목에 잘못 묶인 경우).
+ * 옮길 곳에 같은 업체의 가격이 이미 있으면 아무것도 바꾸지 않고 `conflict` 를 돌려준다 → mode 로 다시 부른다.
+ */
+export async function moveVendorProduct(
+  vendorProductId: string,
+  targetProductId: string,
+  mode?: "replace" | "keep",
+): Promise<ProductLinkResult<LinkVendorProductResult>> {
+  const admin = await requireAdmin();
+  const { supabase } = admin;
+  const { data: vp } = await supabase.from("vendor_products").select("vendor_id, unit_price, unified_product_id").eq("id", vendorProductId).maybeSingle();
+  if (!vp) return fail("품목을 찾을 수 없어요.");
+  if (vp.unified_product_id === targetProductId) return fail("이미 그 표준 품목에 묶여 있어요.");
+
+  // 떼어 내기 전에 먼저 확인한다 — 물어봐야 하는 상황이면 아무것도 바꾸지 않는다
+  if (!mode) {
+    const { data: existing } = await supabase
+      .from("vendor_products")
+      .select("unit_price")
+      .eq("vendor_id", vp.vendor_id)
+      .eq("unified_product_id", targetProductId)
+      .limit(1);
+    if (existing && existing.length > 0) {
+      return ok({ status: "conflict", existingPrice: existing[0].unit_price == null ? null : Number(existing[0].unit_price), newPrice: vp.unit_price == null ? null : Number(vp.unit_price) });
+    }
+  }
+
+  const detached = await detach(admin, vendorProductId);
+  if (!detached.ok) return detached;
+  return linkVendorProductToStandard(vendorProductId, targetProductId, mode);
+}
+
+/** 업체 품목을 새 표준 품목으로 옮긴다 */
+export async function moveVendorProductToNewStandard(vendorProductId: string, productName: string, notes: string): Promise<ProductLinkResult<LinkVendorProductResult>> {
+  const admin = await requireAdmin();
+  const created = await createStandardProduct(admin, productName, notes);
+  if (!created.ok) return created;
+  return moveVendorProduct(vendorProductId, created.data.id);
+}
+
+/**
+ * 한 업체·한 표준 품목에 가격이 여러 개 쌓였을 때, 고른 줄 하나만 남기고 나머지를 지운다.
+ * 지운 값은 활동 로그에 남긴다(되살릴 때 참고).
+ */
+export async function keepOnlyVendorPrice(vendorProductId: string): Promise<ProductLinkResult<{ removed: number; kept: number | null }>> {
+  const admin = await requireAdmin();
+  const { supabase } = admin;
+  const { data: keep } = await supabase
+    .from("vendor_products")
+    .select("id, vendor_id, unified_product_id, product_name, unit_price")
+    .eq("id", vendorProductId)
+    .maybeSingle();
+  if (!keep) return fail("품목을 찾을 수 없어요.");
+  if (!keep.unified_product_id) return fail("표준 품목에 연결되지 않은 품목이에요.");
+
+  const { data: removed, error } = await supabase
+    .from("vendor_products")
+    .delete()
+    .eq("vendor_id", keep.vendor_id)
+    .eq("unified_product_id", keep.unified_product_id)
+    .neq("id", vendorProductId)
+    .select("product_name, unit_price");
+  if (error) return fail(`지우지 못했어요: ${error.message}`);
+
+  const kept = keep.unit_price == null ? null : Number(keep.unit_price);
+  void logActivity({
+    userId: admin.userId, userName: admin.userName, category: "price", action: "vendor_price_keep_one",
+    description: `가격 정리: ${keep.product_name} — ${kept == null ? "가격 없음" : `${kept.toLocaleString()}원`}만 남기고 ${removed?.length ?? 0}줄 지움`,
+    metadata: { vendorProductId, vendorId: keep.vendor_id, unifiedProductId: keep.unified_product_id, kept, removed: removed ?? [] },
+  });
+  return ok({ removed: removed?.length ?? 0, kept });
+}
+
+/**
+ * 업체 × 표준 품목별 가장 최근 명세서 단가. 가격이 여러 개 쌓인 품목에서 "어느 값이 맞는지" 판단하는 근거.
+ * 열쇠는 "업체id|표준품목id".
+ */
+export async function fetchLatestInvoicePrices(): Promise<Record<string, { price: number; date: string }>> {
+  const { supabase } = await requireAdmin();
+  const lines = await fetchInvoiceLines(supabase);
+  const out: Record<string, { price: number; date: string }> = {};
+  for (const l of lines) {
+    if (!l.vendorId || !l.unifiedProductId || !l.invoiceDate || !(l.unitPrice > 0)) continue;
+    const key = `${l.vendorId}|${l.unifiedProductId}`;
+    if (!out[key] || l.invoiceDate > out[key].date) out[key] = { price: l.unitPrice, date: l.invoiceDate };
+  }
+  return out;
 }

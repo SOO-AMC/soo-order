@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Check, ChevronDown, EyeOff, FileText, Link2, Loader2, PackagePlus, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, ChevronDown, EyeOff, FileText, Link2, Loader2, PackagePlus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,9 +11,15 @@ import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
 import { cn } from "@/lib/utils";
 import { toKSTDateString } from "@/lib/utils/format";
 import { bestMatchSameSpec } from "@/lib/utils/item-spec";
+import { discountRelations } from "@/lib/utils/discount";
 import {
   createStandardFromVendorProduct,
   createStandardProductForName,
+  detachVendorProduct,
+  fetchLatestInvoicePrices,
+  keepOnlyVendorPrice,
+  moveVendorProduct,
+  moveVendorProductToNewStandard,
   fetchHiddenItemNames,
   fetchItemCleanup,
   hideItemName,
@@ -32,9 +38,9 @@ interface ItemCleanupProps {
   onChange: () => void;
 }
 
-type View = "names" | "vendorProducts";
-type Target = { kind: "name"; item: UnlinkedItemName } | { kind: "vp"; vp: VendorProduct };
-type Conflict = { vpId: string; productId: string; productName: string; existingPrice: number | null; newPrice: number | null };
+type View = "names" | "vendorProducts" | "mixed";
+type Target = { kind: "name"; item: UnlinkedItemName } | { kind: "vp"; vp: VendorProduct } | { kind: "move"; vp: VendorProduct };
+type Conflict = { vpId: string; productId: string; productName: string; existingPrice: number | null; newPrice: number | null; move?: boolean };
 
 const num = (n: number) => n.toLocaleString();
 const won = (n: number | null) => (n == null ? "가격 없음" : `${Math.round(n).toLocaleString()}원`);
@@ -99,6 +105,48 @@ export function ItemCleanup({ vendors, vendorProducts, unifiedProducts, onChange
     [shownVps, vpLimit, unifiedProducts],
   );
 
+  /** 한 업체가 한 표준 품목에 서로 다른 가격을 둘 이상 가진 묶음 — 포장이 다른 품목이 섞였을 가능성 */
+  const mixedGroups = useMemo(() => {
+    const productName = new Map(unifiedProducts.map((u) => [u.id, u.name] as const));
+    const groups = new Map<string, VendorProduct[]>();
+    for (const vp of vendorProducts) {
+      if (!vp.unified_product_id) continue;
+      const key = `${vp.vendor_id}|${vp.unified_product_id}`;
+      groups.set(key, [...(groups.get(key) ?? []), vp]);
+    }
+    return [...groups.entries()]
+      .filter(([, rows]) => new Set(rows.filter((r) => r.unit_price != null).map((r) => r.unit_price)).size > 1)
+      .map(([key, rows]) => ({
+        key,
+        vendorId: rows[0].vendor_id,
+        // 가격 비교표는 같은 업체·품목의 줄 중 목록에서 맨 뒤의 것을 보여 준다
+        shownId: rows[rows.length - 1].id,
+        vendor: vendorName.get(rows[0].vendor_id) ?? "업체 미상",
+        product: productName.get(rows[0].unified_product_id!) ?? "(지워진 표준 품목)",
+        rows: [...rows].sort((a, b) => (a.unit_price ?? 0) - (b.unit_price ?? 0)),
+      }))
+      .sort((a, b) => a.product.localeCompare(b.product, "ko") || a.vendor.localeCompare(b.vendor, "ko"));
+  }, [vendorProducts, unifiedProducts, vendorName]);
+  const [mixedQuery, setMixedQuery] = useState("");
+  /** 업체×품목별 최근 명세서 단가 (가격이 둘 이상인 품목 보기를 열 때 읽는다) */
+  const [invoicePrices, setInvoicePrices] = useState<Record<string, { price: number; date: string }> | null>(null);
+  /** "이 가격만 남기기"는 두 번 눌러야 실행 */
+  const [confirmKeep, setConfirmKeep] = useState<string | null>(null);
+  const vendorRate = useMemo(() => new Map(vendors.map((v) => [v.id, v.discount_rate ?? 0] as const)), [vendors]);
+  useEffect(() => {
+    if (view !== "mixed" || invoicePrices) return;
+    let active = true;
+    fetchLatestInvoicePrices()
+      .then((r) => { if (active) setInvoicePrices(r); })
+      .catch(() => { if (active) setInvoicePrices({}); });
+    return () => { active = false; };
+  }, [view, invoicePrices]);
+  const [mixedLimit, setMixedLimit] = useState(30);
+  const shownMixed = useMemo(() => {
+    const q = mixedQuery.trim().toLowerCase();
+    return q ? mixedGroups.filter((g) => g.product.toLowerCase().includes(q) || g.vendor.toLowerCase().includes(q) || g.rows.some((r) => r.product_name.toLowerCase().includes(q))) : mixedGroups;
+  }, [mixedGroups, mixedQuery]);
+
   const strongItems = useMemo(() => (data?.items ?? []).filter((i) => i.strong && i.proposal), [data]);
 
   async function run<T>(key: string, fn: () => Promise<ProductLinkResult<T>>, done: (data: T) => string | null): Promise<T | null> {
@@ -144,6 +192,32 @@ export function ItemCleanup({ vendors, vendorProducts, unifiedProducts, onChange
     return true;
   };
 
+  /** 업체 품목을 다른 표준 품목으로 옮긴다 (가격이 둘 이상인 품목 정리) */
+  const moveVp = async (vp: VendorProduct, productId: string, productName: string, key: string, mode?: "replace" | "keep") => {
+    const r = await run(key, () => moveVendorProduct(vp.id, productId, mode), (d) => (d.status === "linked" ? `${vp.product_name}을(를) ${productName}(으)로 옮겼어요.${d.invoiceLines ? ` 명세서 줄 ${num(d.invoiceLines)}개도 함께 옮겼어요.` : ""}` : null));
+    if (!r) return false;
+    if (r.status === "conflict") {
+      setConflict({ vpId: vp.id, productId, productName, existingPrice: r.existingPrice, newPrice: r.newPrice, move: true });
+      return true;
+    }
+    setConflict(null);
+    onChange();
+    return true;
+  };
+
+  /** 표준 품목에서 떼어 내기 → "비교표에 없는 업체 품목"으로 돌아간다 (지우지 않는다) */
+  const detachVp = async (vp: VendorProduct) => {
+    const r = await run(`d:${vp.id}`, () => detachVendorProduct(vp.id), () => `${vp.product_name}을(를) 떼어 냈어요. "비교표에 없는 업체 품목"에서 다시 연결할 수 있어요.`);
+    if (r) onChange();
+  };
+
+  /** 고른 줄 하나만 남기고 그 업체·품목의 다른 가격 줄을 지운다 */
+  const keepOnly = async (vp: VendorProduct) => {
+    const r = await run(`k:${vp.id}`, () => keepOnlyVendorPrice(vp.id), (d) => `${vp.product_name} — ${won(d.kept)}만 남기고 ${num(d.removed)}줄을 지웠어요.`);
+    setConfirmKeep(null);
+    if (r) onChange();
+  };
+
   const loadHidden = () => fetchHiddenItemNames().then(setHidden).catch(() => setHidden([]));
 
   const hide = async (item: UnlinkedItemName) => {
@@ -172,7 +246,12 @@ export function ItemCleanup({ vendors, vendorProducts, unifiedProducts, onChange
     if (!target || !pickId) return;
     const product = unifiedProducts.find((p) => p.id === pickId);
     if (!product) return;
-    const done = target.kind === "name" ? await linkName(target.item, product.id, product.name, "dialog") : await linkVp(target.vp, product.id, product.name, "dialog");
+    const done =
+      target.kind === "name"
+        ? await linkName(target.item, product.id, product.name, "dialog")
+        : target.kind === "move"
+          ? await moveVp(target.vp, product.id, product.name, "dialog")
+          : await linkVp(target.vp, product.id, product.name, "dialog");
     if (done) setTarget(null);
   };
 
@@ -183,6 +262,19 @@ export function ItemCleanup({ vendors, vendorProducts, unifiedProducts, onChange
       if (r) {
         setTarget(null);
         setTick((t) => t + 1);
+        onChange();
+      }
+    } else if (target.kind === "move") {
+      const vp = target.vp;
+      const name = newName.trim();
+      const r = await run("create", () => moveVendorProductToNewStandard(vp.id, newName, newCategory), (d) => (d.status === "linked" ? `${name}을(를) 표준 품목으로 등록하고 ${vp.product_name}을(를) 옮겼어요.` : null));
+      if (r) {
+        // 같은 이름의 표준 품목이 이미 있고 그 업체 가격도 있으면 어느 가격을 남길지 묻는다
+        if (r.status === "conflict") {
+          const existing = unifiedProducts.find((u) => u.name.replace(/\s+/g, "").toLowerCase() === name.replace(/\s+/g, "").toLowerCase());
+          if (existing) setConflict({ vpId: vp.id, productId: existing.id, productName: existing.name, existingPrice: r.existingPrice, newPrice: r.newPrice, move: true });
+        }
+        setTarget(null);
         onChange();
       }
     } else {
@@ -206,6 +298,7 @@ export function ItemCleanup({ vendors, vendorProducts, unifiedProducts, onChange
           items={[
             { value: "names", label: `주문에 적힌 이름${data?.ready ? ` ${num(data.unlinkedNames)}` : ""}` },
             { value: "vendorProducts", label: `비교표에 없는 업체 품목 ${num(unlinkedVps.length)}` },
+            { value: "mixed", label: `가격이 둘 이상인 품목 ${num(mixedGroups.length)}` },
           ]}
         />
       </div>
@@ -361,6 +454,107 @@ export function ItemCleanup({ vendors, vendorProducts, unifiedProducts, onChange
             )}
           </>
         )
+      ) : view === "mixed" ? (
+        <>
+          <p className="flex items-start gap-2 rounded-xl bg-status-ask-bg px-4 py-3 text-[13px] leading-5 text-status-ask">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>
+              한 업체가 한 표준 품목에 서로 다른 가격을 둘 이상 갖고 있어요. 대부분 예전 저장 방식 때문에 정가·할인후·두 번 할인된 값이 따로 쌓인 것이에요. 가격 비교표에는 그중 하나만 보여요. 맞는 값에서 &quot;이 가격만 남기기&quot;를 눌러 주세요. 포장이 다른 품목(예: 30T와 500T)이 섞인 경우에는 그 줄을 다른 표준 품목으로 옮겨 주세요.
+            </span>
+          </p>
+          <FilterBar>
+            <SearchField id="mixed-q" value={mixedQuery} onChange={(v) => { setMixedQuery(v); setMixedLimit(30); }} placeholder="표준 품목·업체·품목 이름 검색" />
+          </FilterBar>
+          {shownMixed.length === 0 ? (
+            <div className="rounded-xl bg-card ring-1 ring-border">
+              <EmptyState icon={Check} title={mixedQuery ? "조건에 맞는 품목이 없어요" : "가격이 둘 이상인 품목이 없어요"} description={mixedQuery ? "검색어를 바꿔 보세요." : "모든 업체가 표준 품목마다 가격을 하나씩만 갖고 있어요."} />
+            </div>
+          ) : (
+            shownMixed.slice(0, mixedLimit).map((g) => {
+              const rate = vendorRate.get(g.vendorId) ?? 0;
+              const relations = discountRelations(g.rows.map((r) => r.unit_price), rate);
+              const invoice = invoicePrices?.[g.key] ?? null;
+              return (
+              <section key={g.key} className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+                <h3 className="flex flex-wrap items-baseline gap-x-2 border-b border-border bg-muted px-4 py-2.5">
+                  <span className="break-all text-sm font-semibold">{g.product}</span>
+                  <span className="text-[13px] text-muted-foreground">
+                    {g.vendor}{rate ? ` (할인 ${rate}%)` : ""} · 가격 {num(new Set(g.rows.map((r) => r.unit_price)).size)}가지
+                    {invoice ? ` · 최근 명세서 단가 ${won(invoice.price)} (${invoice.date})` : invoicePrices ? " · 명세서 기록 없음" : ""}
+                  </span>
+                </h3>
+                {g.rows.map((vp, i) => (
+                  <div key={vp.id} className={cn("grid gap-2 px-4 py-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center", i > 0 && "border-t border-border")}>
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-baseline gap-x-2">
+                        <span className="break-all text-[15px] font-medium">{vp.product_name}</span>
+                        <span className="text-[15px] font-bold tabular-nums">{won(vp.unit_price)}</span>
+                        {vp.id === g.shownId && <span className="rounded-full bg-status-doing-bg px-2 py-0.5 text-xs font-semibold text-status-doing">가격 비교표에 보이는 값</span>}
+                        {invoice && vp.unit_price === invoice.price && (
+                          <span className="rounded-full bg-status-done-bg px-2 py-0.5 text-xs font-semibold text-status-done">최근 명세서와 같음</span>
+                        )}
+                        {vp.unit_price != null && relations.has(vp.unit_price) && (
+                          <span className="text-xs text-muted-foreground">= {won(relations.get(vp.unit_price)!.of)}에 할인 {rate}% 적용</span>
+                        )}
+                      </p>
+                      {conflict?.vpId === vp.id && conflict.move && (
+                        <div className="mt-1.5 space-y-2 rounded-lg bg-status-ask-bg px-3 py-2.5 text-[13px]">
+                          <p className="font-semibold text-status-ask">
+                            {g.vendor}은(는) {conflict.productName}의 가격을 이미 갖고 있어요 — 지금 {won(conflict.existingPrice)}, 이 줄은 {won(conflict.newPrice)}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Button size="sm" className="h-8" disabled={!!busy} onClick={() => moveVp(vp, conflict.productId, conflict.productName, `m:${vp.id}`, "replace")}>
+                              {won(conflict.newPrice)}으로 바꾸기
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8" disabled={!!busy} onClick={() => moveVp(vp, conflict.productId, conflict.productName, `m:${vp.id}`, "keep")}>
+                              {won(conflict.existingPrice)} 유지
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-8" onClick={() => setConflict(null)}>취소</Button>
+                          </div>
+                          <p className="text-muted-foreground">어느 쪽이든 이 줄은 {conflict.productName}의 가격 하나로 합쳐져요.</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {confirmKeep === vp.id ? (
+                        <>
+                          <Button size="sm" className="h-8" disabled={!!busy} onClick={() => keepOnly(vp)}>
+                            {busy === `k:${vp.id}` && <Loader2 className="size-4 animate-spin" />} 다른 {num(g.rows.length - 1)}줄 지우기
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8" onClick={() => setConfirmKeep(null)}>취소</Button>
+                        </>
+                      ) : (
+                        <Button size="sm" className="h-8" disabled={!!busy} onClick={() => setConfirmKeep(vp.id)}>
+                          이 가격만 남기기
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" className="h-8" disabled={!!busy} onClick={() => openTarget({ kind: "move", vp })}>
+                        {busy === `m:${vp.id}` && <Loader2 className="size-4 animate-spin" />} 다른 품목으로 옮기기
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-muted-foreground"
+                        disabled={!!busy}
+                        title="지우지 않아요. 비교표에 없는 업체 품목 목록으로 돌아가요"
+                        onClick={() => detachVp(vp)}
+                      >
+                        {busy === `d:${vp.id}` && <Loader2 className="size-4 animate-spin" />} 떼어 내기
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </section>
+              );
+            })
+          )}
+          {shownMixed.length > mixedLimit && (
+            <Button variant="outline" className="w-full" onClick={() => setMixedLimit((n) => n + 30)}>
+              {num(Math.min(30, shownMixed.length - mixedLimit))}개 더 보기 · 남은 {num(shownMixed.length - mixedLimit)}개
+            </Button>
+          )}
+          <p className="px-1 text-[13px] tabular-nums text-muted-foreground">묶음 {num(shownMixed.length)}개 · 표준 품목 이름순</p>
+        </>
       ) : (
         <>
           <p className="flex items-start gap-2 rounded-xl bg-status-doing-bg px-4 py-3 text-[13px] leading-5 text-status-doing">
@@ -396,7 +590,7 @@ export function ItemCleanup({ vendors, vendorProducts, unifiedProducts, onChange
                     ) : (
                       <p className="text-[13px] text-muted-foreground">용량·포장까지 같은 표준 품목을 찾지 못했어요</p>
                     )}
-                    {conflict?.vpId === vp.id && (
+                    {conflict?.vpId === vp.id && !conflict.move && (
                       <div className="mt-1 space-y-2 rounded-lg bg-status-ask-bg px-3 py-2.5 text-[13px]">
                         <p className="font-semibold text-status-ask">
                           이 업체는 {conflict.productName}의 가격을 이미 갖고 있어요 — 지금 {won(conflict.existingPrice)}, 이 줄은 {won(conflict.newPrice)}
@@ -445,7 +639,7 @@ export function ItemCleanup({ vendors, vendorProducts, unifiedProducts, onChange
               {target?.kind === "name"
                 ? `"${target.item.name}"(으)로 적힌 주문 ${num(target.item.count)}건을 고른 표준 품목으로 묶어요.`
                 : target
-                  ? `${vendorName.get(target.vp.vendor_id) ?? "업체"}의 "${target.vp.product_name}"을(를) 고른 표준 품목의 가격으로 연결해요.`
+                  ? `${vendorName.get(target.vp.vendor_id) ?? "업체"}의 "${target.vp.product_name}"을(를) 고른 표준 품목의 가격으로 ${target.kind === "move" ? "옮겨요" : "연결해요"}.`
                   : ""}
             </DialogDescription>
           </DialogHeader>
