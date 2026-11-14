@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { aiModel } from "./ai-designer";
 import { configuredProvider } from "./designer";
 import { runDuePublish, warnIfTodayMissing, type DueRunResult, type EngineOptions } from "./publish-engine";
 import { createSupabasePublishStore } from "./supabase-publish-store";
@@ -10,6 +11,7 @@ import { createSupabasePublishStore } from "./supabase-publish-store";
  *  - BRIEFING_INTERNAL_NOTIFY=on : 발행 때 직원 알림함에 실제로 알림을 넣는다.
  *      꺼져 있으면(기본) 내용만 기록하고 넣지 않는다 — 개발 PC가 운영 DB에 붙어 있을 때 직원에게 알림이 가지 않게 하는 안전장치.
  *  - BRIEFING_APP_URL : 네이버웍스 메시지에 넣을 앱 주소 (예: https://…). 없으면 경로만.
+ *  - BRIEFING_AI_PROVIDER=anthropic (+ ANTHROPIC_API_KEY) : 카드를 실제 AI로 만든다. 없으면 규칙 정리. BRIEFING_AI_MODEL 로 모델 변경.
  *  - 네이버웍스 자격 증명은 아직 읽지 않는다 (연결 전 — 보낼 내용 기록만).
  */
 export type BriefingRuntimeConfig = {
@@ -18,6 +20,8 @@ export type BriefingRuntimeConfig = {
   /** 네이버웍스: 아직 연결하지 않음 */
   naverWorks: "not-connected";
   ai: "rule" | "anthropic";
+  /** AI를 켰을 때 쓰는 모델 이름 (꺼져 있으면 null) */
+  aiModel: string | null;
 };
 
 export function briefingRuntimeConfig(): BriefingRuntimeConfig {
@@ -27,6 +31,7 @@ export function briefingRuntimeConfig(): BriefingRuntimeConfig {
     baseUrl: /^https?:\/\//i.test(url) ? url : null,
     naverWorks: "not-connected",
     ai: configuredProvider(),
+    aiModel: configuredProvider() === "anthropic" ? aiModel() : null,
   };
 }
 

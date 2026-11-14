@@ -57,9 +57,13 @@ export function BriefingSettings({ data }: { data: BriefingSettingsData | null }
             <Group title="지금 동작 방식">
               <Row
                 label="카드 만들기"
-                value={data.config.ai === "anthropic" ? "AI 사용" : "규칙 정리 (AI 미사용)"}
+                value={data.config.ai === "anthropic" ? `AI 사용 (${data.config.aiModel})` : "규칙 정리 (AI 미사용)"}
                 tone={data.config.ai === "anthropic" ? "on" : "test"}
-                hint={data.config.ai === "anthropic" ? undefined : "붙여넣은 글의 문장을 그대로 골라 배치해요. 숫자·출처를 새로 만들지 않아요."}
+                hint={
+                  data.config.ai === "anthropic"
+                    ? "만들기·다시 만들기를 누를 때만 AI를 불러요. AI가 실패하거나 요약문에 없는 숫자를 쓰면 규칙 정리로 대신 만들어요."
+                    : "붙여넣은 글의 문장을 그대로 골라 배치해요. 숫자·출처를 새로 만들지 않아요. 서버 설정 BRIEFING_AI_PROVIDER=anthropic 으로 AI를 켜요."
+                }
               />
               <Row
                 label="직원 알림"

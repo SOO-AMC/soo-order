@@ -557,6 +557,9 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
             </div>
           )}
 
+          {current?.generation_status === "ai" && card && (
+            <p className="text-xs text-muted-foreground">AI가 디자인한 카드예요. 검수할 때 숫자·약물명·결론을 원문과 꼭 대조해 주세요.</p>
+          )}
           {current?.generation_status === "rule" && card && (
             <p className="text-xs text-muted-foreground">AI 미사용 · 규칙으로 정리한 카드예요. 원문 문장을 그대로 배치했어요.</p>
           )}

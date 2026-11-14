@@ -144,6 +144,14 @@ git push origin main  # 배포 (GitHub → Vercel 자동 배포)
 - **`/price-analysis`**: 기간 A vs B 단가 비교 + **수량가중(라스파이레스) 체감 인상률** + 품목 추이.
 - **환경변수**: `ANTHROPIC_API_KEY` (`.env.local`). 프로덕션은 Vercel env에 등록 필요. 연차 롤오버 cron 보호용 `CRON_SECRET`도 Vercel env에 등록(없으면 엔드포인트가 무인증으로 열림).
 
+## 논문 브리핑
+- 관리자가 논문 요약문을 붙여넣으면 카드뉴스 1장 → 하루 3~4건을 08:30(KST) 발행 → 직원 화면·세미나실 라운딩 화면. **상세는 `docs/paper-briefing.md`.**
+- **불변 규칙**: 논문 1건 = 카드 1장(slides/pages 구조 금지), 필수 입력은 요약문 글상자 1개, 검수 완료 3~4건일 때만 발행, 라운딩은 그날 논문 수만큼만 반복.
+- 로직은 `src/lib/briefing/`(순수 함수 + `pnpm test`), 액션은 `src/lib/actions/briefing-{admin,publish,reader}-actions.ts`, 화면은 `src/components/briefing/`. 라운딩은 `(display)` 그룹 — `(main)` 레이아웃 밖.
+- 직원에게 보이는 조건은 **시각 기준**(발행 완료, 또는 예약 + 예약 시각 경과)이라 크론 없이도 08:30에 열린다. RLS와 reader 액션 양쪽에 같은 조건.
+- **기본은 테스트 모드**: `BRIEFING_AI_PROVIDER`(AI) · `BRIEFING_INTERNAL_NOTIFY`(직원 알림) 가 없으면 규칙 정리 + 알림 미발송. 네이버웍스는 미연결(기록만). 개발 서버가 운영 DB에 붙어 있으므로 `BRIEFING_INTERNAL_NOTIFY` 를 로컬에서 켜지 말 것.
+- 서버/클라이언트 양쪽에서 부르는 헬퍼는 `"use client"` 파일에 두지 말 것(`reader/category.ts`, `admin/log-text.ts` 가 그 이유로 분리됨).
+
 ## 함정 / 주의
 - **secure context 의존 API**: `crypto.randomUUID()`·`navigator.clipboard`는 HTTPS/localhost에서만 동작. LAN IP(`http://192.168.x.x`)로 dev 접속 시 throw → 클릭 무반응/복사 실패. **반드시 `genId()`(`lib/utils/uid.ts`)·`copyText()`(`lib/utils/clipboard.ts`) 사용** (직접 호출 금지). `copyText`는 Radix Dialog 안에서 focus trap에 포커스를 뺏기지 않도록 임시 textarea를 **현재 다이얼로그 내부에 append**하고 iOS용 Range 선택 + 60s 지연 revokeObjectURL 사용.
 - **mupdf-wasm 메모리**: WASM 힙은 자동으로 줄어들지 않음 — `PDFDocument`·`Buffer`마다 **명시적 `.destroy()` 호출**해야 누적되지 않아 Node OOM 안 됨. `saveToBuffer().asUint8Array()`는 **WASM 힙의 view 반환** → 즉시 `Buffer.from(...)`으로 Node 힙에 복사 후 mupdf Buffer destroy 안 하면 다음 호출에서 덮어써져 출력 PDF가 깨짐. **병렬 호출 금지** (vendor 여러 개 동시 처리 시 메모리 충돌 → 다른 vendor 페이지가 섞임).
