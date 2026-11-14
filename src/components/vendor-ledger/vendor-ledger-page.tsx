@@ -1,32 +1,44 @@
 "use client";
 
-import { PageHeader } from "@/components/page-header";
 import { useEffect, useMemo, useState } from "react";
-import { Download, Search, FileText, ExternalLink } from "lucide-react";
+import { BookText, Download, ExternalLink, FileText, Loader2, Search } from "lucide-react";
 import type ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/client";
 import { fetchVendorLedger, fetchInvoiceDocs, getInvoiceFileUrl, mergeInvoicePdfs } from "@/lib/actions/vendor-ledger-action";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
+import { PageHeader } from "@/components/page-header";
+import { BackButton } from "@/components/back-button";
+import { UnderlineTabs } from "@/components/list-parts";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { FilterBar, SearchField } from "@/components/workspace/filter-bar";
+import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
+import { PeriodPicker } from "@/components/workspace/period-picker";
+import { kstToday, presetRange, rangeText, type DateRange } from "@/lib/utils/period";
 import type { LedgerRow, InvoiceDoc } from "@/lib/types/invoice";
 
 const won = (n: number) => `${Math.round(n).toLocaleString()}원`;
+const num = (n: number) => Math.round(n).toLocaleString();
 
+/**
+ * 거래처원장 (관리자). 업체·기간 → 조회 → 요약 숫자 + 거래 내역 표 / 명세서 원본.
+ * 엑셀(업체별 시트), 원본 PDF 합치기(한 업체)·업체별 ZIP(여러 업체, form POST 다운로드)은 예전 그대로.
+ */
 export function VendorLedgerPage() {
   const supabase = createClient();
+  const [today] = useState(kstToday);
 
   const [vendors, setVendors] = useState<{ id: string; name: string }[]>([]);
   const [vendorId, setVendorId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("vendor"),
   );
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [range, setRange] = useState<DateRange>(() => presetRange("thisMonth", kstToday()));
   const [rows, setRows] = useState<LedgerRow[] | null>(null);
   const [docs, setDocs] = useState<InvoiceDoc[] | null>(null);
+  /** 마지막으로 조회한 조건(결과 위에 표시) */
+  const [queried, setQueried] = useState<{ vendor: string; range: DateRange } | null>(null);
   const [view, setView] = useState<"lines" | "docs">("lines");
+  const [lineQuery, setLineQuery] = useState("");
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -41,24 +53,49 @@ export function VendorLedgerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const vendorLabel = (id: string | null) => (id ? vendors.find((v) => v.id === id)?.name ?? "업체" : "전체 업체");
+
   const totals = useMemo(() => {
-    if (!rows) return { count: 0, qty: 0, amount: 0 };
+    if (!rows) return { count: 0, qty: 0, amount: 0, invoices: 0 };
+    const inv = new Set(rows.map((r) => r.invoiceId));
     return rows.reduce(
-      (acc, r) => ({ count: acc.count + 1, qty: acc.qty + r.quantity, amount: acc.amount + r.amount }),
-      { count: 0, qty: 0, amount: 0 },
+      (acc, r) => ({ ...acc, count: acc.count + 1, qty: acc.qty + r.quantity, amount: acc.amount + r.amount }),
+      { count: 0, qty: 0, amount: 0, invoices: inv.size },
     );
   }, [rows]);
+
+  /** 여러 업체일 때 업체별 합계(금액 큰 순) */
+  const byVendor = useMemo(() => {
+    if (!rows) return [];
+    const m = new Map<string, { name: string; amount: number; count: number }>();
+    for (const r of rows) {
+      const k = r.vendorName || "(미지정)";
+      const cur = m.get(k) ?? { name: k, amount: 0, count: 0 };
+      cur.amount += r.amount;
+      cur.count += 1;
+      m.set(k, cur);
+    }
+    return [...m.values()].sort((a, b) => b.amount - a.amount);
+  }, [rows]);
+
+  const shownRows = useMemo(() => {
+    if (!rows) return [];
+    const q = lineQuery.trim().toLowerCase();
+    return q ? rows.filter((r) => r.itemName.toLowerCase().includes(q) || r.vendorName.toLowerCase().includes(q)) : rows;
+  }, [rows, lineQuery]);
 
   const handleSearch = async () => {
     setLoading(true);
     setError("");
     try {
-      const opts = { vendorId, start: start || null, end: end || null };
+      const opts = { vendorId, start: range.start || null, end: range.end || null };
       const [lines, docList] = await Promise.all([fetchVendorLedger(opts), fetchInvoiceDocs(opts)]);
       setRows(lines);
       setDocs(docList);
+      setQueried({ vendor: vendorLabel(vendorId), range });
+      setLineQuery("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "조회 중 오류가 발생했습니다.");
+      setError(e instanceof Error ? e.message : "조회하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     } finally {
       setLoading(false);
     }
@@ -69,9 +106,9 @@ export function VendorLedgerPage() {
     try {
       const url = await getInvoiceFileUrl(path);
       if (url) window.open(url, "_blank", "noopener,noreferrer");
-      else setError("원본 파일을 열 수 없습니다.");
+      else setError("원본 파일을 열 수 없어요.");
     } catch {
-      setError("원본 파일을 여는 중 오류가 발생했습니다.");
+      setError("원본 파일을 여는 중 문제가 생겼어요.");
     } finally {
       setOpeningPath(null);
     }
@@ -88,12 +125,13 @@ export function VendorLedgerPage() {
     a.click();
     document.body.removeChild(a);
     // click 직후 revoke하면 큰 blob의 다운로드가 시작 전에 URL이 사라져 실패한다.
-    // revoke는 메모리 정리용이라 지연해도 안전.
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
-  const periodLabel = () => (start || end ? `${start || "처음"}~${end || "끝"}` : "전체기간");
-  const vendorLabel = () => (vendorId ? vendors.find((v) => v.id === vendorId)?.name ?? "업체" : "전체");
+  const periodLabel = () => {
+    const r = queried?.range ?? range;
+    return r.start || r.end ? `${r.start || "처음"}~${r.end || "끝"}` : "전체기간";
+  };
 
   // 거래내역 엑셀 — 업체명별 시트로 나눠 한 파일
   const handleExport = async () => {
@@ -146,7 +184,7 @@ export function VendorLedgerPage() {
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    triggerDownload(blob, `거래처원장_${vendorLabel()}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    triggerDownload(blob, `거래처원장_${queried?.vendor ?? vendorLabel(vendorId)}_${today}.xlsx`);
   };
 
   // 명세서 원본 — 업체명별 그룹
@@ -183,15 +221,13 @@ export function VendorLedgerPage() {
         const [, list] = [...groups][0];
         const bytes = await buildVendorPdf(list);
         if (!bytes) {
-          setError("합칠 수 있는 원본 파일이 없습니다.");
+          setError("합칠 수 있는 원본 파일이 없어요.");
           return;
         }
         const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
         window.open(URL.createObjectURL(blob), "_blank", "noopener,noreferrer");
       } else {
-        // fetch+blob 방식은 대용량(수백 MB) 응답에서 브라우저 메모리/연결 끊김 문제가 잦다.
-        // → form POST + target=_blank로 브라우저 네이티브 다운로드 사용:
-        //   응답이 디스크로 바로 스트리밍 저장돼 JS 메모리·fetch 타임아웃 영향 없음.
+        // fetch+blob은 대용량(수백 MB)에서 메모리·연결 끊김이 잦다 → form POST + target=_blank로 브라우저 다운로드
         const docIds = docs.map((d) => d.id);
         const filename = `명세서원본_전체_${periodLabel()}.zip`;
         const form = document.createElement("form");
@@ -215,21 +251,44 @@ export function VendorLedgerPage() {
       }
     } catch (e) {
       console.error("[vendor-ledger] 원본 병합/다운로드 오류:", e);
-      setError(e instanceof Error ? e.message : "원본 병합 중 오류가 발생했습니다.");
+      setError(e instanceof Error ? e.message : "원본을 합치는 중 문제가 생겼어요.");
     } finally {
       setMerging(false);
     }
   };
 
-  return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-6xl">
-      <PageHeader title="거래처원장" description={<span className="hidden sm:inline">업체·기간별 명세서 거래 내역</span>} />
+  const hasResult = !!rows && !!docs;
+  const multiVendor = byVendor.length > 1;
 
-      <div className="space-y-4 p-4 lg:px-6">
-        {/* 필터 */}
-        <div className="rounded-2xl bg-card p-4 shadow-card space-y-3">
-          <div className="space-y-1.5">
-            <Label>업체</Label>
+  return (
+    <>
+      <PageHeader
+        title="거래처원장"
+        description={<span className="hidden sm:inline">업체·기간별 명세서 거래</span>}
+        leading={
+          <div className="lg:hidden">
+            <BackButton fallbackHref="/more" />
+          </div>
+        }
+        tabs={
+          hasResult ? (
+            <UnderlineTabs<"lines" | "docs">
+              ariaLabel="보기"
+              value={view}
+              onValueChange={setView}
+              items={[
+                { value: "lines", label: "거래 내역", count: rows?.length },
+                { value: "docs", label: "명세서 원본", count: docs?.length },
+              ]}
+            />
+          ) : undefined
+        }
+      />
+
+      <div className="mx-auto max-w-md space-y-3 p-4 md:max-w-2xl lg:max-w-6xl lg:px-6">
+        {/* 조회 조건 */}
+        <section className="flex flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-border lg:flex-row lg:items-center">
+          <div className="lg:w-60 lg:shrink-0">
             <SearchableSelect
               value={vendorId}
               onChange={setVendorId}
@@ -240,154 +299,180 @@ export function VendorLedgerPage() {
               className="h-9 text-sm"
             />
           </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="start">시작일</Label>
-              <Input id="start" type="date" value={start} onChange={(e) => setStart(e.target.value)} className="w-40" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="end">종료일</Label>
-              <Input id="end" type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="w-40" />
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => { setStart(""); setEnd(""); }}>
-              전체 기간
-            </Button>
+          <div className="min-w-0 flex-1">
+            <PeriodPicker value={range} onChange={setRange} today={today} idPrefix="ledger" />
           </div>
-          <p className="text-xs text-muted-foreground">기간을 비우면 전체 기간으로 조회됩니다.</p>
-          <Button onClick={handleSearch} disabled={loading} className="w-full">
-            <Search className="h-4 w-4" /> {loading ? "조회 중…" : "조회"}
+          <Button onClick={handleSearch} disabled={loading} className="h-9 shrink-0 rounded-lg px-4">
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+            {loading ? "조회하는 중…" : "조회"}
           </Button>
-        </div>
+        </section>
 
         {error && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">
             {error}
-          </div>
+          </p>
         )}
 
-        {loading && (
-          <div className="flex justify-center py-8">
-            <Spinner text="조회 중…" />
+        {loading ? (
+          <ListSkeleton rows={8} />
+        ) : !hasResult ? (
+          <div className="rounded-xl bg-card ring-1 ring-border">
+            <EmptyState
+              icon={BookText}
+              title="업체와 기간을 고르고 조회해 주세요"
+              description="명세서로 확정된 거래만 나와요. 업체를 비우면 모든 업체를 한 번에 봐요."
+            />
           </div>
-        )}
-
-        {(rows || docs) && !loading && (
-          <div className="space-y-3">
-            <div className="inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-border">
-              {(["lines", "docs"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setView(v)}
-                  className={`rounded-md px-3 py-1 text-[13px] font-semibold transition-colors ${
-                    view === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {v === "lines" ? "거래 내역" : "명세서 원본"}
-                </button>
-              ))}
-            </div>
-
-            {view === "lines" && rows && (
-            <>
-            <div className="flex items-center justify-between rounded-2xl bg-card p-4 shadow-card">
-              <div className="text-sm">
-                <span className="text-muted-foreground">거래 </span>
-                <span className="font-semibold">{totals.count}건</span>
-                <span className="mx-2 text-muted-foreground">·</span>
-                <span className="text-muted-foreground">수량 </span>
-                <span className="font-semibold">{totals.qty}</span>
-                <span className="mx-2 text-muted-foreground">·</span>
-                <span className="text-muted-foreground">합계 </span>
-                <span className="font-semibold text-primary">{won(totals.amount)}</span>
+        ) : (
+          <>
+            {/* 요약 */}
+            <section className="rounded-xl bg-card p-5 ring-1 ring-border">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[13px] text-muted-foreground">
+                    {queried?.vendor} · {queried ? rangeText(queried.range) : ""}
+                  </p>
+                  <p className="mt-1 text-[28px] font-extrabold leading-9 tracking-tight tabular-nums">{won(totals.amount)}</p>
+                  <p className="mt-0.5 text-[13px] tabular-nums text-subtle-foreground">
+                    명세서 {totals.invoices}장 · 거래 {totals.count}줄 · 수량 {num(totals.qty)}
+                  </p>
+                </div>
+                {view === "lines" ? (
+                  <Button variant="outline" className="h-9 rounded-lg" onClick={handleExport} disabled={!rows || rows.length === 0}>
+                    <Download className="size-4" /> 엑셀
+                  </Button>
+                ) : (
+                  <Button variant="outline" className="h-9 rounded-lg" onClick={handleMergeDocs} disabled={merging || !docs || docs.length === 0}>
+                    {merging ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                    {merging ? "만드는 중…" : docs && groupDocsByVendor(docs).size <= 1 ? "한 PDF로 보기" : "업체별 PDF · ZIP"}
+                  </Button>
+                )}
               </div>
-              <Button variant="outline" size="sm" onClick={handleExport} disabled={rows.length === 0}>
-                <Download className="h-4 w-4" /> 엑셀
-              </Button>
-            </div>
 
-            {rows.length === 0 ? (
-              <div className="rounded-2xl bg-card p-8 text-center text-sm text-muted-foreground shadow-card">
-                해당 조건의 거래 내역이 없습니다.
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-2xl bg-card shadow-card">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 font-medium whitespace-nowrap">거래일자</th>
-                      <th className="px-3 py-2 font-medium whitespace-nowrap">업체</th>
-                      <th className="px-3 py-2 font-medium">품목</th>
-                      <th className="px-3 py-2 font-medium text-right whitespace-nowrap">수량</th>
-                      <th className="px-3 py-2 font-medium text-right whitespace-nowrap">단가</th>
-                      <th className="px-3 py-2 font-medium text-right whitespace-nowrap">금액</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r, i) => (
-                      <tr key={r.invoiceId + i} className="border-t border-border/50">
-                        <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.invoiceDate ?? "-"}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{r.vendorName}</td>
-                        <td className="px-3 py-2">{r.itemName}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{r.quantity}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{won(r.unitPrice)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-medium">{won(r.amount)}</td>
-                      </tr>
+              {multiVendor && (
+                <div className="mt-4 border-t border-border pt-3">
+                  <p className="mb-2 text-xs font-semibold text-muted-foreground">업체별 합계</p>
+                  <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                    {byVendor.slice(0, 9).map((v) => (
+                      <li key={v.name} className="flex min-w-0 items-baseline justify-between gap-2 text-[13px]">
+                        <span className="min-w-0 truncate">{v.name}</span>
+                        <span className="shrink-0 tabular-nums">
+                          <b className="font-semibold">{won(v.amount)}</b>
+                          <span className="ml-1.5 text-muted-foreground">{v.count}줄</span>
+                        </span>
+                      </li>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            </>
-            )}
+                  </ul>
+                  {byVendor.length > 9 && <p className="mt-1.5 text-xs text-muted-foreground">외 {byVendor.length - 9}곳</p>}
+                </div>
+              )}
+            </section>
 
-            {view === "docs" && docs && (
-              docs.length === 0 ? (
-                <div className="rounded-2xl bg-card p-8 text-center text-sm text-muted-foreground shadow-card">
-                  해당 조건의 명세서가 없습니다.
+            {view === "lines" ? (
+              rows!.length === 0 ? (
+                <div className="rounded-xl bg-card ring-1 ring-border">
+                  <EmptyState icon={BookText} title="이 조건의 거래가 없어요" description="기간을 넓히거나 업체를 바꿔 보세요." />
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between rounded-2xl bg-card p-3 shadow-card">
-                    <span className="text-sm text-muted-foreground">명세서 {docs.length}건</span>
-                    <Button variant="outline" size="sm" onClick={handleMergeDocs} disabled={merging}>
-                      <Download className="h-4 w-4" />
-                      {merging
-                        ? "처리 중…"
-                        : groupDocsByVendor(docs).size <= 1
-                          ? "한 PDF로 보기"
-                          : "업체별 PDF · ZIP"}
-                    </Button>
-                  </div>
-                  {docs.map((d) => (
-                    <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl bg-card p-3 shadow-card">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{d.invoiceDate ?? "날짜 미상"} · {d.vendorName || "업체?"}</p>
-                          <p className="text-xs text-muted-foreground">품목 {d.itemCount}건 · 합계 {won(d.totalAmount)}</p>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                        {d.imagePaths.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">원본 없음</span>
-                        ) : (
-                          d.imagePaths.map((p, i) => (
-                            <Button key={p} variant="outline" size="sm" onClick={() => openFile(p)} disabled={openingPath === p}>
-                              <ExternalLink className="h-3.5 w-3.5" />
-                              {openingPath === p ? "여는 중…" : d.imagePaths.length > 1 ? `원본 ${i + 1}` : "원본 열기"}
-                            </Button>
-                          ))
-                        )}
-                      </div>
+                <>
+                  <FilterBar>
+                    <SearchField id="ledger-q" value={lineQuery} onChange={setLineQuery} placeholder="품목·업체 검색" />
+                  </FilterBar>
+
+                  {/* PC 표 */}
+                  <section className="hidden overflow-hidden rounded-xl bg-card ring-1 ring-border lg:block">
+                    <div className="max-h-[calc(100dvh-24rem)] min-h-[16rem] overflow-auto">
+                      <table className="w-full table-fixed border-separate border-spacing-0 text-[13px]">
+                        <thead className="sticky top-0 z-10">
+                          <tr className="text-left text-xs font-semibold text-muted-foreground">
+                            <th className="w-[108px] border-b border-border bg-muted py-2 pl-4 font-semibold">거래일</th>
+                            {multiVendor && <th className="w-[20%] border-b border-border bg-muted px-3 py-2 font-semibold">업체</th>}
+                            <th className="border-b border-border bg-muted px-3 py-2 font-semibold">품목</th>
+                            <th className="w-20 border-b border-border bg-muted px-3 py-2 text-right font-semibold">수량</th>
+                            <th className="w-28 border-b border-border bg-muted px-3 py-2 text-right font-semibold">단가</th>
+                            <th className="w-32 border-b border-border bg-muted px-3 py-2 pr-4 text-right font-semibold">금액</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shownRows.map((r, i) => (
+                            <tr key={r.invoiceId + i} className="hover:bg-muted/60">
+                              <td className="whitespace-nowrap border-b border-border py-2 pl-4 tabular-nums text-subtle-foreground">{r.invoiceDate ?? "—"}</td>
+                              {multiVendor && <td className="truncate border-b border-border px-3 py-2 text-subtle-foreground">{r.vendorName}</td>}
+                              <td className="truncate border-b border-border px-3 py-2 text-sm font-medium" title={r.itemName}>
+                                {r.itemName}
+                              </td>
+                              <td className="border-b border-border px-3 py-2 text-right tabular-nums">{num(r.quantity)}</td>
+                              <td className="border-b border-border px-3 py-2 text-right tabular-nums text-subtle-foreground">{num(r.unitPrice)}</td>
+                              <td className="border-b border-border px-3 py-2 pr-4 text-right font-semibold tabular-nums">{num(r.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
-                </div>
+                  </section>
+
+                  {/* 모바일 */}
+                  <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border lg:hidden">
+                    {shownRows.map((r, i) => (
+                      <div key={r.invoiceId + i} className={cn("px-4 py-3", i > 0 && "border-t border-border")}>
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="min-w-0 truncate text-[15px] font-semibold">{r.itemName}</span>
+                          <span className="shrink-0 text-[15px] font-bold tabular-nums">{num(r.amount)}</span>
+                        </div>
+                        <p className="mt-0.5 text-[13px] tabular-nums text-muted-foreground">
+                          {r.invoiceDate ?? "—"}
+                          {multiVendor ? ` · ${r.vendorName}` : ""} · {num(r.quantity)} × {num(r.unitPrice)}
+                        </p>
+                      </div>
+                    ))}
+                  </section>
+                  <p className="px-1 text-[13px] tabular-nums text-muted-foreground">
+                    {shownRows.length === rows!.length ? `${rows!.length}줄` : `${shownRows.length} / ${rows!.length}줄`} · 금액은 원, 할인후 기준
+                  </p>
+                </>
               )
+            ) : docs!.length === 0 ? (
+              <div className="rounded-xl bg-card ring-1 ring-border">
+                <EmptyState icon={FileText} title="이 조건의 명세서가 없어요" description="기간을 넓히거나 업체를 바꿔 보세요." />
+              </div>
+            ) : (
+              <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+                {docs!.map((d, i) => (
+                  <div key={d.id} className={cn("flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center", i > 0 && "border-t border-border")}>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-subtle-foreground">
+                        <FileText className="size-[18px]" />
+                      </span>
+                      <span className="min-w-0">
+                        <b className="block truncate text-[15px] font-semibold">
+                          {d.vendorName || "업체 미지정"}
+                          <span className="ml-2 text-[13px] font-normal tabular-nums text-muted-foreground">{d.invoiceDate ?? "날짜 없음"}</span>
+                        </b>
+                        <span className="text-[13px] tabular-nums text-muted-foreground">
+                          품목 {d.itemCount}개 · {won(d.totalAmount)}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-1.5 pl-12 sm:pl-0">
+                      {d.imagePaths.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">원본 없음</span>
+                      ) : (
+                        d.imagePaths.map((p, j) => (
+                          <Button key={p} variant="outline" size="sm" className="h-8 rounded-lg" onClick={() => openFile(p)} disabled={openingPath === p}>
+                            <ExternalLink className="size-3.5" />
+                            {openingPath === p ? "여는 중…" : d.imagePaths.length > 1 ? `원본 ${j + 1}` : "원본 열기"}
+                          </Button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </section>
             )}
-          </div>
+          </>
         )}
       </div>
-    </div>
+    </>
   );
 }

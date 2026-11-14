@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useEffect, useActionState } from "react";
-import Link from "next/link";
-import { ChevronLeft, Plus, ChevronRight, KeyRound, Pencil, Trash2, Search } from "lucide-react";
+import { useState, useEffect, useMemo, useActionState } from "react";
+import { ChevronRight, KeyRound, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
+import { BackButton } from "@/components/back-button";
 import { PageHeader } from "@/components/page-header";
-import { UnderlineTabs } from "@/components/list-parts";
+import { SavedViews } from "@/components/workspace/saved-views";
+import { FilterBar, SearchField, FilterChip, ClearFilters } from "@/components/workspace/filter-bar";
+import { DetailPanel, WorkspaceSplit, DetailFields } from "@/components/workspace/detail-panel";
+import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
 import {
   Dialog,
   DialogContent,
@@ -20,301 +20,400 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  createStaff,
-  updateStaff,
-  resetStaffPassword,
-  deleteStaff,
-  type StaffActionState,
-} from "@/app/(main)/members/actions";
+import { createStaff, updateStaff, resetStaffPassword, deleteStaff, type StaffActionState } from "@/app/(main)/members/actions";
 import { fetchMembers, type MemberData } from "@/lib/actions/members-action";
+import { formatDate } from "@/lib/utils/format";
 import { POSITION_LABEL, ROLE_LABEL, type Position, type Role } from "@/lib/types/member";
 
 const roleRank = (r: string) => (r === "admin" ? 0 : r === "team_manager" ? 1 : 2);
+const ROLES: Role[] = ["user", "team_manager", "admin"];
+const POSITIONS = Object.keys(POSITION_LABEL) as Position[];
 
-const STAFF_TABS: { key: string; label: string; pos: Position | null }[] = [
-  { key: "all", label: "전체", pos: null },
-  { key: "veterinarian", label: "수의사", pos: "veterinarian" },
-  { key: "intern_vet", label: "인턴수의사", pos: "intern_vet" },
-  { key: "technician", label: "테크니션", pos: "technician" },
-  { key: "radiologist", label: "방사선사", pos: "radiologist" },
-  { key: "manager", label: "매니저", pos: "manager" },
-  { key: "admin_staff", label: "행정", pos: "admin_staff" },
-];
+/** 권한 설명 — 고를 때 무엇이 달라지는지 한 줄 */
+const ROLE_HINT: Record<Role, string> = {
+  user: "주문·반품 신청, 내 현황, 혈액 대장",
+  team_manager: "지금은 일반과 같아요 (팀 기능은 연차·근무표와 함께 빠짐)",
+  admin: "모든 관리 기능(발주·검수·가격·직원)",
+};
 
+type ViewKey = "all" | Position | "none";
+type DialogType = "create" | "edit" | "resetPassword" | "delete" | null;
+
+/** 권한 배지 */
+function RoleTag({ role }: { role: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-bold",
+        role === "admin"
+          ? "bg-status-doing-bg text-status-doing"
+          : role === "team_manager"
+            ? "bg-status-ask-bg text-status-ask"
+            : "bg-secondary text-subtle-foreground"
+      )}
+    >
+      {ROLE_LABEL[role as Role] ?? role}
+    </span>
+  );
+}
+
+function Avatar({ name, className }: { name: string; className?: string }) {
+  return (
+    <span className={cn("grid shrink-0 place-items-center rounded-full bg-primary/10 font-bold text-primary", className ?? "size-8 text-[13px]")}>
+      {name.charAt(0)}
+    </span>
+  );
+}
+
+/**
+ * 직원 관리 (관리자, 디자인 시스템 데이터 작업대).
+ * 보기 = 직책, 필터 = 권한·이름, 표 → 상세 패널(정보 수정·비밀번호 초기화·계정 삭제).
+ */
 export function StaffManagement({ initialMembers }: { initialMembers?: MemberData[] }) {
   const [members, setMembers] = useState<MemberData[]>(initialMembers ?? []);
   const [isLoading, setIsLoading] = useState(!initialMembers);
   const [query, setQuery] = useState("");
-  const [tab, setTab] = useState("all");
+  const [view, setView] = useState<ViewKey>("all");
+  const [roleFilter, setRoleFilter] = useState<Role | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<DialogType>(null);
 
   useEffect(() => {
     fetchMembers()
       .then((data) => setMembers(data))
       .finally(() => setIsLoading(false));
   }, []);
-  const [selectedMember, setSelectedMember] = useState<MemberData | null>(null);
-  const [dialogType, setDialogType] = useState<
-    "create" | "edit" | "resetPassword" | "delete" | "actions" | null
-  >(null);
-
-  const openDialog = (type: typeof dialogType, member?: MemberData) => {
-    if (member) setSelectedMember(member);
-    setDialogType(type);
-  };
 
   const refreshMembers = () => {
     fetchMembers().then((data) => setMembers(data));
   };
 
-  const closeDialog = () => {
-    setDialogType(null);
-    setSelectedMember(null);
-    refreshMembers();
+  const closeDialog = (changed = false) => {
+    setDialog(null);
+    if (changed) refreshMembers();
+  };
+
+  const viewCounts = useMemo(() => {
+    const c: Record<string, number> = { all: members.length, none: 0 };
+    for (const m of members) {
+      if (m.position) c[m.position] = (c[m.position] ?? 0) + 1;
+      else c.none += 1;
+    }
+    return c;
+  }, [members]);
+
+  const list = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return members
+      .filter((m) => (view === "all" ? true : view === "none" ? !m.position : m.position === view))
+      .filter((m) => (roleFilter ? m.role === roleFilter : true))
+      .filter((m) => (q ? m.full_name.toLowerCase().includes(q) : true))
+      .sort((a, b) => roleRank(a.role) - roleRank(b.role) || a.full_name.localeCompare(b.full_name, "ko"));
+  }, [members, view, roleFilter, query]);
+
+  const detail = detailId ? members.find((m) => m.id === detailId) ?? null : null;
+  const detailIndex = detail ? list.findIndex((m) => m.id === detail.id) : -1;
+  const hasFilters = !!query.trim() || !!roleFilter;
+  const clearFilters = () => {
+    setQuery("");
+    setRoleFilter(null);
   };
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
+    <>
       <PageHeader
         title="직원 관리"
         description={members.length > 0 ? `${members.length}명` : undefined}
         leading={
-          <Button variant="ghost" size="icon" asChild className="lg:hidden">
-            <Link href="/more" aria-label="더보기로">
-              <ChevronLeft />
-            </Link>
-          </Button>
+          <div className="lg:hidden">
+            <BackButton fallbackHref="/more" />
+          </div>
         }
         action={
-          <Button size="sm" className="h-9 rounded-lg" onClick={() => openDialog("create")}>
-            <Plus className="h-4 w-4" />
+          <Button className="h-9 rounded-lg px-3 text-[13px]" onClick={() => setDialog("create")}>
+            <Plus className="size-4" />
             직원 추가
           </Button>
         }
-        tabs={
-          members.length > 0 ? (
-            <UnderlineTabs
-              ariaLabel="직책"
-              value={tab}
-              onValueChange={setTab}
-              items={STAFF_TABS.map((t) => ({
-                value: t.key,
-                label: t.label,
-                count: t.pos ? members.filter((m) => m.position === t.pos).length : members.length,
-              }))}
-            />
-          ) : undefined
-        }
       />
 
-      <div className="space-y-4 p-4 lg:px-6">
+      <div className="space-y-3 p-4 lg:px-6">
+        <SavedViews<ViewKey>
+          value={view}
+          onValueChange={setView}
+          views={[
+            { value: "all", label: "전체", count: viewCounts.all },
+            ...POSITIONS.map((p) => ({ value: p as ViewKey, label: POSITION_LABEL[p], count: viewCounts[p] ?? 0 })),
+            ...(viewCounts.none > 0 ? [{ value: "none" as ViewKey, label: "직책 없음", count: viewCounts.none }] : []),
+          ]}
+        />
+        <FilterBar>
+          <SearchField id="member-search" value={query} onChange={setQuery} placeholder="이름 검색" />
+          <FilterChip<Role>
+            label="권한"
+            options={ROLES.slice().reverse().map((r) => ({ value: r, label: ROLE_LABEL[r], hint: `${members.filter((m) => m.role === r).length}명` }))}
+            value={roleFilter}
+            onChange={setRoleFilter}
+          />
+          <ClearFilters show={hasFilters} onClear={clearFilters} />
+        </FilterBar>
 
-      {!isLoading && members.length > 0 && (
-        <>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="이름 검색"
-              className="pl-9"
+        {isLoading ? (
+          <ListSkeleton rows={8} />
+        ) : list.length === 0 ? (
+          <div className="rounded-xl bg-card ring-1 ring-border">
+            <EmptyState
+              icon={Users}
+              title={members.length === 0 ? "등록된 직원이 없어요" : "조건에 맞는 직원이 없어요"}
+              description={members.length === 0 ? "직원 추가로 계정을 만들어 주세요." : "검색어나 필터를 바꿔 보세요."}
+              action={
+                hasFilters ? (
+                  <Button variant="outline" size="sm" onClick={clearFilters}>
+                    필터 지우기
+                  </Button>
+                ) : undefined
+              }
             />
           </div>
-        </>
-      )}
+        ) : (
+          <WorkspaceSplit>
+            <div className="min-w-0 flex-1">
+              {/* PC 표 */}
+              <section className="hidden overflow-hidden rounded-xl bg-card ring-1 ring-border lg:block">
+                <table className="w-full table-fixed border-separate border-spacing-0 text-[13px]">
+                  <thead>
+                    <tr className="text-left text-xs font-semibold text-muted-foreground">
+                      <th className="border-b border-border py-2 pl-4 font-semibold">이름</th>
+                      <th className="w-28 border-b border-border px-3 py-2 font-semibold">권한</th>
+                      <th className="w-28 border-b border-border px-3 py-2 font-semibold">직책</th>
+                      <th className="w-28 border-b border-border px-3 py-2 pr-4 font-semibold">등록일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((m) => {
+                      const isOpen = detailId === m.id;
+                      return (
+                        <tr
+                          key={m.id}
+                          onClick={() => setDetailId(m.id)}
+                          className={cn("cursor-pointer", isOpen ? "bg-row-selected shadow-[inset_3px_0_0_var(--primary)]" : "hover:bg-muted/60")}
+                        >
+                          <td className="border-b border-border py-2 pl-4">
+                            <span className="flex min-w-0 items-center gap-2.5">
+                              <Avatar name={m.full_name} />
+                              <span className="truncate text-sm font-semibold">{m.full_name}</span>
+                            </span>
+                          </td>
+                          <td className="border-b border-border px-3 py-2">
+                            <RoleTag role={m.role} />
+                          </td>
+                          <td className="truncate border-b border-border px-3 py-2 text-subtle-foreground">
+                            {m.position ? POSITION_LABEL[m.position] : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="whitespace-nowrap border-b border-border px-3 py-2 pr-4 tabular-nums text-muted-foreground">
+                            {formatDate(m.created_at)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </section>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Spinner text="불러오는 중..." />
-        </div>
-      ) : members.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">
-          등록된 직원이 없습니다.
-        </p>
-      ) : (() => {
-        const q = query.trim().toLowerCase();
-        const activeTab = STAFF_TABS.find((t) => t.key === tab) ?? STAFF_TABS[0];
-        const list = members
-          .filter((m) => (q ? m.full_name.toLowerCase().includes(q) : true))
-          .filter((m) => (tab === "all" ? true : (m.position ?? null) === activeTab.pos))
-          .sort((a, b) => roleRank(a.role) - roleRank(b.role) || a.full_name.localeCompare(b.full_name, "ko"));
-        if (list.length === 0) {
-          return <p className="py-8 text-center text-muted-foreground">결과가 없습니다.</p>;
-        }
-        return (
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">{list.length}명</p>
-            {list.map((member) => (
-              <Card
-                key={member.id}
-                className="cursor-pointer hover:bg-accent/50 transition-colors"
-                onClick={() => openDialog("actions", member)}
-              >
-                <CardContent className="flex items-center justify-between py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{member.full_name}</span>
-                    <Badge variant={member.role === "admin" ? "default" : member.role === "team_manager" ? "outline" : "secondary"}>
-                      {ROLE_LABEL[member.role as Role] ?? member.role}
-                    </Badge>
-                    {member.position && <Badge variant="outline">{POSITION_LABEL[member.position]}</Badge>}
+              {/* 모바일/태블릿 */}
+              <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border lg:hidden">
+                {list.map((m, i) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setDetailId(m.id)}
+                    className={cn("flex w-full items-center gap-3 px-4 py-3 text-left active:bg-muted", i > 0 && "border-t border-border")}
+                  >
+                    <Avatar name={m.full_name} className="size-10 text-[15px]" />
+                    <span className="min-w-0 flex-1">
+                      <b className="block truncate text-[15px] font-semibold">{m.full_name}</b>
+                      <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                        <RoleTag role={m.role} />
+                        {m.position ? POSITION_LABEL[m.position] : "직책 없음"}
+                      </span>
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  </button>
+                ))}
+              </section>
+              <p className="px-1 pt-2 text-[13px] tabular-nums text-muted-foreground">{list.length}명 · 본인 계정은 내 계정에서 바꿔요</p>
+            </div>
+
+            {detail && (
+              <DetailPanel
+                open
+                onClose={() => setDetailId(null)}
+                onPrev={detailIndex > 0 ? () => setDetailId(list[detailIndex - 1].id) : undefined}
+                onNext={detailIndex >= 0 && detailIndex < list.length - 1 ? () => setDetailId(list[detailIndex + 1].id) : undefined}
+                title={
+                  <span className="flex items-center gap-2.5">
+                    <Avatar name={detail.full_name} />
+                    {detail.full_name}
+                  </span>
+                }
+                badge={<RoleTag role={detail.role} />}
+                footer={
+                  <div className="flex w-full flex-col gap-2">
+                    <Button className="h-10 w-full rounded-lg lg:h-9" onClick={() => setDialog("edit")}>
+                      <Pencil className="size-4" />
+                      정보 수정
+                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="h-10 flex-1 rounded-lg lg:h-9" onClick={() => setDialog("resetPassword")}>
+                        <KeyRound className="size-4" />
+                        비밀번호 초기화
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-10 rounded-lg text-status-late hover:bg-status-late-bg hover:text-status-late lg:h-9"
+                        onClick={() => setDialog("delete")}
+                      >
+                        <Trash2 className="size-4" />
+                        삭제
+                      </Button>
+                    </div>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        );
-      })()}
-
-      {/* 액션 선택 Dialog */}
-      <Dialog
-        open={dialogType === "actions"}
-        onOpenChange={(open) => !open && closeDialog()}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{selectedMember?.full_name}</DialogTitle>
-            <DialogDescription>작업을 선택하세요</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="outline"
-              className="justify-start"
-              onClick={() => setDialogType("edit")}
-            >
-              <Pencil className="h-4 w-4 mr-2" />
-              정보 수정
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start"
-              onClick={() => setDialogType("resetPassword")}
-            >
-              <KeyRound className="h-4 w-4 mr-2" />
-              비밀번호 초기화
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start text-destructive hover:text-destructive"
-              onClick={() => setDialogType("delete")}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              계정 삭제
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* 직원 추가 Dialog */}
-      <CreateStaffDialog
-        open={dialogType === "create"}
-        onClose={closeDialog}
-      />
-
-      {/* 직원 수정 Dialog */}
-      {selectedMember && (
-        <EditStaffDialog
-          open={dialogType === "edit"}
-          onClose={closeDialog}
-          member={selectedMember}
-        />
-      )}
-
-      {/* 비밀번호 초기화 Dialog */}
-      {selectedMember && (
-        <ResetPasswordDialog
-          open={dialogType === "resetPassword"}
-          onClose={closeDialog}
-          member={selectedMember}
-        />
-      )}
-
-      {/* 삭제 확인 Dialog */}
-      {selectedMember && (
-        <DeleteStaffDialog
-          open={dialogType === "delete"}
-          onClose={closeDialog}
-          member={selectedMember}
-        />
-      )}
+                }
+              >
+                <div className="flex flex-col gap-5">
+                  <DetailFields
+                    items={[
+                      { label: "권한", value: ROLE_LABEL[detail.role as Role] ?? detail.role },
+                      { label: "직책", value: detail.position ? POSITION_LABEL[detail.position] : <span className="text-muted-foreground">없음</span> },
+                      { label: "등록일", value: formatDate(detail.created_at) },
+                    ]}
+                  />
+                  <p className="rounded-xl bg-muted px-3.5 py-3 text-[13px] text-subtle-foreground">
+                    {ROLE_HINT[detail.role as Role] ? (
+                      <>
+                        <b className="font-semibold text-foreground">{ROLE_LABEL[detail.role as Role]}</b> · {ROLE_HINT[detail.role as Role]}
+                      </>
+                    ) : (
+                      "권한 정보가 없어요."
+                    )}
+                  </p>
+                </div>
+              </DetailPanel>
+            )}
+          </WorkspaceSplit>
+        )}
       </div>
-    </div>
+
+      {/* 직원 추가/수정은 열 때마다 새로 그려 입력값이 남지 않게(key) */}
+      {dialog === "create" && <StaffFormDialog key="create" mode="create" onClose={closeDialog} />}
+      {dialog === "edit" && detail && <StaffFormDialog key={`edit-${detail.id}`} mode="edit" member={detail} onClose={closeDialog} />}
+      {dialog === "resetPassword" && detail && <ResetPasswordDialog member={detail} onClose={closeDialog} />}
+      {dialog === "delete" && detail && (
+        <DeleteStaffDialog
+          member={detail}
+          onClose={(changed) => {
+            if (changed) setDetailId(null);
+            closeDialog(changed);
+          }}
+        />
+      )}
+    </>
   );
 }
 
-function CreateStaffDialog({
-  open,
+/** 고르는 칩 하나 */
+function PickChip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={cn(
+        "h-9 rounded-full px-3.5 text-sm font-semibold transition-colors",
+        on ? "bg-foreground text-background" : "bg-muted text-subtle-foreground ring-1 ring-border hover:text-foreground"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <span className="text-[13px] font-semibold text-subtle-foreground">{children}</span>;
+}
+
+/** 직원 추가 / 정보 수정 (같은 폼) */
+function StaffFormDialog({
+  mode,
+  member,
   onClose,
 }: {
-  open: boolean;
-  onClose: () => void;
+  mode: "create" | "edit";
+  member?: MemberData;
+  onClose: (changed?: boolean) => void;
 }) {
-  const [state, formAction, isPending] = useActionState<
-    StaffActionState,
-    FormData
-  >(async (prev, formData) => {
-    const result = await createStaff(prev, formData);
-    if (result.success) onClose();
+  const [role, setRole] = useState<Role>((member?.role as Role) ?? "user");
+  const [position, setPosition] = useState<Position | "">(member?.position ?? "");
+  const [state, formAction, isPending] = useActionState<StaffActionState, FormData>(async (prev, formData) => {
+    const result = mode === "create" ? await createStaff(prev, formData) : await updateStaff(prev, formData);
+    if (result.success) onClose(true);
     return result;
   }, {});
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>직원 추가</DialogTitle>
-          <DialogDescription>새 직원 계정을 생성합니다.</DialogDescription>
+          <DialogTitle>{mode === "create" ? "직원 추가" : `${member?.full_name} 정보 수정`}</DialogTitle>
+          <DialogDescription>{mode === "create" ? "이름과 처음 비밀번호로 로그인해요." : "이름을 바꾸면 로그인 이름도 같이 바뀌어요."}</DialogDescription>
         </DialogHeader>
-        <form action={formAction} className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="create-name">이름</Label>
-            <Input id="create-name" name="name" placeholder="이름" required />
+        <form action={formAction} className="flex flex-col gap-4">
+          {member && <input type="hidden" name="userId" value={member.id} />}
+          <input type="hidden" name="role" value={role} />
+          <input type="hidden" name="position" value={position} />
+
+          <label className="grid gap-1.5">
+            <FieldLabel>이름</FieldLabel>
+            <Input name="name" defaultValue={member?.full_name} placeholder="이름" required className="h-11 text-base" />
+          </label>
+
+          {mode === "create" && (
+            <label className="grid gap-1.5">
+              <FieldLabel>처음 비밀번호</FieldLabel>
+              <Input name="password" type="password" autoComplete="new-password" placeholder="숫자·영문·특수문자 조합 4자리 이상" required className="h-11 text-base" />
+            </label>
+          )}
+
+          <div className="grid gap-1.5">
+            <FieldLabel>권한</FieldLabel>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="권한">
+              {ROLES.map((r) => (
+                <PickChip key={r} on={role === r} onClick={() => setRole(r)}>
+                  {ROLE_LABEL[r]}
+                </PickChip>
+              ))}
+            </div>
+            <p className="text-[13px] text-muted-foreground">{ROLE_HINT[role]}</p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="create-password">비밀번호</Label>
-            <Input
-              id="create-password"
-              name="password"
-              type="password"
-              placeholder="4자 이상"
-              required
-            />
+
+          <div className="grid gap-1.5">
+            <FieldLabel>직책</FieldLabel>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="직책">
+              {POSITIONS.map((p) => (
+                <PickChip key={p} on={position === p} onClick={() => setPosition(p)}>
+                  {POSITION_LABEL[p]}
+                </PickChip>
+              ))}
+              <PickChip on={position === ""} onClick={() => setPosition("")}>
+                없음
+              </PickChip>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>권한</Label>
-            <Select name="role" defaultValue="user">
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="user">일반</SelectItem>
-                <SelectItem value="team_manager">팀관리자</SelectItem>
-                <SelectItem value="admin">전체관리자</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>직책</Label>
-            <Select name="position" defaultValue="">
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="직책 선택 (선택사항)" />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.entries(POSITION_LABEL) as [Position, string][]).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+
           {state.error && (
-            <p className="text-sm text-destructive">{state.error}</p>
+            <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">
+              {state.error}
+            </p>
           )}
           <DialogFooter>
             <DialogClose asChild>
@@ -323,7 +422,7 @@ function CreateStaffDialog({
               </Button>
             </DialogClose>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "생성 중..." : "추가"}
+              {isPending ? "저장하는 중…" : mode === "create" ? "추가하기" : "저장하기"}
             </Button>
           </DialogFooter>
         </form>
@@ -332,130 +431,30 @@ function CreateStaffDialog({
   );
 }
 
-function EditStaffDialog({
-  open,
-  onClose,
-  member,
-}: {
-  open: boolean;
-  onClose: () => void;
-  member: MemberData;
-}) {
-  const [state, formAction, isPending] = useActionState<
-    StaffActionState,
-    FormData
-  >(async (prev, formData) => {
-    const result = await updateStaff(prev, formData);
-    if (result.success) onClose();
-    return result;
-  }, {});
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>정보 수정</DialogTitle>
-          <DialogDescription>
-            직원 정보를 수정합니다.
-          </DialogDescription>
-        </DialogHeader>
-        <form action={formAction} className="space-y-3">
-          <input type="hidden" name="userId" value={member.id} />
-          <div className="space-y-2">
-            <Label htmlFor="edit-name">이름</Label>
-            <Input
-              id="edit-name"
-              name="name"
-              defaultValue={member.full_name}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>권한</Label>
-            <Select name="role" defaultValue={member.role}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="user">일반</SelectItem>
-                <SelectItem value="team_manager">팀관리자</SelectItem>
-                <SelectItem value="admin">전체관리자</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>직책</Label>
-            <Select name="position" defaultValue={member.position ?? ""}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="직책 선택 (선택사항)" />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.entries(POSITION_LABEL) as [Position, string][]).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {state.error && (
-            <p className="text-sm text-destructive">{state.error}</p>
-          )}
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                취소
-              </Button>
-            </DialogClose>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "수정 중..." : "수정"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ResetPasswordDialog({
-  open,
-  onClose,
-  member,
-}: {
-  open: boolean;
-  onClose: () => void;
-  member: MemberData;
-}) {
-  const [state, formAction, isPending] = useActionState<
-    StaffActionState,
-    FormData
-  >(async (prev, formData) => {
+function ResetPasswordDialog({ member, onClose }: { member: MemberData; onClose: (changed?: boolean) => void }) {
+  const [state, formAction, isPending] = useActionState<StaffActionState, FormData>(async (prev, formData) => {
     const result = await resetStaffPassword(prev, formData);
-    if (result.success) onClose();
+    if (result.success) onClose(true);
     return result;
   }, {});
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>비밀번호 초기화</DialogTitle>
-          <DialogDescription>
-            {member.full_name}의 비밀번호를 초기화합니다.
-          </DialogDescription>
+          <DialogDescription>{member.full_name}님이 새 비밀번호로 로그인하게 돼요. 바뀐 비밀번호를 직접 알려 주세요.</DialogDescription>
         </DialogHeader>
-        <form action={formAction} className="space-y-3">
+        <form action={formAction} className="flex flex-col gap-4">
           <input type="hidden" name="userId" value={member.id} />
-          <div className="space-y-2">
-            <Label htmlFor="reset-password">새 비밀번호</Label>
-            <Input
-              id="reset-password"
-              name="newPassword"
-              type="password"
-              placeholder="4자 이상"
-              required
-            />
-          </div>
+          <label className="grid gap-1.5">
+            <FieldLabel>새 비밀번호</FieldLabel>
+            <Input name="newPassword" type="password" autoComplete="new-password" placeholder="숫자·영문·특수문자 조합 4자리 이상" required className="h-11 text-base" />
+          </label>
           {state.error && (
-            <p className="text-sm text-destructive">{state.error}</p>
+            <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">
+              {state.error}
+            </p>
           )}
           <DialogFooter>
             <DialogClose asChild>
@@ -464,7 +463,7 @@ function ResetPasswordDialog({
               </Button>
             </DialogClose>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "초기화 중..." : "초기화"}
+              {isPending ? "바꾸는 중…" : "초기화"}
             </Button>
           </DialogFooter>
         </form>
@@ -473,15 +472,7 @@ function ResetPasswordDialog({
   );
 }
 
-function DeleteStaffDialog({
-  open,
-  onClose,
-  member,
-}: {
-  open: boolean;
-  onClose: () => void;
-  member: MemberData;
-}) {
+function DeleteStaffDialog({ member, onClose }: { member: MemberData; onClose: (changed?: boolean) => void }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -493,33 +484,30 @@ function DeleteStaffDialog({
       setError(result.error);
       setIsDeleting(false);
     } else {
-      onClose();
+      onClose(true);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>계정 삭제</DialogTitle>
-          <DialogDescription>
-            <strong>{member.full_name}</strong>의 계정을 삭제하시겠습니까?
-            <br />이 작업은 되돌릴 수 없습니다.
-          </DialogDescription>
+          <DialogTitle>{member.full_name}님 계정을 삭제할까요?</DialogTitle>
+          <DialogDescription>로그인이 막히고 직원 목록에서 빠져요. 이 직원이 남긴 주문·기록은 그대로 남아요. 다시 쓰려면 DB에서 직접 복구해야 해요.</DialogDescription>
         </DialogHeader>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">
+            {error}
+          </p>
+        )}
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline">
               취소
             </Button>
           </DialogClose>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={isDeleting}
-          >
-            {isDeleting ? "삭제 중..." : "삭제"}
+          <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+            {isDeleting ? "삭제하는 중…" : "계정 삭제"}
           </Button>
         </DialogFooter>
       </DialogContent>

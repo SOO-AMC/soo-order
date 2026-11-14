@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState, useMemo, useCallback, useEffect } from "react";
-import { Search, Upload, FileDown, ChevronUp, Pencil, Plus, Settings2 } from "lucide-react";
+import { Upload, FileDown, ChevronUp, Pencil, Plus, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,6 +12,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ExcelUploadDialog } from "./excel-upload-dialog";
+import { SavedViews } from "@/components/workspace/saved-views";
+import { FilterBar, SearchField, FilterChip, ClearFilters, Segmented } from "@/components/workspace/filter-bar";
+import { BottomSheet } from "@/components/workspace/bottom-sheet";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { toKSTDateString } from "@/lib/utils/format";
 import { useAuth } from "@/hooks/use-auth";
@@ -64,7 +68,12 @@ export function ComparisonTable({
   const [searchQuery, setSearchQuery] = useState(() =>
     typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("q") ?? "",
   );
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  /** 보기: 전체 / 약품 / 약국 / 가격 없음 */
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "약품" | "약국" | "empty">("all");
+  /** 최저가 업체 필터 (저장값=할인후 기준) */
+  const [minVendorFilter, setMinVendorFilter] = useState<string | null>(null);
+  const [createError, setCreateError] = useState("");
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
@@ -120,18 +129,36 @@ export function ComparisonTable({
   }, [unifiedProducts, productsByUnified]);
 
   const categoryCounts = useMemo(() => {
-    let 약품 = 0, 약국 = 0;
+    let 약품 = 0, 약국 = 0, empty = 0;
     for (const r of rows) {
       if (r.unified.notes === "약품") 약품++;
       else if (r.unified.notes === "약국") 약국++;
+      if (r.minPrice == null) empty++;
     }
-    return { 약품, 약국 };
+    return { 약품, 약국, empty };
   }, [rows]);
+
+  /** 행마다 최저가(할인후) 업체 id들 */
+  const minVendorsOf = useCallback(
+    (r: ComparisonRow) =>
+      r.minPrice == null ? [] : vendors.filter((v) => r.prices.get(v.id)?.price === r.minPrice).map((v) => v.id),
+    [vendors]
+  );
+  const minVendorOptions = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const r of rows) for (const id of minVendorsOf(r)) c.set(id, (c.get(id) ?? 0) + 1);
+    return vendors.map((v) => ({ value: v.id, label: v.name, hint: `${c.get(v.id) ?? 0}개` }));
+  }, [rows, vendors, minVendorsOf]);
 
   const filtered = useMemo(() => {
     let result = rows;
-    if (categoryFilter !== "all") {
+    if (categoryFilter === "empty") {
+      result = result.filter((r) => r.minPrice == null);
+    } else if (categoryFilter !== "all") {
       result = result.filter((r) => r.unified.notes === categoryFilter);
+    }
+    if (minVendorFilter) {
+      result = result.filter((r) => minVendorsOf(r).includes(minVendorFilter));
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -143,7 +170,7 @@ export function ComparisonTable({
       );
     }
     return result;
-  }, [rows, searchQuery, categoryFilter]);
+  }, [rows, searchQuery, categoryFilter, minVendorFilter, minVendorsOf]);
 
   const openEdit = useCallback((row: ComparisonRow) => {
     const prices: Record<string, string> = {};
@@ -205,12 +232,14 @@ export function ComparisonTable({
       prices[vendor.id] = "";
     }
     setNewForm({ name: "", notes: "", remarks: "", prices });
+    setCreateError("");
     setIsAdding(true);
     setExpandedId(null);
     setEditForm(null);
   }, [vendors]);
 
   const closeAdd = useCallback(() => {
+    setCreateError("");
     setIsAdding(false);
     setNewForm(null);
   }, []);
@@ -223,7 +252,7 @@ export function ComparisonTable({
     try {
       const createResult = await createUnifiedProduct(newForm.name, "", "", newForm.notes, newForm.remarks);
       if (createResult.error) {
-        alert(createResult.error);
+        setCreateError(createResult.error);
         return;
       }
       const newId = createResult.id!;
@@ -314,13 +343,14 @@ export function ComparisonTable({
             {isSaving ? "..." : "저장"}
           </Button>
         </div>
+        {createError && <p role="alert" className="mt-1 text-xs font-medium text-status-late">{createError}</p>}
       </TableCell>
     </TableRow>
   );
 
   // 모바일: 카드 형태
   const renderAddCardMobile = () => (
-    <div className="space-y-4 rounded-xl bg-card p-4 ring-2 ring-primary">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
         <div className="col-span-2 space-y-1">
           <label className="text-[13px] font-medium text-subtle-foreground">제품명 *</label>
@@ -391,6 +421,9 @@ export function ComparisonTable({
           })}
         </div>
       </div>
+      {createError && (
+        <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">{createError}</p>
+      )}
       <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={closeAdd} disabled={isSaving}>취소</Button>
         <Button size="sm" onClick={handleCreate} disabled={isSaving || !newForm?.name.trim()}>
@@ -475,7 +508,7 @@ export function ComparisonTable({
 
   // 모바일: 카드 내 인라인 편집 패널
   const renderMobileEditPanel = (row: ComparisonRow) => (
-    <div className="space-y-4 border-t border-border pt-3">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
         <div className="col-span-2 space-y-1">
           <label className="text-[13px] font-medium text-subtle-foreground">제품명</label>
@@ -723,34 +756,30 @@ export function ComparisonTable({
       </span>
     ) : null;
 
-  const CATEGORY_FILTERS = [
-    { value: "all", label: "전체", count: rows.length },
-    { value: "약품", label: "약품", count: categoryCounts.약품 },
-    { value: "약국", label: "약국", count: categoryCounts.약국 },
-  ];
-
   return (
     <div className="space-y-3">
-      {/* 검색 + 동작 */}
+      {/* 보기 + 동작 */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[12rem] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="제품명·비고 검색"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-9 bg-card pl-9"
-          />
-        </div>
-        <div className="flex items-center gap-1.5">
+        <SavedViews<"all" | "약품" | "약국" | "empty">
+          className="order-2 w-full min-w-0 lg:order-1 lg:w-auto lg:flex-1"
+          value={categoryFilter}
+          onValueChange={setCategoryFilter}
+          views={[
+            { value: "all", label: "전체", count: rows.length },
+            { value: "약품", label: "약품", count: categoryCounts.약품 },
+            { value: "약국", label: "약국", count: categoryCounts.약국 },
+            ...(categoryCounts.empty > 0 ? [{ value: "empty" as const, label: "가격 없음", count: categoryCounts.empty }] : []),
+          ]}
+        />
+        <div className="order-1 ml-auto flex items-center gap-1.5 lg:order-2">
           {isAdmin && (
             <Button size="sm" className="h-9 rounded-lg" onClick={openAdd}>
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
               품목 추가
             </Button>
           )}
           <Button variant="outline" size="sm" className="h-9 rounded-lg" onClick={() => setUploadOpen(true)} aria-label="엑셀 업로드">
-            <Upload className="h-4 w-4" />
+            <Upload className="size-4" />
             <span className="hidden sm:inline">업로드</span>
           </Button>
           <Button
@@ -760,7 +789,7 @@ export function ComparisonTable({
             onClick={() => handleTemplateDownload(rows.length > 0)}
             aria-label={rows.length > 0 ? "엑셀 내보내기" : "엑셀 양식"}
           >
-            <FileDown className="h-4 w-4" />
+            <FileDown className="size-4" />
             <span className="hidden sm:inline">{rows.length > 0 ? "내보내기" : "양식"}</span>
           </Button>
           {isAdmin && (
@@ -772,7 +801,7 @@ export function ComparisonTable({
               aria-pressed={showSettings}
               aria-label="업체별 할인율"
             >
-              <Settings2 className="h-4 w-4" />
+              <Settings2 className="size-4" />
               <span className="hidden sm:inline">할인율</span>
             </Button>
           )}
@@ -829,58 +858,41 @@ export function ComparisonTable({
 
       <ExcelUploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} onSuccess={onDataChange} />
 
-      {/* 구분 필터 + 할인후/할인전 */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1.5" role="group" aria-label="구분">
-          {CATEGORY_FILTERS.map((c) => (
-            <button
-              key={c.value}
-              type="button"
-              aria-pressed={categoryFilter === c.value}
-              onClick={() => setCategoryFilter(c.value)}
-              className={`inline-flex h-8 items-center gap-1 rounded-full px-3 text-[13px] font-semibold transition-colors ${
-                categoryFilter === c.value
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card text-subtle-foreground ring-1 ring-border hover:text-foreground"
-              }`}
-            >
-              {c.label}
-              <span className={`tabular-nums ${categoryFilter === c.value ? "opacity-80" : "text-muted-foreground"}`}>
-                {c.count}
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-border">
-          {(["after", "before"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={priceView === v}
-              onClick={() => setPriceView(v)}
-              className={`rounded-md px-3 py-1 text-[13px] font-semibold transition-colors ${
-                priceView === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {v === "after" ? "할인후" : "할인전"}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* 검색 · 최저가 업체 · 할인후/할인전 */}
+      <FilterBar>
+        <SearchField id="price-search" value={searchQuery} onChange={setSearchQuery} placeholder="제품명·비고 검색" />
+        <FilterChip label="최저가 업체" options={minVendorOptions} value={minVendorFilter} onChange={setMinVendorFilter} />
+        <ClearFilters
+          show={!!searchQuery || !!minVendorFilter}
+          onClear={() => {
+            setSearchQuery("");
+            setMinVendorFilter(null);
+          }}
+        />
+        <Segmented<"after" | "before">
+          className="ml-auto"
+          ariaLabel="표시 단가"
+          value={priceView}
+          onValueChange={setPriceView}
+          items={[
+            { value: "after", label: "할인후" },
+            { value: "before", label: "할인전" },
+          ]}
+        />
+      </FilterBar>
 
       {vendors.length === 0 || (filtered.length === 0 && !isAdding) ? (
         <p className="rounded-xl bg-card px-4 py-10 text-center text-[13px] text-muted-foreground ring-1 ring-border">
           {vendors.length === 0
-            ? "업체를 먼저 등록해주세요."
+            ? "가격 비교에 표시할 업체가 없어요."
             : rows.length === 0
-              ? "통합 제품을 등록하고 매핑해주세요."
-              : "검색 결과가 없습니다."}
+              ? "품목을 추가하거나 엑셀로 올려 주세요."
+              : "조건에 맞는 품목이 없어요."}
         </p>
       ) : (
         <>
           {/* 모바일 카드 뷰 */}
           <div className="space-y-2.5 lg:hidden">
-            {isAdding && newForm && renderAddCardMobile()}
             {filtered.map((row) => {
               const isExpanded = expandedId === row.unified.id;
               const dmin = rowDisplayMin(row);
@@ -897,7 +909,7 @@ export function ComparisonTable({
                     className="flex w-full items-start gap-2 px-4 pb-2 pt-3 text-left disabled:cursor-default"
                   >
                     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-                      {categoryFilter === "all" && categoryTag(row.unified.notes)}
+                      {(categoryFilter === "all" || categoryFilter === "empty") && categoryTag(row.unified.notes)}
                       <span className="text-[15px] font-semibold leading-snug">{row.unified.name}</span>
                       {row.unified.remarks && (
                         <span className="text-[13px] text-muted-foreground">{row.unified.remarks}</span>
@@ -933,11 +945,33 @@ export function ComparisonTable({
                       );
                     })}
                   </div>
-                  {isExpanded && editForm && <div className="px-4 pb-4">{renderMobileEditPanel(row)}</div>}
                 </div>
               );
             })}
           </div>
+
+          {/* 모바일: 추가·수정은 아래 시트 */}
+          {!isDesktop && (
+            <>
+              <BottomSheet open={isAdding && !!newForm} onOpenChange={(o) => { if (!o) closeAdd(); }} title="품목 추가" tall>
+                {newForm && renderAddCardMobile()}
+              </BottomSheet>
+              {(() => {
+                const row = expandedId ? rows.find((r) => r.unified.id === expandedId) : undefined;
+                return (
+                  <BottomSheet
+                    open={!!row && !!editForm}
+                    onOpenChange={(o) => { if (!o) closeEdit(); }}
+                    title={row?.unified.name ?? "품목 수정"}
+                    description="단가는 할인후 기준이에요"
+                    tall
+                  >
+                    {row && editForm && renderMobileEditPanel(row)}
+                  </BottomSheet>
+                );
+              })()}
+            </>
+          )}
 
           {/* PC 표: 머리글·제품명 고정, 표 안에서 스크롤 */}
           <div className="hidden overflow-hidden rounded-xl bg-card ring-1 ring-border lg:block">
@@ -983,7 +1017,7 @@ export function ComparisonTable({
                           >
                             <td className="sticky left-0 z-[1] border-b border-border bg-card px-4 py-2.5 group-hover:bg-muted">
                               <span className="flex items-center gap-1.5">
-                                {categoryFilter === "all" && categoryTag(row.unified.notes)}
+                                {(categoryFilter === "all" || categoryFilter === "empty") && categoryTag(row.unified.notes)}
                                 <span className="font-medium">{row.unified.name}</span>
                               </span>
                             </td>
@@ -1025,7 +1059,7 @@ export function ComparisonTable({
             </div>
           </div>
           <p className="hidden px-1 text-xs text-muted-foreground lg:block">
-            초록 칸 = 그 품목의 최저가 · 업체 칸에 마우스를 올리면 업체 쪽 품목명이 보여요
+            초록 칸 = 그 품목의 최저가 · 업체 칸에 마우스를 올리면 업체 쪽 품목명이 보여요 · 수정 칸은 할인후 단가
             {isAdmin ? " · 행을 누르면 바로 수정" : ""}
           </p>
         </>

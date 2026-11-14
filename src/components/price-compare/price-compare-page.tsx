@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { BackButton } from "@/components/back-button";
+import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
 import { PageHeader } from "@/components/page-header";
 import { UnderlineTabs } from "@/components/list-parts";
 import { ComparisonTable } from "./comparison-table";
@@ -44,11 +42,9 @@ export function PriceComparePage() {
       <PageHeader
         title="가격 비교"
         leading={
-          <Button variant="ghost" size="icon" asChild className="lg:hidden">
-            <Link href="/more" aria-label="더보기로">
-              <ChevronLeft />
-            </Link>
-          </Button>
+          <div className="lg:hidden">
+            <BackButton fallbackHref="/more" />
+          </div>
         }
         tabs={
           <UnderlineTabs<"compare" | "aliases">
@@ -64,13 +60,14 @@ export function PriceComparePage() {
       />
 
       {error ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-destructive">데이터를 불러올 수 없습니다.</p>
-          <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+        <div className="p-4 lg:px-6">
+          <div className="rounded-xl bg-card ring-1 ring-border">
+            <EmptyState title="가격 비교를 불러오지 못했어요" description={error} />
+          </div>
         </div>
       ) : !data ? (
-        <div className="flex items-center justify-center py-16">
-          <Spinner text="불러오는 중..." />
+        <div className="p-4 lg:px-6">
+          <ListSkeleton rows={10} />
         </div>
       ) : (
         <div className="space-y-4 p-4 lg:px-6">
