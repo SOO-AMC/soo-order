@@ -6,6 +6,7 @@
 //   계속 데이터가 오므로 연결이 유지되고 메모리도 vendor 1개분만 들고 있게 된다.
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/supabase/server";
+import { chunk } from "@/lib/supabase/paginate";
 
 export const runtime = "nodejs"; // mupdf(WASM)는 Node 전용
 export const maxDuration = 300;
@@ -47,12 +48,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "다운로드할 명세서가 지정되지 않았습니다." }, { status: 400 });
     }
 
-    const { data, error } = await supabase
-      .from("invoices")
-      .select("id, vendor_name, invoice_date, image_urls, page_start, page_end")
-      .in("id", docIds);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    const rows = (data ?? []) as InvoiceRow[];
+    // id를 수백 개 한 번에 보내면 주소가 길어져 요청이 실패한다 → 100개씩 나눠 읽는다
+    const rows: InvoiceRow[] = [];
+    for (const ids of chunk(docIds, 100)) {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("id, vendor_name, invoice_date, image_urls, page_start, page_end")
+        .in("id", ids);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      rows.push(...((data ?? []) as InvoiceRow[]));
+    }
 
     // 업체별로 명세서 항목(파일+페이지범위)을 모음. 합본 PDF면 같은 파일 + 다른 페이지 범위.
     // 단일 invoice는 page_start/page_end = NULL → 파일 전체 사용.

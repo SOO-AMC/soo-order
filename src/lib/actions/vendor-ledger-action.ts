@@ -1,60 +1,34 @@
 "use server";
 
 import { requireAdmin } from "@/lib/supabase/server";
+import { fetchInvoiceLines } from "@/lib/invoices/lines";
+import { fetchAllPages } from "@/lib/supabase/paginate";
 import type { LedgerRow, InvoiceDoc } from "@/lib/types/invoice";
 
-interface InvoiceRow {
-  id: string;
-  vendor_name: string;
-  invoice_date: string | null;
-}
-interface ItemRow {
-  invoice_id: string;
-  item_name: string;
-  quantity: number;
-  unit_price: number;
-  amount: number;
-}
-
-/**
- * 거래처원장 조회. 업체(없으면 전체) + 기간(없으면 전체)으로
- * invoice_items 를 invoices 와 조인해 거래 내역을 반환한다. 관리자 전용.
- */
-export async function fetchVendorLedger(opts: {
+interface LedgerFilter {
   vendorId?: string | null;
   start?: string | null;
   end?: string | null;
-}): Promise<LedgerRow[]> {
+}
+
+/**
+ * 거래처원장 조회. 업체(없으면 전체) + 기간(없으면 전체)의 명세서 품목 줄을 **전부** 반환한다. 관리자 전용.
+ * 줄 수 제한(1,000줄)과 명세서 id 목록 길이 제한에 걸리지 않도록 fetchInvoiceLines 로 끝까지 읽는다.
+ * 읽지 못하면 빈 목록 대신 오류를 던진다 — "0원"으로 보이면 그 숫자를 믿게 되기 때문.
+ */
+export async function fetchVendorLedger(opts: LedgerFilter): Promise<LedgerRow[]> {
   const { supabase } = await requireAdmin();
+  const lines = await fetchInvoiceLines(supabase, opts);
 
-  let q = supabase.from("invoices").select("id, vendor_name, invoice_date");
-  if (opts.vendorId) q = q.eq("vendor_id", opts.vendorId);
-  if (opts.start) q = q.gte("invoice_date", opts.start);
-  if (opts.end) q = q.lte("invoice_date", opts.end);
-
-  const { data: invoices, error } = await q;
-  if (error || !invoices || invoices.length === 0) return [];
-
-  const invMap = new Map<string, InvoiceRow>((invoices as InvoiceRow[]).map((i) => [i.id, i]));
-  const ids = (invoices as InvoiceRow[]).map((i) => i.id);
-
-  const { data: items } = await supabase
-    .from("invoice_items")
-    .select("invoice_id, item_name, quantity, unit_price, amount")
-    .in("invoice_id", ids);
-
-  const rows: LedgerRow[] = ((items as ItemRow[]) ?? []).map((it) => {
-    const inv = invMap.get(it.invoice_id);
-    return {
-      invoiceId: it.invoice_id,
-      invoiceDate: inv?.invoice_date ?? null,
-      vendorName: inv?.vendor_name ?? "",
-      itemName: it.item_name,
-      quantity: it.quantity,
-      unitPrice: it.unit_price,
-      amount: it.amount,
-    };
-  });
+  const rows: LedgerRow[] = lines.map((l) => ({
+    invoiceId: l.invoiceId,
+    invoiceDate: l.invoiceDate,
+    vendorName: l.vendorName,
+    itemName: l.itemName,
+    quantity: l.quantity,
+    unitPrice: l.unitPrice,
+    amount: l.amount,
+  }));
 
   rows.sort((a, b) => {
     const d = (a.invoiceDate ?? "").localeCompare(b.invoiceDate ?? "");
@@ -68,44 +42,32 @@ interface InvoiceDocRow {
   vendor_name: string;
   invoice_date: string | null;
   total_amount: number;
-  image_urls: string[];
+  image_urls: string[] | null;
+  invoice_items: { count: number }[] | null;
 }
 
-/** 거래처원장 — 업체+기간별 명세서 원본 문서 목록. 관리자 전용. */
-export async function fetchInvoiceDocs(opts: {
-  vendorId?: string | null;
-  start?: string | null;
-  end?: string | null;
-}): Promise<InvoiceDoc[]> {
+/** 거래처원장 — 업체+기간별 명세서 원본 문서 목록(품목 수 포함). 관리자 전용. */
+export async function fetchInvoiceDocs(opts: LedgerFilter): Promise<InvoiceDoc[]> {
   const { supabase } = await requireAdmin();
 
-  let q = supabase
-    .from("invoices")
-    .select("id, vendor_name, invoice_date, total_amount, image_urls")
-    .order("invoice_date", { ascending: false });
-  if (opts.vendorId) q = q.eq("vendor_id", opts.vendorId);
-  if (opts.start) q = q.gte("invoice_date", opts.start);
-  if (opts.end) q = q.lte("invoice_date", opts.end);
-
-  const { data, error } = await q;
-  if (error || !data || data.length === 0) return [];
-  const invList = data as InvoiceDocRow[];
-
-  const { data: items } = await supabase
-    .from("invoice_items")
-    .select("invoice_id")
-    .in("invoice_id", invList.map((i) => i.id));
-  const countById = new Map<string, number>();
-  for (const it of (items as { invoice_id: string }[]) ?? []) {
-    countById.set(it.invoice_id, (countById.get(it.invoice_id) ?? 0) + 1);
-  }
+  const invList = await fetchAllPages<InvoiceDocRow>(
+    (from, to) => {
+      // 품목 수는 명세서마다 DB가 세어 준다 (id 목록을 다시 보내지 않는다)
+      let q = supabase.from("invoices").select("id, vendor_name, invoice_date, total_amount, image_urls, invoice_items(count)");
+      if (opts.vendorId) q = q.eq("vendor_id", opts.vendorId);
+      if (opts.start) q = q.gte("invoice_date", opts.start);
+      if (opts.end) q = q.lte("invoice_date", opts.end);
+      return q.order("invoice_date", { ascending: false }).order("id").range(from, to);
+    },
+    { label: "명세서 목록" },
+  );
 
   return invList.map((i) => ({
     id: i.id,
     vendorName: i.vendor_name,
     invoiceDate: i.invoice_date,
-    totalAmount: i.total_amount,
-    itemCount: countById.get(i.id) ?? 0,
+    totalAmount: Number(i.total_amount) || 0,
+    itemCount: i.invoice_items?.[0]?.count ?? 0,
     imagePaths: i.image_urls ?? [],
   }));
 }

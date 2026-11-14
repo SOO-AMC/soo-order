@@ -5,14 +5,14 @@ import { transformRpcResponse } from "@/lib/utils/dashboard";
 import {
   computeAlerts,
   computeLeadTime,
-  computeSpend,
+  computeInvoiceSpend,
+  spendMonthLabels,
   type AlertOrderRow,
   type LeadTimeOrderRow,
-  type SpendOrderRow,
-  type VendorMini,
-  type VendorProductMini,
-  type AliasMini,
 } from "@/lib/utils/dashboard-extras";
+import { fetchInvoiceLines } from "@/lib/invoices/lines";
+import { fetchAllPages } from "@/lib/supabase/paginate";
+import { kstToday } from "@/lib/utils/period";
 import type { DashboardData, RecentOrderRow } from "@/lib/types/dashboard";
 
 interface RecentOrderQueryRow {
@@ -40,29 +40,31 @@ export async function fetchDashboardData(): Promise<DashboardData> {
   try {
     const now = new Date();
     const leadTimeSince = new Date(now.getTime() - 130 * 86400000).toISOString();
-    const spendSince = new Date(now.getFullYear(), now.getMonth() - (SPEND_MONTHS - 1), 1).toISOString();
+    const today = kstToday();
+    const spendSince = `${spendMonthLabels(today, SPEND_MONTHS)[0]}-01`;
 
-    const [activeRes, inspectedRes, spendRes, vendorsRes, vpRes, aliasRes, recentRes] = await Promise.all([
+    // 줄 수가 1,000을 넘을 수 있는 조회(검수 이력·명세서 줄)는 끝까지 읽는다
+    const [activeRes, inspected, spendLines, vendorsRes, recentRes] = await Promise.all([
       supabase
         .from("orders")
         .select(
           "id, status, item_name, quantity, unit, is_urgent, vendor_name, created_at, dispatched_at, updated_at, return_requested_at, requester:profiles!requester_id(full_name)"
         )
         .in("status", ["pending", "ordered", "return_requested"]),
-      supabase
-        .from("orders")
-        .select("item_name, created_at, dispatched_at, inspected_at")
-        .eq("type", "order")
-        .not("inspected_at", "is", null)
-        .gte("inspected_at", leadTimeSince),
-      supabase
-        .from("orders")
-        .select("item_name, quantity, vendor_name, created_at")
-        .eq("type", "order")
-        .gte("created_at", spendSince),
+      fetchAllPages<LeadTimeOrderRow>(
+        (from, to) =>
+          supabase
+            .from("orders")
+            .select("item_name, created_at, dispatched_at, inspected_at")
+            .eq("type", "order")
+            .not("inspected_at", "is", null)
+            .gte("inspected_at", leadTimeSince)
+            .order("id")
+            .range(from, to),
+        { label: "검수 이력" },
+      ),
+      fetchInvoiceLines(supabase, { start: spendSince }),
       supabase.from("vendors").select("id, name"),
-      supabase.from("vendor_products").select("vendor_id, product_name, unit_price, unified_product_id"),
-      supabase.from("item_name_aliases").select("item_name, unified_product_id"),
       supabase
         .from("orders")
         .select("id, item_name, quantity, unit, status, created_at, requester:profiles!requester_id(full_name)")
@@ -72,14 +74,9 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     ]);
 
     const alerts = computeAlerts((activeRes.data ?? []) as unknown as AlertOrderRow[]);
-    const leadTime = computeLeadTime((inspectedRes.data ?? []) as unknown as LeadTimeOrderRow[]);
-    const spend = computeSpend(
-      (spendRes.data ?? []) as unknown as SpendOrderRow[],
-      (vendorsRes.data ?? []) as unknown as VendorMini[],
-      (vpRes.data ?? []) as unknown as VendorProductMini[],
-      (aliasRes.data ?? []) as unknown as AliasMini[],
-      SPEND_MONTHS,
-    );
+    const leadTime = computeLeadTime(inspected);
+    const vendorNameById = new Map(((vendorsRes.data ?? []) as { id: string; name: string }[]).map((v) => [v.id, v.name] as const));
+    const spend = computeInvoiceSpend(spendLines, vendorNameById, today, SPEND_MONTHS);
     const recentOrders: RecentOrderRow[] = ((recentRes.data ?? []) as unknown as RecentOrderQueryRow[]).map((o) => ({
       id: o.id,
       itemName: o.item_name,
@@ -91,7 +88,8 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     }));
 
     return { ...core, alerts, leadTime, spend, recentOrders };
-  } catch {
+  } catch (e) {
+    console.error("[dashboard] 추가 지표 계산 실패", e);
     return core;
   }
 }

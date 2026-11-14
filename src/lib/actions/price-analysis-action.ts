@@ -2,27 +2,9 @@
 
 import { requireAdmin } from "@/lib/supabase/server";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
+import { fetchInvoiceLines } from "@/lib/invoices/lines";
+import { fetchAllPages } from "@/lib/supabase/paginate";
 import type { PriceAnalysisResult, PriceAnalysisRow, ItemTrendPoint } from "@/lib/types/invoice";
-
-interface InvRow {
-  id: string;
-  vendor_id: string | null;
-  vendor_name: string;
-  invoice_date: string | null;
-}
-interface ItemRow {
-  invoice_id: string;
-  unified_product_id: string | null;
-  item_name: string;
-  unit_price: number;
-  quantity: number;
-}
-interface TrendItemRow {
-  invoice_id: string;
-  unit_price: number;
-  list_price: number;
-  quantity: number;
-}
 
 const EMPTY: PriceAnalysisResult = {
   rows: [],
@@ -52,23 +34,9 @@ export async function fetchPriceAnalysis(opts: {
   const lo = [opts.aStart, opts.bStart].sort()[0];
   const hi = [opts.aEnd, opts.bEnd].sort()[1];
 
-  let q = supabase
-    .from("invoices")
-    .select("id, vendor_id, vendor_name, invoice_date")
-    .gte("invoice_date", lo)
-    .lte("invoice_date", hi);
-  if (opts.vendorId) q = q.eq("vendor_id", opts.vendorId);
-  const { data: invoices } = await q;
-  const invList = (invoices as InvRow[]) ?? [];
-  if (invList.length === 0) return EMPTY;
-
-  const dateById = new Map(invList.map((i) => [i.id, i.invoice_date] as const));
-
-  const { data: items } = await supabase
-    .from("invoice_items")
-    .select("invoice_id, unified_product_id, item_name, unit_price, quantity")
-    .in("invoice_id", invList.map((i) => i.id));
-  const itemList = (items as ItemRow[]) ?? [];
+  // 두 기간을 덮는 범위의 줄을 끝까지 읽는다 (1,000줄 제한·id 목록 길이 제한 없음)
+  const itemList = await fetchInvoiceLines(supabase, { vendorId: opts.vendorId, start: lo, end: hi });
+  if (itemList.length === 0) return EMPTY;
 
   const inA = (d: string | null) => d != null && d >= opts.aStart && d <= opts.aEnd;
   const inB = (d: string | null) => d != null && d >= opts.bStart && d <= opts.bEnd;
@@ -83,24 +51,24 @@ export async function fetchPriceAnalysis(opts: {
   }
   const groups = new Map<string, Agg>();
   for (const it of itemList) {
-    const d = dateById.get(it.invoice_id) ?? null;
+    const d = it.invoiceDate;
     const isA = inA(d);
     const isB = inB(d);
     if (!isA && !isB) continue;
-    const key = it.unified_product_id ?? "n:" + normalizeItemName(it.item_name);
+    const key = it.unifiedProductId ?? "n:" + normalizeItemName(it.itemName);
     let g = groups.get(key);
     if (!g) {
-      g = { name: it.item_name, unifiedProductId: it.unified_product_id, aQty: 0, aSum: 0, bQty: 0, bSum: 0 };
+      g = { name: it.itemName, unifiedProductId: it.unifiedProductId, aQty: 0, aSum: 0, bQty: 0, bSum: 0 };
       groups.set(key, g);
     }
-    if (isB) g.name = it.item_name; // 최근 표기 우선
+    if (isB) g.name = it.itemName; // 최근 표기 우선
     if (isA) {
       g.aQty += it.quantity;
-      g.aSum += it.unit_price * it.quantity;
+      g.aSum += it.unitPrice * it.quantity;
     }
     if (isB) {
       g.bQty += it.quantity;
-      g.bSum += it.unit_price * it.quantity;
+      g.bSum += it.unitPrice * it.quantity;
     }
   }
 
@@ -145,22 +113,14 @@ export async function fetchPriceAnalysis(opts: {
 /** 명세서에 등장한 품목 목록(중복 제거) — 품목 추이 검색용. 관리자 전용. */
 export async function fetchTrendProducts(): Promise<{ key: string; name: string; unifiedProductId: string | null }[]> {
   const { supabase } = await requireAdmin();
-  const PAGE = 1000;
+  const rows = await fetchAllPages<{ item_name: string; unified_product_id: string | null }>(
+    (from, to) => supabase.from("invoice_items").select("item_name, unified_product_id").order("id").range(from, to),
+    { label: "명세서 품목 목록" },
+  );
   const seen = new Map<string, { key: string; name: string; unifiedProductId: string | null }>();
-  let from = 0;
-  while (true) {
-    const { data, error } = await supabase
-      .from("invoice_items")
-      .select("item_name, unified_product_id")
-      .range(from, from + PAGE - 1);
-    const rows = (data as { item_name: string; unified_product_id: string | null }[]) ?? [];
-    if (error || rows.length === 0) break;
-    for (const it of rows) {
-      const key = it.unified_product_id ?? "n:" + normalizeItemName(it.item_name);
-      if (!seen.has(key)) seen.set(key, { key, name: it.item_name, unifiedProductId: it.unified_product_id });
-    }
-    if (rows.length < PAGE) break;
-    from += PAGE;
+  for (const it of rows) {
+    const key = it.unified_product_id ?? "n:" + normalizeItemName(it.item_name);
+    if (!seen.has(key)) seen.set(key, { key, name: it.item_name, unifiedProductId: it.unified_product_id });
   }
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
@@ -173,25 +133,18 @@ export async function fetchItemPriceTrend(opts: {
 }): Promise<ItemTrendPoint[]> {
   const { supabase } = await requireAdmin();
 
-  let iq = supabase.from("invoice_items").select("invoice_id, unit_price, list_price, quantity");
-  if (opts.unifiedProductId) iq = iq.eq("unified_product_id", opts.unifiedProductId);
-  else iq = iq.eq("item_name", opts.itemName);
-  const { data: items } = await iq;
-  const itemList = (items as TrendItemRow[]) ?? [];
-  if (itemList.length === 0) return [];
-
-  const invIds = [...new Set(itemList.map((i) => i.invoice_id))];
-  let vq = supabase.from("invoices").select("id, vendor_id, vendor_name, invoice_date").in("id", invIds);
-  if (opts.vendorId) vq = vq.eq("vendor_id", opts.vendorId);
-  const { data: invs } = await vq;
-  const invMap = new Map((((invs as InvRow[]) ?? [])).map((i) => [i.id, i] as const));
-
-  const points: ItemTrendPoint[] = [];
-  for (const it of itemList) {
-    const inv = invMap.get(it.invoice_id);
-    if (!inv) continue;
-    points.push({ date: inv.invoice_date, vendorName: inv.vendor_name, unitPrice: it.unit_price, listPrice: it.list_price, quantity: it.quantity });
-  }
+  const lines = await fetchInvoiceLines(supabase, {
+    vendorId: opts.vendorId,
+    unifiedProductId: opts.unifiedProductId,
+    itemName: opts.itemName,
+  });
+  const points: ItemTrendPoint[] = lines.map((l) => ({
+    date: l.invoiceDate,
+    vendorName: l.vendorName,
+    unitPrice: l.unitPrice,
+    listPrice: l.listPrice,
+    quantity: l.quantity,
+  }));
   points.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
   return points;
 }

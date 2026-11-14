@@ -20,6 +20,9 @@ import type { LedgerRow, InvoiceDoc } from "@/lib/types/invoice";
 const won = (n: number) => `${Math.round(n).toLocaleString()}원`;
 const num = (n: number) => Math.round(n).toLocaleString();
 
+/** 거래 내역 표에 한 번에 그리는 줄 수 */
+const LINE_STEP = 300;
+
 /**
  * 거래처원장 (관리자). 업체·기간 → 조회 → 요약 숫자 + 거래 내역 표 / 명세서 원본.
  * 엑셀(업체별 시트), 원본 PDF 합치기(한 업체)·업체별 ZIP(여러 업체, form POST 다운로드)은 예전 그대로.
@@ -39,6 +42,8 @@ export function VendorLedgerPage() {
   const [queried, setQueried] = useState<{ vendor: string; range: DateRange } | null>(null);
   const [view, setView] = useState<"lines" | "docs">("lines");
   const [lineQuery, setLineQuery] = useState("");
+  /** 한 번에 그리는 줄 수. 합계는 항상 전체 줄로 계산하고, 표만 나눠 그린다 (수천 줄을 한꺼번에 그리면 느려짐) */
+  const [lineLimit, setLineLimit] = useState(LINE_STEP);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -83,6 +88,7 @@ export function VendorLedgerPage() {
     const q = lineQuery.trim().toLowerCase();
     return q ? rows.filter((r) => r.itemName.toLowerCase().includes(q) || r.vendorName.toLowerCase().includes(q)) : rows;
   }, [rows, lineQuery]);
+  const visibleRows = useMemo(() => shownRows.slice(0, lineLimit), [shownRows, lineLimit]);
 
   const handleSearch = async () => {
     setLoading(true);
@@ -94,6 +100,7 @@ export function VendorLedgerPage() {
       setDocs(docList);
       setQueried({ vendor: vendorLabel(vendorId), range });
       setLineQuery("");
+      setLineLimit(LINE_STEP);
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     } finally {
@@ -377,7 +384,7 @@ export function VendorLedgerPage() {
               ) : (
                 <>
                   <FilterBar>
-                    <SearchField id="ledger-q" value={lineQuery} onChange={setLineQuery} placeholder="품목·업체 검색" />
+                    <SearchField id="ledger-q" value={lineQuery} onChange={(v) => { setLineQuery(v); setLineLimit(LINE_STEP); }} placeholder="품목·업체 검색" />
                   </FilterBar>
 
                   {/* PC 표 */}
@@ -395,7 +402,7 @@ export function VendorLedgerPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {shownRows.map((r, i) => (
+                          {visibleRows.map((r, i) => (
                             <tr key={r.invoiceId + i} className="hover:bg-muted/60">
                               <td className="whitespace-nowrap border-b border-border py-2 pl-4 tabular-nums text-subtle-foreground">{r.invoiceDate ?? "—"}</td>
                               {multiVendor && <td className="truncate border-b border-border px-3 py-2 text-subtle-foreground">{r.vendorName}</td>}
@@ -414,7 +421,7 @@ export function VendorLedgerPage() {
 
                   {/* 모바일 */}
                   <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border lg:hidden">
-                    {shownRows.map((r, i) => (
+                    {visibleRows.map((r, i) => (
                       <div key={r.invoiceId + i} className={cn("px-4 py-3", i > 0 && "border-t border-border")}>
                         <div className="flex items-baseline justify-between gap-3">
                           <span className="min-w-0 truncate text-[15px] font-semibold">{r.itemName}</span>
@@ -427,8 +434,14 @@ export function VendorLedgerPage() {
                       </div>
                     ))}
                   </section>
+                  {shownRows.length > visibleRows.length && (
+                    <Button variant="outline" className="w-full" onClick={() => setLineLimit((n) => n + LINE_STEP)}>
+                      {num(Math.min(LINE_STEP, shownRows.length - visibleRows.length))}줄 더 보기 · 남은 {num(shownRows.length - visibleRows.length)}줄
+                    </Button>
+                  )}
                   <p className="px-1 text-[13px] tabular-nums text-muted-foreground">
-                    {shownRows.length === rows!.length ? `${rows!.length}줄` : `${shownRows.length} / ${rows!.length}줄`} · 금액은 원, 할인후 기준
+                    {shownRows.length === rows!.length ? `${num(rows!.length)}줄` : `${num(shownRows.length)} / ${num(rows!.length)}줄`}
+                    {shownRows.length > visibleRows.length ? ` 중 ${num(visibleRows.length)}줄 표시` : ""} · 합계는 전체 줄 기준 · 금액은 원, 할인후 기준
                   </p>
                 </>
               )

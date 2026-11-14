@@ -90,7 +90,7 @@ export interface LeadTimeData {
   slowestToInspect: SlowItem[]; // 검수까지 느렸던 품목
 }
 
-// ── 지출 추이 (C, 가격매칭 기반 추정) ──
+// ── 지출 추이 (C, 명세서 금액 합계 — 거래처원장과 같은 숫자) ──
 export interface SpendMonthPoint {
   label: string; // "2026-03"
   amount: number;
@@ -102,10 +102,11 @@ export interface SpendVendorPoint {
 export interface SpendData {
   monthly: SpendMonthPoint[];
   byVendorThisMonth: SpendVendorPoint[];
-  matchedCount: number; // 금액 계산된(매칭된) 주문 수
-  totalCount: number; // 같은 기간 전체 주문 수
   thisMonthAmount: number;
-  lastMonthAmount: number;
+  lastMonthAmount: number; // 지난달 한 달 전체
+  lastMonthToDateAmount: number; // 지난달 1일 ~ 오늘과 같은 날짜까지 (이번 달과 공정하게 비교)
+  invoiceCountThisMonth: number; // 이번 달 명세서 장수
+  asOf: string; // 기준일 (KST, YYYY-MM-DD)
 }
 
 export interface RecentOrderRow {

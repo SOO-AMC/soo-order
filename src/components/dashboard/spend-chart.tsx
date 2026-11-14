@@ -11,39 +11,40 @@ import {
 import type { SpendData } from "@/lib/types/dashboard";
 
 const chartConfig = {
-  amount: { label: "추정 지출", color: "var(--chart-1)" },
+  amount: { label: "지출", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
 const won = (n: number) => `${n.toLocaleString()}원`;
 
 export function SpendChart({ data }: { data: SpendData }) {
   const empty = data.monthly.every((m) => m.amount === 0);
-  const coverage = data.totalCount > 0 ? Math.round((data.matchedCount / data.totalCount) * 100) : 0;
-  const diff = data.lastMonthAmount > 0 ? data.thisMonthAmount - data.lastMonthAmount : 0;
+  // 이번 달은 아직 진행 중이므로 지난달 "같은 날짜까지"와 비교한다 (한 달 전체와 비교하면 늘 줄어든 것처럼 보임)
+  const diff = data.lastMonthToDateAmount > 0 ? data.thisMonthAmount - data.lastMonthToDateAmount : 0;
+  const day = Number(data.asOf.slice(8, 10));
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-[15px] font-bold">지출 추이 (추정)</CardTitle>
+        <CardTitle className="text-[15px] font-bold">지출 추이</CardTitle>
         <p className="text-xs text-muted-foreground">
-          가격비교 단가 × 수량 기준 추정치. 매칭률 {coverage}% ({data.matchedCount}/{data.totalCount}건)
+          확정한 명세서 금액의 합계예요. 거래처원장과 같은 숫자 · 이번 달 명세서 {data.invoiceCountThisMonth.toLocaleString()}장
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
         {empty ? (
           <p className="text-sm text-muted-foreground">
-            가격 매칭된 주문이 없어 추정할 데이터가 없습니다. 가격비교에 제품을 등록하고 &quot;품목 매칭&quot;을 쌓으면 표시됩니다.
+            최근 6개월에 확정한 명세서가 없어요. 명세서 스캔에서 명세서를 확정하면 여기에 합계가 나와요.
           </p>
         ) : (
           <>
             <div className="flex items-baseline gap-3">
               <div>
-                <p className="text-xs text-muted-foreground">이번 달 추정</p>
+                <p className="text-xs text-muted-foreground">이번 달 (1일 ~ {day}일)</p>
                 <p className="text-lg font-bold">{won(data.thisMonthAmount)}</p>
               </div>
-              {data.lastMonthAmount > 0 && Math.abs(diff) > 0 && (
+              {data.lastMonthToDateAmount > 0 && Math.abs(diff) > 0 && (
                 <p className={diff > 0 ? "text-xs text-status-late" : "text-xs text-status-done"}>
-                  {diff > 0 ? "▲" : "▼"} 지난달 대비 {won(Math.abs(diff))}
+                  {diff > 0 ? "▲" : "▼"} 지난달 {day}일까지보다 {won(Math.abs(diff))}
                 </p>
               )}
             </div>

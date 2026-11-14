@@ -19,13 +19,14 @@ function CountDelta({ current, previous }: { current: number; previous: number }
 }
 
 function MoneyDelta({ spend }: { spend: SpendData }) {
-  if (spend.lastMonthAmount <= 0) return <span className="text-xs text-muted-foreground">지난달 데이터 없음</span>;
-  const diff = spend.thisMonthAmount - spend.lastMonthAmount;
-  if (diff === 0) return <span className="text-xs text-muted-foreground">지난달과 동일</span>;
+  // 이번 달은 진행 중 → 지난달 "같은 날짜까지"와 비교
+  if (spend.lastMonthToDateAmount <= 0) return <span className="text-xs text-muted-foreground">지난달 같은 기간 명세서 없음</span>;
+  const diff = spend.thisMonthAmount - spend.lastMonthToDateAmount;
+  if (diff === 0) return <span className="text-xs text-muted-foreground">지난달 같은 기간과 동일</span>;
   const up = diff > 0;
   return (
     <span className={cn("text-xs font-medium", up ? "text-status-late" : "text-status-done")}>
-      {up ? "▲" : "▼"} {won(Math.abs(diff))} <span className="font-normal text-muted-foreground">지난달 대비</span>
+      {up ? "▲" : "▼"} {won(Math.abs(diff))} <span className="font-normal text-muted-foreground">지난달 같은 기간 대비</span>
     </span>
   );
 }
@@ -44,7 +45,7 @@ export function StatCards({ summary, spend }: { summary: SummaryData; spend?: Sp
     { label: "검수대기", value: `${summary.ordered}`, unit: "건", icon: ClipboardCheck, delta: <CountDelta current={summary.ordered} previous={summary.orderedYesterday} /> },
     { label: "반품신청", value: `${summary.returnRequested}`, unit: "건", icon: Undo2, delta: <CountDelta current={summary.returnRequested} previous={summary.returnRequestedYesterday} /> },
     spend
-      ? { label: "이번 달 추정 지출", value: won(spend.thisMonthAmount), unit: "", icon: Wallet, delta: <MoneyDelta spend={spend} /> }
+      ? { label: "이번 달 지출 (명세서)", value: won(spend.thisMonthAmount), unit: "", icon: Wallet, delta: <MoneyDelta spend={spend} /> }
       : { label: "검수완료", value: `${summary.inspecting}`, unit: "건", icon: ClipboardCheck, delta: <CountDelta current={summary.inspecting} previous={summary.inspectingYesterday} /> },
   ];
 

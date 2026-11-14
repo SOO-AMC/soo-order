@@ -1,4 +1,3 @@
-import { normalizeItemName } from "./normalize-item-name";
 import type { AlertsData, AlertItem, LeadTimeData, SpendData } from "@/lib/types/dashboard";
 
 // ─────────────────────────────────────────────
@@ -153,116 +152,68 @@ export function computeLeadTime(inspected: LeadTimeOrderRow[]): LeadTimeData {
 }
 
 // ─────────────────────────────────────────────
-// C. 지출 추이 (가격매칭 기반 추정)
+// C. 지출 추이 (명세서 금액 합계)
+//   예전에는 "주문 수량 × 가격비교 단가"로 추정했는데, 이름이 맞는 주문이 1/3뿐이라 실제의 1/10 수준으로 나왔다.
+//   이제 확정된 명세서의 금액을 그대로 더한다 → 거래처원장의 같은 기간 합계와 같은 숫자.
 // ─────────────────────────────────────────────
-export interface SpendOrderRow {
-  item_name: string;
-  quantity: number;
-  vendor_name: string | null;
-  created_at: string;
-}
-export interface VendorMini {
-  id: string;
-  name: string;
-}
-export interface VendorProductMini {
-  vendor_id: string;
-  product_name: string;
-  unit_price: number | null;
-  unified_product_id: string | null;
-}
-export interface AliasMini {
-  item_name: string;
-  unified_product_id: string;
+export interface SpendLine {
+  invoiceId: string;
+  invoiceDate: string | null; // YYYY-MM-DD
+  amount: number;
+  vendorId: string | null;
+  vendorName: string;
 }
 
-function monthKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+/** 기준일(YYYY-MM-DD)을 포함해 과거로 monthsBack 개월의 "YYYY-MM" 목록 (오래된 달 → 이번 달) */
+export function spendMonthLabels(today: string, monthsBack: number): string[] {
+  const [y, m] = today.split("-").map(Number);
+  const out: string[] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const idx = y * 12 + (m - 1) - i;
+    out.push(`${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`);
+  }
+  return out;
 }
 
-export function computeSpend(
-  orders: SpendOrderRow[],
-  vendors: VendorMini[],
-  vendorProducts: VendorProductMini[],
-  aliases: AliasMini[],
+export function computeInvoiceSpend(
+  lines: SpendLine[],
+  vendorNameById: Map<string, string>,
+  today: string,
   monthsBack: number,
 ): SpendData {
-  const vendorIdByNorm = new Map<string, string>();
-  for (const v of vendors) vendorIdByNorm.set(normalizeItemName(v.name), v.id);
-  const aliasMap = new Map<string, string>();
-  for (const a of aliases) aliasMap.set(a.item_name, a.unified_product_id);
+  const labels = spendMonthLabels(today, monthsBack);
+  const thisKey = labels[labels.length - 1];
+  const lastKey = spendMonthLabels(today, 2)[0];
+  const lastToDateEnd = `${lastKey}-${today.slice(8, 10)}`; // 지난달의 같은 날짜 (문자열 비교라 31일이 없는 달도 안전)
 
-  const vpByUnified = new Map<string, VendorProductMini[]>();
-  const vpByNormName = new Map<string, VendorProductMini[]>();
-  for (const vp of vendorProducts) {
-    if (vp.unified_product_id) {
-      const arr = vpByUnified.get(vp.unified_product_id);
-      if (arr) arr.push(vp);
-      else vpByUnified.set(vp.unified_product_id, [vp]);
-    }
-    const nn = normalizeItemName(vp.product_name);
-    if (nn) {
-      const arr = vpByNormName.get(nn);
-      if (arr) arr.push(vp);
-      else vpByNormName.set(nn, [vp]);
-    }
-  }
+  const monthSums = new Map<string, number>(labels.map((l) => [l, 0]));
+  const vendorSums = new Map<string, number>();
+  const invoicesThisMonth = new Set<string>();
+  let lastToDate = 0;
 
-  const priceFor = (itemName: string, vendorName: string | null): number | null => {
-    const norm = normalizeItemName(itemName);
-    if (!norm) return null;
-    const vendorId = vendorName ? vendorIdByNorm.get(normalizeItemName(vendorName)) : undefined;
-    const pickPrice = (cands: VendorProductMini[]): number | null => {
-      if (vendorId) {
-        const own = cands.find((c) => c.vendor_id === vendorId && c.unit_price != null);
-        if (own?.unit_price != null) return own.unit_price;
-      }
-      const any = cands.find((c) => c.unit_price != null);
-      return any?.unit_price ?? null;
-    };
-    const uid = aliasMap.get(norm);
-    if (uid) {
-      const p = pickPrice(vpByUnified.get(uid) ?? []);
-      if (p != null) return p;
-    }
-    return pickPrice(vpByNormName.get(norm) ?? []);
-  };
-
-  const now = new Date();
-  const monthLabels: string[] = [];
-  for (let i = monthsBack - 1; i >= 0; i--) {
-    monthLabels.push(monthKey(new Date(now.getFullYear(), now.getMonth() - i, 1)));
-  }
-  const monthSums = new Map<string, number>(monthLabels.map((m) => [m, 0]));
-  const thisMonthKey = monthKey(now);
-  const lastMonthKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
-  const vendorSumsThisMonth = new Map<string, number>();
-
-  let matched = 0;
-  let total = 0;
-  for (const o of orders) {
-    const mk = monthKey(new Date(o.created_at));
-    if (!monthSums.has(mk)) continue;
-    total++;
-    const price = priceFor(o.item_name, o.vendor_name);
-    if (price == null || o.quantity <= 0) continue;
-    const amount = price * o.quantity;
-    monthSums.set(mk, (monthSums.get(mk) ?? 0) + amount);
-    matched++;
-    if (mk === thisMonthKey) {
-      const vn = o.vendor_name?.trim() || "(미지정)";
-      vendorSumsThisMonth.set(vn, (vendorSumsThisMonth.get(vn) ?? 0) + amount);
+  for (const l of lines) {
+    if (!l.invoiceDate) continue;
+    const key = l.invoiceDate.slice(0, 7);
+    if (!monthSums.has(key)) continue;
+    monthSums.set(key, (monthSums.get(key) ?? 0) + l.amount);
+    if (key === lastKey && l.invoiceDate <= lastToDateEnd) lastToDate += l.amount;
+    if (key === thisKey) {
+      invoicesThisMonth.add(l.invoiceId);
+      // 명세서에 찍힌 글자가 아니라 연결된 업체 이름으로 묶는다 (같은 업체가 여러 이름으로 갈라지지 않게)
+      const name = (l.vendorId && vendorNameById.get(l.vendorId)) || l.vendorName.trim() || "(업체 미지정)";
+      vendorSums.set(name, (vendorSums.get(name) ?? 0) + l.amount);
     }
   }
 
   return {
-    monthly: monthLabels.map((m) => ({ label: m, amount: Math.round(monthSums.get(m) ?? 0) })),
-    byVendorThisMonth: [...vendorSumsThisMonth.entries()]
+    monthly: labels.map((l) => ({ label: l, amount: Math.round(monthSums.get(l) ?? 0) })),
+    byVendorThisMonth: [...vendorSums.entries()]
       .map(([vendor, amount]) => ({ vendor, amount: Math.round(amount) }))
       .sort((a, b) => b.amount - a.amount),
-    matchedCount: matched,
-    totalCount: total,
-    thisMonthAmount: Math.round(monthSums.get(thisMonthKey) ?? 0),
-    lastMonthAmount: Math.round(monthSums.get(lastMonthKey) ?? 0),
+    thisMonthAmount: Math.round(monthSums.get(thisKey) ?? 0),
+    lastMonthAmount: Math.round(monthSums.get(lastKey) ?? 0),
+    lastMonthToDateAmount: Math.round(lastToDate),
+    invoiceCountThisMonth: invoicesThisMonth.size,
+    asOf: today,
   };
 }

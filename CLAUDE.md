@@ -113,6 +113,7 @@ git push origin main  # 배포 (GitHub → Vercel 자동 배포)
 **성능·기능 핵심 마이그레이션**(미실행 시 런타임 오류 또는 성능 저하):
 - `migrate-orders-indexes.sql`: orders(10k+ 행) 인덱스 — `(status, created_at desc)`, `(created_at desc)`, item_name/vendor_name pg_trgm GIN, requester_id. tab-counts·리스트·조회탭 풀스캔 방지.
 - `migrate-latest-vendor-rpc.sql`: `latest_vendor_by_item()` RPC — 주문탭 "품목별 최근 업체" 힌트를 **jsonb 객체 1개로** 반환(PostgREST max-rows=1000 우회). orders/page.tsx가 호출하며 구버전(행 반환)·신버전(객체) 모두 처리.
+- `migrate-app-settings.sql`: `app_settings`(key/value) — 관리자 > 앱 설정에서 바꾸는 값. 지금은 `login_video`(로그인 화면 유튜브 영상, 로그인 전에도 읽히도록 이 키만 공개). 미실행이면 로그인 화면은 기본 영상, 저장은 안내 오류.
 - `migrate-display-account.sql`: 세미나실 화면 계정(`role = display`) 차단 — public 모든 표에 restrictive 정책 `block_display_account`(+profiles 자기 행만, briefing 읽기만, storage). **표를 새로 만들면 다시 실행.**
 - `migrate-invoice-page-range.sql`: invoices에 `page_start`/`page_end` 추가. 안 돌리면 명세서 확정 INSERT가 "column does not exist"로 실패.
 - **연차 3종은 순서대로 실행**: `migrate-leave-periods-grants-snapshots.sql`(주기 다회차화 + leave_grants + 스냅샷) → `migrate-leave-quota-guards.sql`(중복 유니크 + status 'scheduled') → `migrate-leave-borrowed-charge.sql`(`balance_id` 선사용). 앞 단계를 건너뛰면 뒤가 실패한다. 미실행 시 `.eq("status","active")`가 없는 컬럼을 참조해 **잔여가 전부 0으로 보인다**(에러가 아니라 조용히 틀림).
@@ -154,6 +155,10 @@ git push origin main  # 배포 (GitHub → Vercel 자동 배포)
 - 서버/클라이언트 양쪽에서 부르는 헬퍼는 `"use client"` 파일에 두지 말 것(`reader/category.ts`, `admin/log-text.ts` 가 그 이유로 분리됨).
 
 ## 함정 / 주의
+- **Supabase 조회는 한 번에 1,000줄까지만** 온다. 넘는 줄은 **오류 없이 잘린다**(합계가 조용히 작게 나옴). 줄 수가 1,000을 넘을 수 있는 조회는 `fetchAllPages()`(`lib/supabase/paginate.ts`)로 끝까지 읽고, 쪽 순서가 흔들리지 않게 `.order("id")`를 붙인다. 실패하면 빈 목록 대신 오류를 던진다.
+- **`.in("id", ids)`에 id를 수백 개 넣지 말 것** — 주소가 길어져 요청이 통째로 실패하고, 결과가 0건으로 보인다. 묶어서 거르거나(`invoices!inner(...)`) `chunk(ids, 100)`으로 나눠 보낸다.
+- **명세서 금액은 `fetchInvoiceLines()`(`lib/invoices/lines.ts`) 하나로 읽는다.** 거래처원장·단가 분석·대시보드 지출이 모두 이걸 써서 같은 기간이면 같은 숫자가 나온다. 따로 조회를 만들면 화면마다 합계가 달라진다.
+- **가격 비교 입력은 항상 할인전(업체 정가)**, DB 저장은 할인후. 계산은 `lib/utils/discount.ts`만 쓴다. 수정 화면은 손댄 칸만 저장한다(`priceToSave`) — 전부 다시 저장하면 할인율이 또 곱해진다.
 - **secure context 의존 API**: `crypto.randomUUID()`·`navigator.clipboard`는 HTTPS/localhost에서만 동작. LAN IP(`http://192.168.x.x`)로 dev 접속 시 throw → 클릭 무반응/복사 실패. **반드시 `genId()`(`lib/utils/uid.ts`)·`copyText()`(`lib/utils/clipboard.ts`) 사용** (직접 호출 금지). `copyText`는 Radix Dialog 안에서 focus trap에 포커스를 뺏기지 않도록 임시 textarea를 **현재 다이얼로그 내부에 append**하고 iOS용 Range 선택 + 60s 지연 revokeObjectURL 사용.
 - **mupdf-wasm 메모리**: WASM 힙은 자동으로 줄어들지 않음 — `PDFDocument`·`Buffer`마다 **명시적 `.destroy()` 호출**해야 누적되지 않아 Node OOM 안 됨. `saveToBuffer().asUint8Array()`는 **WASM 힙의 view 반환** → 즉시 `Buffer.from(...)`으로 Node 힙에 복사 후 mupdf Buffer destroy 안 하면 다음 호출에서 덮어써져 출력 PDF가 깨짐. **병렬 호출 금지** (vendor 여러 개 동시 처리 시 메모리 충돌 → 다른 vendor 페이지가 섞임).
 - 검색·항목 많은 드롭다운은 `components/ui/searchable-select.tsx`(Popover+검색) 사용.
