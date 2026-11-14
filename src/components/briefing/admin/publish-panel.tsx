@@ -48,7 +48,9 @@ export function PublishPanel({
   const [panel, setPanel] = useState<PublishPanelData | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ message: string; reasons?: string[] } | null>(null);
-  const [notice, setNotice] = useState("");
+  const [noticeState, setNoticeState] = useState<{ text: string; forStatus: IssueStatus } | null>(null);
+  const setNotice = (text: string, forStatus: IssueStatus = "draft") => setNoticeState(text ? { text, forStatus } : null);
+  const notice = noticeState && noticeState.forStatus === status ? noticeState.text : "";
   const [confirm, setConfirm] = useState<"publish" | "unpublish" | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pastTime] = useState(() => isPastPublishTime(issueDate));
@@ -86,7 +88,7 @@ export function PublishPanel({
       const res = await scheduleIssue(issueId);
       if (!res.ok) return setError({ message: res.error, reasons: res.reasons });
       onIssueChange(res.data);
-      setNotice(`${formatIssueDate(res.data.issue_date)} 08:30에 발행돼요.`);
+      setNotice(`${formatIssueDate(res.data.issue_date)} 08:30에 발행돼요.`, "scheduled");
     });
   const handleCancel = () =>
     run("cancel", async () => {
@@ -110,7 +112,8 @@ export function PublishPanel({
             ? "발행했어요. 테스트 모드라 직원 알림은 보내지 않고 기록만 남겼어요."
             : internal?.outcome === "failed"
               ? "발행했어요. 직원 알림은 실패했어요 — 아래 기록을 확인해 주세요."
-              : "발행했어요. 이 날짜 알림은 이미 나간 적이 있어 다시 보내지 않았어요."
+              : "발행했어요. 이 날짜 알림은 이미 나간 적이 있어 다시 보내지 않았어요.",
+        "published"
       );
     });
   const handleUnpublish = () =>
