@@ -28,6 +28,14 @@ export interface Order {
   notes: string;
   order_notes: string;
   inspection_notes: string;
+  /** 품절 사유·시각, 주문자가 확인한 시각 (supabase/migrate-order-reasons.sql — 실행 전에는 없다) */
+  out_of_stock_reason?: string | null;
+  out_of_stock_at?: string | null;
+  out_of_stock_ack_at?: string | null;
+  /** 관리자가 마지막으로 바꾼 내용과 이유 (예: "수량: 3 박스 → 2 박스") */
+  admin_change_summary?: string | null;
+  admin_change_reason?: string | null;
+  admin_change_at?: string | null;
   created_at: string;
   updated_at: string;
 }

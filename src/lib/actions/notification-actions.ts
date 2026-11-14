@@ -1,6 +1,7 @@
 "use server";
 
 import { requireUser } from "@/lib/supabase/server";
+import { editNotificationBody } from "@/lib/utils/order-notify";
 
 /**
  * 관리자가 요청자의 주문을 수정했을 때 요청자에게 인앱 알림 생성.
@@ -12,6 +13,8 @@ export async function notifyOrderEdited(
   itemName: string,
   link: string,
   changes: string[],
+  /** 수량·품목을 바꾼 이유 (있으면 본문 끝에 "사유: …") */
+  reason = "",
 ) {
   if (!orderId || !recipientId) return;
 
@@ -25,7 +28,7 @@ export async function notifyOrderEdited(
     order_id: orderId,
     type: "order_edited",
     title: `'${itemName}' 주문이 수정되었습니다`,
-    body: changes.length > 0 ? changes.join("\n") : "주문 정보가 수정되었습니다.",
+    body: editNotificationBody(changes, reason),
     link: link || null,
   });
 }

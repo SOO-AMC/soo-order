@@ -15,6 +15,8 @@ import { FilterBar, SearchField, FilterChip, ClearFilters, Segmented } from "@/c
 import { DetailPanel, WorkspaceSplit, DetailFields, Timeline } from "@/components/workspace/detail-panel";
 import { BottomSheet } from "@/components/workspace/bottom-sheet";
 import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { OutOfStockReasonInput } from "./out-of-stock-reason";
 import { formatShort, groupByDay, type OrderGroup } from "@/components/orders/list-format";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { PhotoGallery } from "@/components/orders/photo-gallery";
@@ -161,6 +163,9 @@ export function InspectionList({
   const [inspectionNotes, setInspectionNotes] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionError, setActionError] = useState("");
+  /** 여러 건 품절 처리 창 */
+  const [oosOpen, setOosOpen] = useState(false);
+  const [oosReason, setOosReason] = useState("");
   const [view, setView] = useState<ViewKey>(() =>
     (["all", "late", "partial", "urgent", "photo"] as const).find((v) => v === initialView) ?? "all"
   );
@@ -440,13 +445,15 @@ export function InspectionList({
   );
 
   const handleBulkOutOfStock = async () => {
-    if (selectedIds.size === 0) return;
-    if (!confirm(`${selectedIds.size}건을 품절 처리할까요?`)) return;
+    const reason = oosReason.trim();
+    if (selectedIds.size === 0 || !reason) return;
 
     setIsProcessing(true);
     try {
-      await bulkMarkOutOfStock([...selectedIds]);
-      logClientAction("inspection", "out_of_stock_bulk", `${selectedIds.size}건 일괄 품절`);
+      await bulkMarkOutOfStock([...selectedIds], reason);
+      logClientAction("inspection", "out_of_stock_bulk", `${selectedIds.size}건 일괄 품절 (사유: ${reason})`);
+      setOosOpen(false);
+      setOosReason("");
       setSelectedIds(new Set());
       setInspectionNotes({});
       await fetchOrders();
@@ -875,7 +882,7 @@ export function InspectionList({
           <Button
             size="sm"
             className="h-9 bg-white/15 text-white hover:bg-white/25"
-            onClick={handleBulkOutOfStock}
+            onClick={() => { setOosReason(""); setOosOpen(true); }}
             disabled={isProcessing}
           >
             <PackageX className="size-4" />
@@ -897,6 +904,22 @@ export function InspectionList({
           </Button>
         </FloatingActionBar>
       )}
+
+      <Dialog open={oosOpen} onOpenChange={(o) => { if (!isProcessing) setOosOpen(o); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{selectedIds.size}건 품절 처리</DialogTitle>
+            <DialogDescription>고른 주문을 모두 품절로 바꾸고, 주문자마다 사유를 알려요.</DialogDescription>
+          </DialogHeader>
+          <OutOfStockReasonInput id="bulk-out-of-stock-reason" value={oosReason} onChange={setOosReason} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOosOpen(false)} disabled={isProcessing}>취소</Button>
+            <Button variant="destructive" onClick={handleBulkOutOfStock} disabled={isProcessing || !oosReason.trim()}>
+              {isProcessing ? "처리하는 중…" : "품절 처리"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

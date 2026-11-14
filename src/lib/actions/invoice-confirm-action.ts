@@ -2,6 +2,7 @@
 
 import { requireAdmin } from "@/lib/supabase/server";
 import { buildVendorIndex, looksLikeOwnHospital, vendorKey } from "@/lib/utils/vendor-name";
+import { arrivalNotifications, partialNotifications } from "@/lib/utils/order-notify";
 import type { ConfirmInvoicePayload } from "@/lib/types/invoice";
 
 /**
@@ -62,14 +63,23 @@ export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<vo
 
   // 배분 대상 기존 주문 정보 선조회
   const allocIds = payload.rows.flatMap((r) => r.allocations.map((a) => a.orderId));
-  const ordersById = new Map<string, { quantity: number; received_quantity: number }>();
+  interface AllocOrder {
+    quantity: number;
+    received_quantity: number;
+    requester_id: string | null;
+    item_name: string;
+    unit: string | null;
+  }
+  const ordersById = new Map<string, AllocOrder>();
+  /** 이 명세서로 받은 수량이 기록된 주문 (주문자에게 알릴 대상) */
+  const touchedOrderIds = new Set<string>();
   if (allocIds.length > 0) {
     const { data } = await supabase
       .from("orders")
-      .select("id, quantity, received_quantity")
+      .select("id, quantity, received_quantity, requester_id, item_name, unit")
       .in("id", allocIds);
-    for (const o of (data ?? []) as { id: string; quantity: number; received_quantity: number }[]) {
-      ordersById.set(o.id, { quantity: o.quantity, received_quantity: o.received_quantity ?? 0 });
+    for (const o of (data ?? []) as ({ id: string } & AllocOrder)[]) {
+      ordersById.set(o.id, { quantity: o.quantity, received_quantity: o.received_quantity ?? 0, requester_id: o.requester_id, item_name: o.item_name, unit: o.unit });
     }
   }
 
@@ -116,6 +126,7 @@ export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<vo
       if (!o) continue;
       const newReceived = o.received_quantity + alloc.quantity;
       o.received_quantity = newReceived; // 같은 주문이 여러 라인에 걸쳐도 누적 반영
+      touchedOrderIds.add(alloc.orderId);
       if (o.quantity > 0 && newReceived < o.quantity) {
         await supabase
           .from("orders")
@@ -150,6 +161,25 @@ export async function confirmInvoice(payload: ConfirmInvoicePayload): Promise<vo
     // leftoverAction === "ledger" (또는 잔여 0) → 추가 처리 없음
 
     finalOrderIds.push(representativeOrderId);
+  }
+
+  // 주문자에게 알림: 다 들어온 주문은 "들어왔어요", 일부만 들어온 주문은 "일부만 들어왔어요".
+  // 주문자마다 한 통으로 묶는다. 알림 저장이 실패해도 명세서 확정은 계속한다.
+  {
+    const arrived = [];
+    const partial = [];
+    for (const id of touchedOrderIds) {
+      const o = ordersById.get(id);
+      if (!o) continue;
+      const base = { id, requester_id: o.requester_id, item_name: o.item_name, unit: o.unit };
+      if (o.quantity > 0 && o.received_quantity < o.quantity) partial.push({ ...base, received: o.received_quantity, quantity: o.quantity });
+      else arrived.push({ ...base, quantity: o.received_quantity, note: "" });
+    }
+    const notifications = [...arrivalNotifications(arrived, userId), ...partialNotifications(partial, userId)];
+    if (notifications.length > 0) {
+      const { error: notifyError } = await supabase.from("notifications").insert(notifications);
+      if (notifyError) console.error("[invoice-confirm] 알림 저장 실패:", notifyError.message);
+    }
   }
 
   // 단가 불일치 갱신

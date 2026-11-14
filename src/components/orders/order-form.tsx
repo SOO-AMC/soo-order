@@ -10,6 +10,7 @@ import { LastOrderHint } from "./last-order-hint";
 import { PhotoPicker, photoItemsFromPaths } from "./photo-picker";
 import type { PhotoItem } from "./photo-picker";
 import { itemNamesLooselyMatch } from "@/lib/utils/normalize-item-name";
+import { needsChangeReason } from "@/lib/utils/order-notify";
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/types/order";
 
 interface OrderFormData {
@@ -26,6 +27,8 @@ export interface OrderFormResult extends Omit<OrderFormData, "vendor_name" | "in
   vendor_name: string;
   inspection_notes: string;
   photos: PhotoItem[];
+  /** 수량·품목을 바꾼 이유 (changeReasonFor 가 있을 때만 채워진다) */
+  change_reason: string;
 }
 
 /** 진행 중(주문신청/검수대기) 주문 — 중복 주문 경고용 */
@@ -45,8 +48,18 @@ interface OrderFormProps {
   showInspectionField?: boolean;
   /** 제공되면 입력 중인 품목명과 겹치는 진행 중 주문을 경고로 표시 */
   activeOrders?: ActiveOrderRef[];
+  /**
+   * 다른 사람의 주문을 고치는 경우 원래 값. 수량·단위·품목이 달라지면 "바꾼 이유"를 꼭 받는다.
+   * 이유는 주문자에게 알림과 주문 화면으로 보인다.
+   */
+  changeReasonFor?: { item_name: string; quantity: number; unit: string };
+  /** 새 주문의 품목 이름을 미리 채운다 (품절 알림에서 "다시 주문"으로 넘어온 경우) */
+  initialItemName?: string;
   onSubmit: (data: OrderFormResult) => Promise<void>;
 }
+
+/** 관리자가 수량·품목을 바꿀 때 자주 쓰는 이유 (칩) */
+const CHANGE_REASONS = ["원내 재고가 남아 있어요", "포장 단위에 맞췄어요", "업체 재고가 부족해요", "같은 약의 다른 제품으로 바꿨어요"];
 
 /** 자주 쓰는 단위 (칩). 그 밖은 "직접 입력" */
 const COMMON_UNITS = ["개", "박스", "병", "바이알", "통", "봉지"];
@@ -64,8 +77,8 @@ function Question({ title, hint, children }: { title: string; hint?: string; chi
   );
 }
 
-export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, showInspectionField, activeOrders, onSubmit }: OrderFormProps) {
-  const [itemName, setItemName] = useState(defaultValues?.item_name ?? "");
+export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, showInspectionField, activeOrders, changeReasonFor, initialItemName, onSubmit }: OrderFormProps) {
+  const [itemName, setItemName] = useState(defaultValues?.item_name ?? initialItemName ?? "");
   const [quantity, setQuantity] = useState(defaultValues?.quantity ? defaultValues.quantity.toString() : "");
   // 단위는 고르지 않으면 비워 둔다(예전과 같음)
   const [unit, setUnit] = useState(defaultValues?.unit ?? "");
@@ -74,12 +87,15 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, s
   const [notes, setNotes] = useState(defaultValues?.notes ?? "");
   const [vendorName, setVendorName] = useState(defaultValues?.vendor_name ?? "");
   const [inspectionNotes, setInspectionNotes] = useState(defaultValues?.inspection_notes ?? "");
+  const [changeReason, setChangeReason] = useState("");
   const [photos, setPhotos] = useState<PhotoItem[]>(existingPhotoUrls ? photoItemsFromPaths(existingPhotoUrls) : []);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const isEdit = !!defaultValues;
   const qtyNum = parseInt(quantity, 10) || 0;
+  /** 남의 주문의 수량·단위·품목을 바꿨는가 → 이유가 필요하다 */
+  const reasonNeeded = !!changeReasonFor && needsChangeReason(changeReasonFor, { item_name: itemName, quantity: qtyNum, unit });
 
   const duplicateMatches = useMemo(() => {
     const name = itemName.trim();
@@ -100,6 +116,10 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, s
       setError("수량을 정하거나 사진을 올려 주세요.");
       return;
     }
+    if (reasonNeeded && !changeReason.trim()) {
+      setError("수량이나 품목을 바꾼 이유를 적어 주세요. 주문자에게 보여요.");
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -112,6 +132,7 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, s
         vendor_name: vendorName.trim(),
         inspection_notes: inspectionNotes.trim(),
         photos,
+        change_reason: reasonNeeded ? changeReason.trim() : "",
       });
     } catch {
       setError("저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
@@ -281,6 +302,34 @@ export function OrderForm({ defaultValues, existingPhotoUrls, showVendorField, s
           </label>
         )}
       </Question>
+
+      {reasonNeeded && (
+        <Question title="왜 바꾸나요?" hint="주문자에게 알림과 주문 화면으로 보여요">
+          <div className="flex flex-wrap gap-1.5">
+            {CHANGE_REASONS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setChangeReason(r)}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-[13px] font-semibold",
+                  changeReason === r ? "bg-primary text-primary-foreground" : "bg-muted text-subtle-foreground"
+                )}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <Input
+            id="change_reason"
+            aria-label="바꾼 이유"
+            placeholder="예: 원내 재고가 남아 있어요"
+            value={changeReason}
+            onChange={(e) => setChangeReason(e.target.value)}
+            className="h-11 text-base"
+          />
+        </Question>
+      )}
 
       {/* 모바일: 아래 고정 큰 버튼 / PC: 폼 끝 */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">

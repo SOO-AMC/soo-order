@@ -32,6 +32,7 @@ import {
   revertOrderToPending,
   deleteOrder,
 } from "@/lib/actions/order-mutations";
+import { OutOfStockReasonInput } from "./out-of-stock-reason";
 
 interface InspectionActionsProps {
   orderId: string;
@@ -197,25 +198,17 @@ export function InspectionActions({
           <DialogHeader>
             <DialogTitle>품절 처리</DialogTitle>
             <DialogDescription>
-              이 품목을 품절로 처리하시겠습니까?
+              {itemName ? `${itemName}을(를) ` : ""}품절로 바꾸고 주문자에게 사유를 알려요.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="out-of-stock-reason">품절 사유</Label>
-            <Input
-              id="out-of-stock-reason"
-              placeholder="품절 사유 (선택)"
-              value={outOfStockReason}
-              onChange={(e) => setOutOfStockReason(e.target.value)}
-            />
-          </div>
+          <OutOfStockReasonInput value={outOfStockReason} onChange={setOutOfStockReason} />
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">
                 취소
               </Button>
             </DialogClose>
-            <Button variant="destructive" onClick={handleOutOfStock} disabled={isOutOfStocking}>
+            <Button variant="destructive" onClick={handleOutOfStock} disabled={isOutOfStocking || !outOfStockReason.trim()}>
               {isOutOfStocking ? "처리 중..." : "품절 처리"}
             </Button>
           </DialogFooter>

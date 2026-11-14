@@ -33,6 +33,9 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { applyRealtimeChange, pruneSet } from "@/lib/utils/realtime-list";
 
 type ViewKey = "all" | "mine" | "urgent" | "photo";
+/** 품절 사유. 새 칸(out_of_stock_reason)이 비어 있으면 예전처럼 발주 비고에 적힌 것을 쓴다 */
+const oosReasonOf = (o: { out_of_stock_reason?: string | null; order_notes?: string | null }) => (o.out_of_stock_reason || o.order_notes || "").trim();
+
 const SELECT = "*, requester:profiles!requester_id(full_name)";
 
 const at = (iso: string | null) =>
@@ -198,7 +201,7 @@ export function OutOfStockList({
           o.item_name.toLowerCase().includes(q) ||
           (o.vendor_name ?? "").toLowerCase().includes(q) ||
           (o.requester?.full_name ?? "").toLowerCase().includes(q) ||
-          (o.order_notes ?? "").toLowerCase().includes(q)
+          oosReasonOf(o).toLowerCase().includes(q)
       );
     }
     if (vendorFilter) list = list.filter((o) => o.vendor_name?.trim() === vendorFilter);
@@ -402,9 +405,9 @@ export function OutOfStockList({
                               )}
                             </td>
                             <td className="border-b border-border px-3 py-2.5 pr-4">
-                              {order.order_notes ? (
-                                <div className="line-clamp-2 leading-snug text-subtle-foreground" title={order.order_notes}>
-                                  {order.order_notes}
+                              {oosReasonOf(order) ? (
+                                <div className="line-clamp-2 leading-snug text-subtle-foreground" title={oosReasonOf(order)}>
+                                  {oosReasonOf(order)}
                                 </div>
                               ) : (
                                 <span className="text-muted-foreground">—</span>
@@ -448,8 +451,8 @@ export function OutOfStockList({
                             <span className="min-w-0 flex-1">
                               <ItemTitle order={order} />
                               <MetaLine order={order} withDate={!!g.mixedDates} withQty />
-                              {order.order_notes && (
-                                <span className="mt-0.5 block truncate text-[13px] text-subtle-foreground">{order.order_notes}</span>
+                              {oosReasonOf(order) && (
+                                <span className="mt-0.5 block truncate text-[13px] text-subtle-foreground">{oosReasonOf(order)}</span>
                               )}
                             </span>
                             <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -587,7 +590,7 @@ function OutOfStockDetail({
             },
             { label: "업체", value: order.vendor_name || <span className="text-muted-foreground">업체 미지정</span> },
             { label: "요청", value: `${order.requester?.full_name ?? "—"} · ${at(order.created_at)}` },
-            { label: "비고", value: order.order_notes || <span className="text-muted-foreground">없음</span> },
+            { label: "품절 사유", value: oosReasonOf(order) || <span className="text-muted-foreground">적혀 있지 않아요</span> },
           ]}
         />
 

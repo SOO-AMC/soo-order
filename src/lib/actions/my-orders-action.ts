@@ -55,3 +55,22 @@ export async function fetchMyOrdersStatus(): Promise<MyOrdersData> {
 
   return { counts, activeOrders, recentCompleted };
 }
+
+/**
+ * 품절 알림을 확인했다고 표시한다 (내 주문 현황의 "확인이 필요해요"에서 빠진다).
+ * 본인이 요청한 품절 주문에만 된다. 주문은 그대로 품절 목록에 남는다.
+ */
+export async function acknowledgeOutOfStock(orderId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { supabase, userId } = await requireUser();
+  const { error } = await supabase
+    .from("orders")
+    .update({ out_of_stock_ack_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .eq("requester_id", userId)
+    .eq("status", "out_of_stock");
+  if (error) {
+    const missing = error.code === "42703" || error.code === "PGRST204" || /does not exist|could not find/i.test(error.message);
+    return { ok: false, error: missing ? "이 기능은 아직 준비 중이에요. (supabase/migrate-order-reasons.sql 실행 필요)" : "확인 표시를 하지 못했어요. 잠시 뒤 다시 눌러 주세요." };
+  }
+  return { ok: true };
+}

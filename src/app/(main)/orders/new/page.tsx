@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -23,10 +23,21 @@ import { logClientAction } from "@/app/(main)/log-action";
 import { itemNamesLooselyMatch } from "@/lib/utils/normalize-item-name";
 import { ORDER_STATUS_LABEL } from "@/lib/types/order";
 
+const noopSubscribe = () => () => {};
+/** 주소의 ?item= 값 (품절 알림의 "다시 주문"에서 넘어올 때). 서버에서는 빈 값 → 화면이 뜬 뒤 채워진다 */
+function useItemFromQuery(): string {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => new URLSearchParams(window.location.search).get("item") ?? "",
+    () => "",
+  );
+}
+
 export default function NewOrderPage() {
   const router = useRouter();
   const supabase = createClient();
   const { userName } = useAuth();
+  const initialItem = useItemFromQuery();
   const [activeOrders, setActiveOrders] = useState<ActiveOrderRef[]>([]);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [duplicateMatches, setDuplicateMatches] = useState<ActiveOrderRef[]>([]);
@@ -189,7 +200,7 @@ export default function NewOrderPage() {
         }
       />
       <div className="py-2 lg:px-6 lg:py-4">
-        <OrderForm onSubmit={handleSubmit} activeOrders={activeOrders} />
+        <OrderForm key={initialItem} initialItemName={initialItem} onSubmit={handleSubmit} activeOrders={activeOrders} />
       </div>
 
       <Dialog open={duplicateOpen} onOpenChange={(o) => { if (!o) setDuplicateOpen(false); }}>

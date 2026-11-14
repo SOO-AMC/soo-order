@@ -83,8 +83,11 @@ export default async function OutOfStockDetailPage({ params }: { params: Promise
             { label: "업체", value: order.vendor_name || <span className="text-muted-foreground">없음</span> },
             { label: "요청자", value: order.requester?.full_name ?? "알 수 없음" },
             { label: "주문 일시", value: formatDateTime(order.created_at) },
+            // 품절 사유: 예전에 품절 처리한 주문은 사유가 발주 비고 칸에 들어 있다
+            (order.out_of_stock_reason || order.order_notes) && { label: "품절 사유", value: order.out_of_stock_reason || order.order_notes, wide: true },
             order.notes && { label: "요청 비고", value: order.notes, wide: true },
-            order.order_notes && { label: "발주 비고", value: order.order_notes, wide: true },
+            // 새 방식으로 품절 처리한 주문만 발주 비고가 따로 남아 있다
+            order.out_of_stock_reason && order.order_notes && { label: "발주 비고", value: order.order_notes, wide: true },
           ]}
         />
       </DetailCard>

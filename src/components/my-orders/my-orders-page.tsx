@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, CircleX, Plus } from "lucide-react";
-import { fetchMyOrdersStatus, type MyOrdersData } from "@/lib/actions/my-orders-action";
+import { acknowledgeOutOfStock, fetchMyOrdersStatus, type MyOrdersData } from "@/lib/actions/my-orders-action";
 import { useAuth } from "@/hooks/use-auth";
 import { NotificationBell } from "@/components/notification-bell";
 import { PageHeader } from "@/components/page-header";
@@ -31,7 +31,29 @@ export function MyOrdersPage({ initialData }: { initialData?: MyOrdersData }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const needAttention = useMemo(() => (data ? data.activeOrders.filter((o) => o.status === "out_of_stock") : []), [data]);
+  // 품절인데 아직 "확인했어요"를 누르지 않은 것
+  const needAttention = useMemo(() => (data ? data.activeOrders.filter((o) => o.status === "out_of_stock" && !o.out_of_stock_ack_at) : []), [data]);
+  const [ackBusy, setAckBusy] = useState<string | null>(null);
+  const [ackError, setAckError] = useState("");
+
+  const acknowledge = async (orderId: string) => {
+    if (ackBusy) return;
+    setAckBusy(orderId);
+    setAckError("");
+    try {
+      const res = await acknowledgeOutOfStock(orderId);
+      if (!res.ok) {
+        setAckError(res.error);
+        return;
+      }
+      const now = new Date().toISOString();
+      setData((d) => (d ? { ...d, activeOrders: d.activeOrders.map((o) => (o.id === orderId ? { ...o, out_of_stock_ack_at: now } : o)) } : d));
+    } catch {
+      setAckError("확인 표시를 하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
+    } finally {
+      setAckBusy(null);
+    }
+  };
 
   const visibleActive = useMemo(() => {
     if (!data) return [];
@@ -103,22 +125,34 @@ export function MyOrdersPage({ initialData }: { initialData?: MyOrdersData }) {
             {needAttention.length > 0 && !filter && (
               <section className="overflow-hidden rounded-2xl bg-card ring-1 ring-border">
                 <h2 className="px-4 pb-1.5 pt-3.5 text-[13px] font-semibold text-subtle-foreground">확인이 필요해요</h2>
-                {needAttention.map((o) => (
-                  <Link
-                    key={o.id}
-                    href={`/orders/${o.id}?from=dashboard`}
-                    className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/60"
-                  >
-                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-status-late-bg text-status-late">
-                      <CircleX className="size-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <b className="block truncate text-base font-semibold">{o.item_name} 품절</b>
-                      <span className="text-[13px] text-muted-foreground">대체품을 골라 주세요 · {formatTimeAgo(o.created_at)} 요청</span>
-                    </span>
-                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  </Link>
-                ))}
+                {needAttention.map((o) => {
+                  // 품절 사유: 새 칸이 비어 있으면(예전에 품절 처리한 주문) 발주 비고에 적힌 것을 보여 준다
+                  const reason = (o.out_of_stock_reason ?? o.order_notes ?? "").trim();
+                  return (
+                    <div key={o.id} className="px-4 py-2.5">
+                      <Link href={`/orders/${o.id}?from=dashboard`} className="flex items-center gap-3 rounded-lg transition-colors hover:bg-muted/60">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-status-late-bg text-status-late">
+                          <CircleX className="size-5" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <b className="block truncate text-base font-semibold">{o.item_name} 품절</b>
+                          <span className="block text-[13px] text-subtle-foreground">{reason ? `사유: ${reason}` : "사유는 적혀 있지 않아요"}</span>
+                          <span className="text-[13px] text-muted-foreground">{formatTimeAgo(o.created_at)} 요청</span>
+                        </span>
+                        <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      </Link>
+                      <div className="mt-2 flex gap-2 pl-[52px]">
+                        <Button asChild size="sm" variant="outline" className="h-9">
+                          <Link href={`/orders/new?item=${encodeURIComponent(o.item_name)}`}>다른 품목으로 다시 주문</Link>
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-9" disabled={ackBusy === o.id} onClick={() => acknowledge(o.id)}>
+                          확인했어요
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {ackError && <p role="alert" className="px-4 pb-1 text-[13px] font-medium text-status-late">{ackError}</p>}
                 <div className="h-1.5" />
               </section>
             )}

@@ -84,6 +84,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             { label: "요청 일시", value: formatDateTime(order.created_at) },
             wasUpdated && order.updater && { label: "마지막 수정", value: `${order.updater.full_name ?? "—"} · ${formatDateTime(order.updated_at)}` },
             order.notes && { label: "비고", value: order.notes, wide: true },
+            order.status === "out_of_stock" && (order.out_of_stock_reason || order.order_notes) && { label: "품절 사유", value: order.out_of_stock_reason || order.order_notes, wide: true },
+            order.admin_change_reason && {
+              label: "관리자가 바꾼 내용",
+              value: `${order.admin_change_summary ? `${order.admin_change_summary} · ` : ""}사유: ${order.admin_change_reason}`,
+              wide: true,
+            },
           ]}
         />
       </DetailCard>

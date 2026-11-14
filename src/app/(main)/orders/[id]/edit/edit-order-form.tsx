@@ -1,6 +1,7 @@
 "use client";
 
 import { PageHeader } from "@/components/page-header";
+import { useAuth } from "@/hooks/use-auth";
 import { BackButton } from "@/components/back-button";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -16,6 +17,7 @@ export function EditOrderForm({ order }: { order: Order }) {
   const id = order.id;
   const router = useRouter();
   const supabase = createClient();
+  const { userId: currentUserId } = useAuth();
 
   const handleSubmit = async (data: OrderFormResult) => {
     const {
@@ -80,7 +82,17 @@ export function EditOrderForm({ order }: { order: Order }) {
           photoCount: data.photos.length,
         }
       );
-      notifyOrderEdited(id, order.requester_id, data.item_name, `/orders/${id}`, changes).catch(() => {});
+      notifyOrderEdited(id, order.requester_id, data.item_name, `/orders/${id}`, changes, data.change_reason).catch(() => {});
+
+      // 수량·품목을 바꿨으면 "무엇을 왜 바꿨는지"를 주문에 남긴다 → 주문자가 주문 화면에서 볼 수 있다.
+      // 따로 저장한다: 이 칸들이 아직 없어도(마이그레이션 전) 위의 수정 자체는 이미 끝났다.
+      if (data.change_reason) {
+        const summary = changes.filter((c) => c.startsWith("수량:") || c.startsWith("품목명:")).join(" · ");
+        await supabase
+          .from("orders")
+          .update({ admin_change_summary: summary, admin_change_reason: data.change_reason, admin_change_at: new Date().toISOString() })
+          .eq("id", id);
+      }
     }
 
     router.push(`/orders/${id}`);
@@ -103,6 +115,11 @@ export function EditOrderForm({ order }: { order: Order }) {
             }}
             existingPhotoUrls={order.photo_urls}
             showVendorField={order.status !== "pending"}
+            changeReasonFor={
+              currentUserId && order.requester_id && currentUserId !== order.requester_id
+                ? { item_name: order.item_name, quantity: order.quantity, unit: order.unit ?? "" }
+                : undefined
+            }
             onSubmit={handleSubmit}
           />
       </div>

@@ -1,6 +1,41 @@
 "use server";
 
 import { requireAdmin, requireUser } from "@/lib/supabase/server";
+import {
+  arrivalNotifications,
+  dispatchNotifications,
+  outOfStockNotifications,
+  partialNotifications,
+  type NotificationRow,
+} from "@/lib/utils/order-notify";
+
+type Db = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
+
+/**
+ * 주문자에게 알림을 보낸다.
+ * 본 작업(발주·검수·품절)은 이미 끝난 뒤라서, 알림 저장이 실패해도 오류를 던지지 않는다.
+ * 문구와 묶는 규칙은 lib/utils/order-notify.ts.
+ */
+async function sendNotifications(supabase: Db, rows: NotificationRow[]) {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("notifications").insert(rows);
+  if (error) console.error("[notify] 알림 저장 실패:", error.message);
+}
+
+/** 수정한 주문에서 알림에 필요한 칸만 돌려받는다 */
+const NOTIFY_COLUMNS = "id, requester_id, item_name, vendor_name, quantity, unit";
+interface NotifyRow {
+  id: string;
+  requester_id: string | null;
+  item_name: string;
+  vendor_name: string | null;
+  quantity: number | null;
+  unit: string | null;
+}
+
+/** 칸이 아직 없는 경우 (supabase/migrate-order-reasons.sql 미실행) */
+const isMissingColumn = (e: { code?: string; message?: string } | null) =>
+  !!e && (e.code === "42703" || e.code === "PGRST204" || /column .* does not exist|could not find the .* column/i.test(e.message ?? ""));
 
 /** 개별 발주 (status → ordered) */
 export async function dispatchOrder(
@@ -10,7 +45,7 @@ export async function dispatchOrder(
 ) {
   const { supabase, userId } = await requireAdmin();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("orders")
     .update({
       status: "ordered",
@@ -19,9 +54,12 @@ export async function dispatchOrder(
       order_notes: orderNotes.trim(),
       dispatched_at: new Date().toISOString(),
     })
-    .eq("id", orderId);
+    .eq("id", orderId)
+    .select(NOTIFY_COLUMNS)
+    .single();
 
   if (error) throw new Error("발주 처리에 실패했습니다.");
+  await sendNotifications(supabase, dispatchNotifications([data as NotifyRow], userId));
 }
 
 /** 일괄 발주 — 동일 업체 */
@@ -32,7 +70,7 @@ export async function bulkDispatchAll(
 ) {
   const { supabase, userId } = await requireAdmin();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("orders")
     .update({
       status: "ordered",
@@ -41,9 +79,11 @@ export async function bulkDispatchAll(
       updated_by: userId,
       dispatched_at: new Date().toISOString(),
     })
-    .in("id", orderIds);
+    .in("id", orderIds)
+    .select(NOTIFY_COLUMNS);
 
   if (error) throw new Error("일괄 발주 처리에 실패했습니다.");
+  await sendNotifications(supabase, dispatchNotifications((data ?? []) as NotifyRow[], userId));
 }
 
 /** 일괄 발주 — 개별 업체 */
@@ -64,9 +104,15 @@ export async function bulkDispatchIndividual(
           updated_by: userId,
           dispatched_at: dispatchedAt,
         })
-        .eq("id", item.id),
+        .eq("id", item.id)
+        .select(NOTIFY_COLUMNS)
+        .single(),
     ),
   );
+
+  // 일부가 실패해도 성공한 건의 주문자에게는 알린다
+  const done = results.filter((r) => !r.error && r.data).map((r) => r.data as NotifyRow);
+  await sendNotifications(supabase, dispatchNotifications(done, userId));
 
   if (results.some((r) => r.error)) throw new Error("일부 발주 처리에 실패했습니다.");
 }
@@ -94,21 +140,14 @@ export async function inspectOrder(
       inspected_at: new Date().toISOString(),
     })
     .eq("id", orderId)
-    .select("requester_id, item_name")
+    .select(NOTIFY_COLUMNS)
     .single();
 
   if (error) throw new Error("검수 처리에 실패했습니다.");
 
-  if (trimmedNotes && updated?.requester_id && updated.requester_id !== userId) {
-    await supabase.from("notifications").insert({
-      user_id: updated.requester_id,
-      order_id: orderId,
-      type: "inspection_completed",
-      title: `'${updated.item_name}' 검수가 완료되었습니다`,
-      body: `검수비고: ${trimmedNotes}`,
-      link: `/inspection/${orderId}`,
-    });
-  }
+  // 들어온 것은 항상 알린다 (예전에는 검수 비고가 있을 때만 알렸다)
+  const row = updated as NotifyRow;
+  await sendNotifications(supabase, arrivalNotifications([{ ...row, quantity: confirmedQuantity, note: trimmedNotes }], userId));
 }
 
 /** 일괄 검수 완료 */
@@ -138,32 +177,19 @@ export async function bulkInspectOrders(
           inspected_at: now,
         })
         .eq("id", item.id)
-        .select("requester_id, item_name")
+        .select(NOTIFY_COLUMNS)
         .single(),
     ),
   );
 
+  // 주문자마다 한 통으로 묶어 알린다 (일부가 실패해도 성공한 건은 알린다)
+  const arrived = results
+    .map((r, i) => ({ r, item: items[i] }))
+    .filter(({ r }) => !r.error && r.data)
+    .map(({ r, item }) => ({ ...(r.data as NotifyRow), quantity: item.confirmedQuantity, note: item.inspectionNotes.trim() }));
+  await sendNotifications(supabase, arrivalNotifications(arrived, userId));
+
   if (results.some((r) => r.error)) throw new Error("일부 검수 처리에 실패했습니다.");
-
-  // 검수비고가 입력된 항목은 요청자에게 알림 (본인이 요청자인 경우 제외)
-  const notifications = results
-    .map((r, i) => ({ data: r.data, item: items[i] }))
-    .filter(({ data, item }) => {
-      const trimmed = item.inspectionNotes.trim();
-      return trimmed && data?.requester_id && data.requester_id !== userId;
-    })
-    .map(({ data, item }) => ({
-      user_id: data!.requester_id,
-      order_id: item.id,
-      type: "inspection_completed",
-      title: `'${data!.item_name}' 검수가 완료되었습니다`,
-      body: `검수비고: ${item.inspectionNotes.trim()}`,
-      link: `/inspection/${item.id}`,
-    }));
-
-  if (notifications.length > 0) {
-    await supabase.from("notifications").insert(notifications);
-  }
 }
 
 /**
@@ -177,7 +203,7 @@ export async function recordReceivedQuantity(orderId: string, receivedTotal: num
 
   const { data: order, error: readErr } = await supabase
     .from("orders")
-    .select("quantity, status, requester_id, item_name")
+    .select("quantity, unit, status, requester_id, item_name, received_quantity")
     .eq("id", orderId)
     .single();
   if (readErr || !order) throw new Error("주문을 찾을 수 없습니다.");
@@ -185,6 +211,7 @@ export async function recordReceivedQuantity(orderId: string, receivedTotal: num
 
   const received = Math.floor(receivedTotal);
   const trimmedNotes = inspectionNotes.trim();
+  const base = { id: orderId, requester_id: order.requester_id as string | null, item_name: order.item_name as string, unit: order.unit as string | null };
 
   if (order.quantity > 0 && received < order.quantity) {
     const { error } = await supabase
@@ -192,6 +219,10 @@ export async function recordReceivedQuantity(orderId: string, receivedTotal: num
       .update({ received_quantity: received, updated_by: userId })
       .eq("id", orderId);
     if (error) throw new Error("받은 수량 저장에 실패했습니다.");
+    // 더 들어왔을 때만 알린다 (숫자를 줄여 고친 경우는 알리지 않는다)
+    if (received > (order.received_quantity ?? 0)) {
+      await sendNotifications(supabase, partialNotifications([{ ...base, received, quantity: order.quantity }], userId));
+    }
     return { completed: false };
   }
 
@@ -211,48 +242,53 @@ export async function recordReceivedQuantity(orderId: string, receivedTotal: num
     .eq("id", orderId);
   if (error) throw new Error("검수 처리에 실패했습니다.");
 
-  if (trimmedNotes && order.requester_id && order.requester_id !== userId) {
-    await supabase.from("notifications").insert({
-      user_id: order.requester_id,
-      order_id: orderId,
-      type: "inspection_completed",
-      title: `'${order.item_name}' 검수가 완료되었습니다`,
-      body: `검수비고: ${trimmedNotes}`,
-      link: `/inspection/${orderId}`,
-    });
-  }
+  await sendNotifications(supabase, arrivalNotifications([{ ...base, quantity: received, note: trimmedNotes }], userId));
   return { completed: true };
 }
 
-/** 품절 처리 (status → out_of_stock) */
-export async function markOutOfStock(orderId: string, reason: string) {
-  const { supabase } = await requireAdmin();
+/**
+ * 품절 처리 (status → out_of_stock).
+ * 사유는 품절 사유 칸(out_of_stock_reason)에 넣는다 — 예전처럼 발주 비고(order_notes)를 덮어쓰지 않는다.
+ * 주문자에게 사유와 함께 알린다. 한 건이든 여러 건이든 같은 함수.
+ */
+async function markOutOfStockMany(orderIds: string[], reason: string) {
+  const { supabase, userId } = await requireAdmin();
+  if (orderIds.length === 0) return;
+  const trimmed = reason.trim();
+  const RETURNING = "id, requester_id, item_name";
 
-  const { error } = await supabase
+  let res = await supabase
     .from("orders")
     .update({
       status: "out_of_stock",
-      order_notes: reason.trim() || null,
+      out_of_stock_reason: trimmed || null,
+      out_of_stock_at: new Date().toISOString(),
+      out_of_stock_ack_at: null,
     })
-    .eq("id", orderId);
+    .in("id", orderIds)
+    .select(RETURNING);
 
-  if (error) throw new Error("품절 처리에 실패했습니다.");
+  if (res.error && isMissingColumn(res.error)) {
+    // 품절 사유 칸이 아직 없다 → 예전 방식(사유가 있을 때만 발주 비고에 적는다)
+    res = await supabase
+      .from("orders")
+      .update(trimmed ? { status: "out_of_stock", order_notes: trimmed } : { status: "out_of_stock" })
+      .in("id", orderIds)
+      .select(RETURNING);
+  }
+  if (res.error) throw new Error("품절 처리에 실패했습니다.");
+
+  await sendNotifications(supabase, outOfStockNotifications((res.data ?? []) as { id: string; requester_id: string | null; item_name: string }[], userId, trimmed));
 }
 
-/** 일괄 품절 처리 */
-export async function bulkMarkOutOfStock(orderIds: string[]) {
-  const { supabase } = await requireAdmin();
+/** 품절 처리 */
+export async function markOutOfStock(orderId: string, reason: string) {
+  await markOutOfStockMany([orderId], reason);
+}
 
-  const results = await Promise.all(
-    orderIds.map((id) =>
-      supabase
-        .from("orders")
-        .update({ status: "out_of_stock" })
-        .eq("id", id),
-    ),
-  );
-
-  if (results.some((r) => r.error)) throw new Error("일부 품절 처리에 실패했습니다.");
+/** 일괄 품절 처리 — 사유는 고른 주문 모두에 똑같이 적힌다 */
+export async function bulkMarkOutOfStock(orderIds: string[], reason = "") {
+  await markOutOfStockMany(orderIds, reason);
 }
 
 /** 주문 취소 — 주문신청으로 되돌리기 */
