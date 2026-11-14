@@ -3,7 +3,8 @@ export default function AuthLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const videoId = "o1GbZpE7xkM";
+  // 로그인 화면(PC) 배경 영상 — 유튜브 영상 번호 (youtu.be/ 뒤의 글자). 퍼가기 허용된 영상이어야 한다
+  const videoId = "cjx0hcdmry8";
 
   return (
     <>
