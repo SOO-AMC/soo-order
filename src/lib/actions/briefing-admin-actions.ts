@@ -50,6 +50,13 @@ async function syncIssueState(supabase: Sb, issueId: string): Promise<boolean> {
   return true;
 }
 
+/** 발행된 묶음의 논문은 고칠 수 없다(직원이 보고 있는 내용이 조용히 바뀌거나 사라지지 않게). 고치려면 발행 취소 → 수정 → 다시 발행 */
+const PUBLISHED_LOCK = { ok: false as const, error: "이미 발행된 논문이에요. 고치려면 먼저 발행을 취소해 주세요." };
+async function isPublished(supabase: Sb, issueId: string): Promise<boolean> {
+  const { data } = await supabase.from("briefing_issues").select("status").eq("id", issueId).maybeSingle();
+  return data?.status === "published";
+}
+
 function touch(issueDate?: string) {
   revalidatePath("/briefing/admin");
   if (issueDate) revalidatePath(`/briefing/admin/${issueDate}`);
@@ -113,6 +120,7 @@ export async function addPaper(issueDate: string, rawText: string): Promise<Acti
     }
   }
   if (!issue) return { ok: false, error: "발행 묶음을 만들지 못했어요. 잠시 뒤 다시 눌러 주세요." };
+  if (issue.status === "published") return PUBLISHED_LOCK;
 
   const { data: existing } = await supabase.from("briefing_papers").select("display_order").eq("issue_id", issue.id).order("display_order", { ascending: false });
   const count = existing?.length ?? 0;
@@ -140,6 +148,7 @@ export async function updatePaperRaw(paperId: string, rawText: string): Promise<
   if (!raw) return { ok: false, error: "요약 글이 비어 있어요." };
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
+  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
   if (paper.raw_summary_text === raw) return { ok: true, data: paper };
 
   const { data, error } = await supabase
@@ -164,6 +173,7 @@ export async function generatePaperCard(paperId: string): Promise<ActionResult<G
   const { supabase, userId, userName } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
+  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
 
   try {
     const result = await designCard(paper.raw_summary_text, {
@@ -206,6 +216,7 @@ export async function saveCardEdit(paperId: string, card: unknown): Promise<Acti
   const { supabase, userId, userName } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
+  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
   const parsed = parseCard(card);
   if (!parsed.ok) return { ok: false, error: `카드 형식이 맞지 않아요 (${parsed.error})` };
 
@@ -238,6 +249,7 @@ export async function restorePreviousCard(paperId: string): Promise<ActionResult
   const { supabase } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
+  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
   if (!paper.previous_card_content) return { ok: false, error: "되돌릴 이전 카드가 없어요." };
   const prev = paper.previous_card_content as PaperCardContent;
   const { data, error } = await supabase
@@ -268,6 +280,7 @@ export async function updatePaperMeta(
   const { supabase } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
+  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
 
   const url = cleanUrl(meta.sourceUrl);
   if (url === undefined) return { ok: false, error: "원문 링크는 http:// 또는 https:// 로 시작해야 해요." };
@@ -297,6 +310,7 @@ export async function setPaperReviewed(paperId: string, reviewed: boolean): Prom
   const { supabase, userId, userName } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
+  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
   if (reviewed && !paper.card_content) return { ok: false, error: "카드를 먼저 만들어 주세요." };
 
   const { data, error } = await supabase
@@ -321,6 +335,7 @@ export async function deletePaper(paperId: string): Promise<ActionResult<{ id: s
   const { supabase, userId, userName } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
+  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
   const { error } = await supabase.from("briefing_papers").delete().eq("id", paperId);
   if (error) return { ok: false, error: "지우지 못했어요." };
   await syncIssueState(supabase, paper.issue_id);
@@ -332,6 +347,7 @@ export async function deletePaper(paperId: string): Promise<ActionResult<{ id: s
 /** 논문 순서 바꾸기 (같은 날짜 안에서). 같은 논문 안의 "장 순서"는 없다. */
 export async function reorderPapers(issueId: string, paperIds: string[]): Promise<ActionResult<{ ids: string[] }>> {
   const { supabase } = await requireAdmin();
+  if (await isPublished(supabase, issueId)) return PUBLISHED_LOCK;
   const { error } = await supabase.rpc("briefing_reorder_papers", { p_issue_id: issueId, p_paper_ids: paperIds });
   if (error) return { ok: false, error: "순서를 바꾸지 못했어요." };
   touch();

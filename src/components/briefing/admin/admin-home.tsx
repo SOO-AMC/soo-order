@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Newspaper, Plus } from "lucide-react";
+import { ChevronRight, Newspaper, Plus, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
@@ -39,11 +39,18 @@ export function BriefingAdminHome({
           </div>
         }
         action={
-          <Button asChild className="h-9 rounded-lg px-3 text-[13px]">
-            <Link href="/briefing/admin/new">
-              <Plus className="size-4" /> 새 논문 등록
-            </Link>
-          </Button>
+          <>
+            <Button asChild variant="outline" size="icon" className="size-9 rounded-lg" aria-label="논문 브리핑 설정">
+              <Link href="/briefing/admin/settings">
+                <Settings className="size-4" />
+              </Link>
+            </Button>
+            <Button asChild className="h-9 rounded-lg px-3 text-[13px]">
+              <Link href="/briefing/admin/new">
+                <Plus className="size-4" /> 새 논문 등록
+              </Link>
+            </Button>
+          </>
         }
       />
 

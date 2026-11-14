@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { kstDate } from "@/lib/briefing/kst";
 import { CATEGORY_KEYS, type PaperCardContent } from "@/lib/briefing/schema";
 import type { BriefingIssue } from "@/lib/briefing/types";
+import { runDueNow } from "@/lib/briefing/run-publish";
 
 /**
  * 논문 브리핑 열람 액션 (전 직원).
@@ -92,8 +93,13 @@ async function loadIssue(supabase: Sb, userId: string, issue: Pick<BriefingIssue
 export async function fetchTodayBriefing(): Promise<{ today: string; issue: ReaderIssue | null }> {
   const { supabase, userId } = await requireUser();
   const today = kstDate();
-  const issue = must(await supabase.from("briefing_issues").select("id, issue_date, published_at").eq("issue_date", today).or(visibleFilter()).maybeSingle(), "오늘 브리핑");
+  const issue = must(await supabase.from("briefing_issues").select("id, issue_date, published_at, status").eq("issue_date", today).or(visibleFilter()).maybeSingle(), "오늘 브리핑");
   if (!issue) return { today, issue: null };
+  // 예약 시각이 지난 예약분: 이미 보이지만 아직 "발행 완료"로 바뀌지 않았다 → 여기서 마무리(상태 전환 + 알림 1번).
+  // 여러 사람이 동시에 열어도 한 번만 일어나고, 실패해도 읽기는 그대로 된다.
+  if ((issue as { status?: string }).status === "scheduled") {
+    await runDueNow().catch((e) => console.error("[briefing] 예약 발행 마무리 실패:", e instanceof Error ? e.message : e));
+  }
   return { today, issue: await loadIssue(supabase, userId, issue as BriefingIssue) };
 }
 

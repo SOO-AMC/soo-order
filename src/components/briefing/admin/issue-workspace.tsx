@@ -40,6 +40,7 @@ import { BackButton } from "@/components/back-button";
 import { PaperCard, type CardVariant } from "@/components/briefing/paper-card";
 import { CardEditDialog } from "@/components/briefing/admin/card-edit-dialog";
 import { FitWidth } from "@/components/briefing/fit-width";
+import { PublishPanel } from "@/components/briefing/admin/publish-panel";
 import {
   addPaper,
   deletePaper,
@@ -55,7 +56,7 @@ import { checkFidelity } from "@/lib/briefing/fidelity";
 import { checkPublishable, progressLabel } from "@/lib/briefing/publish-rules";
 import { addDays, formatIssueDate } from "@/lib/briefing/kst";
 import { CATEGORY_KEYS, CATEGORY_LABEL, type PaperCardContent } from "@/lib/briefing/schema";
-import { ISSUE_STATUS_LABEL, MAX_PAPERS, MIN_PAPERS, type BriefingPaper, type IssueWithPapers } from "@/lib/briefing/types";
+import { ISSUE_STATUS_LABEL, MAX_PAPERS, type BriefingPaper, type BriefingIssue, type IssueStatus, type IssueWithPapers } from "@/lib/briefing/types";
 
 const NEW = "__new__";
 type Meta = { category: string; sourceUrl: string; doi: string; adminMemo: string };
@@ -75,7 +76,7 @@ const metaOf = (p?: BriefingPaper): Meta => ({
  * 아래 썸네일은 그날의 서로 다른 논문(최대 4건)이다.
  */
 export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDate: string; initialIssue: IssueWithPapers | null; startNew?: boolean }) {
-  const [issue, setIssue] = useState(initialIssue);
+  const [issue, setIssue] = useState<BriefingIssue | null>(initialIssue);
   const [papers, setPapers] = useState<BriefingPaper[]>(initialIssue?.papers ?? []);
   const [selected, setSelected] = useState<string>(() => (startNew || (initialIssue?.papers.length ?? 0) === 0 ? NEW : initialIssue!.papers[0].id));
   /** 글상자 내용 (논문 id → 글). 저장 전 편집 중인 값 */
@@ -147,7 +148,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
       }
       paper = res.data;
       setPapers((prev) => [...prev, res.data]);
-      if (!issue) setIssue({ id: res.data.issue_id, issue_date: issueDate, status: "draft", scheduled_at: null, published_at: null, created_by: null, created_at: "", updated_at: "", papers: [] });
+      if (!issue) setIssue({ id: res.data.issue_id, issue_date: issueDate, status: "draft", scheduled_at: null, published_at: null, created_by: null, created_at: "", updated_at: "" });
       // 새 논문에 적어 둔 고급 설정을 방금 만든 논문으로 옮긴다
       const pendingMeta = metas[NEW];
       clearDraft(NEW);
@@ -298,7 +299,11 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
     });
 
   const missingCards = papers.filter((p) => !p.card_content).length;
-  const status = issue?.status ?? "draft";
+  const status: IssueStatus = issue?.status === "scheduled" && !publish.ok ? "draft" : (issue?.status ?? "draft");
+  /** 발행된 묶음은 잠근다 (서버도 막는다) */
+  const locked = status === "published";
+  const blocked = !!busy || locked;
+  const papersKey = papers.map((p) => `${p.id}:${p.updated_at}`).join("|");
 
   return (
     <>
@@ -352,7 +357,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
                 논문 {total + 1} (새 글)
               </span>
             )}
-            {!isNew && canAddMore && (
+            {!isNew && canAddMore && !locked && (
               <button
                 type="button"
                 onClick={() => setSelected(NEW)}
@@ -385,6 +390,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
               onChange={(e) => setTexts((t) => ({ ...t, [selected]: e.target.value }))}
               placeholder={"외부 AI 도구로 정리한 논문 요약을 여기에 붙여넣으세요.\n\n줄글, 여러 문단, 불릿, 번호 목록, 한글·영문 혼합 모두 괜찮아요."}
               spellCheck={false}
+              readOnly={locked}
               className="mt-4 block min-h-[300px] w-full resize-y rounded-xl border border-input bg-background px-4 py-3.5 text-[15px] leading-[1.7] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring lg:min-h-[380px]"
             />
             <div className="mt-1.5 flex items-center justify-between text-xs text-muted-foreground">
@@ -448,11 +454,11 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
             )}
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <Button onClick={handleGenerate} disabled={!!busy || !text.trim()} className="h-12 flex-1 rounded-xl text-base font-bold">
+              <Button onClick={handleGenerate} disabled={blocked || !text.trim()} className="h-12 flex-1 rounded-xl text-base font-bold">
                 {busy === "generate" ? <Loader2 className="size-5 animate-spin" /> : <Sparkles className="size-5" />}
                 {busy === "generate" ? "카드를 만드는 중…" : card ? "AI 카드뉴스 다시 만들기" : "AI 카드뉴스 만들기"}
               </Button>
-              <Button variant="outline" onClick={handleSaveText} disabled={!!busy || !(textDirty || metaDirty)} className="h-12 rounded-xl px-4">
+              <Button variant="outline" onClick={handleSaveText} disabled={blocked || !(textDirty || metaDirty)} className="h-12 rounded-xl px-4">
                 {busy === "save" ? "저장하는 중…" : "글만 저장"}
               </Button>
             </div>
@@ -462,26 +468,27 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
           </div>
 
           {missingCards >= 2 && (
-            <Button variant="outline" onClick={handleGenerateAll} disabled={!!busy} className="h-11 rounded-xl">
+            <Button variant="outline" onClick={handleGenerateAll} disabled={blocked} className="h-11 rounded-xl">
               {busy === "generate-all" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {busy === "generate-all" ? "차례로 만드는 중…" : `전체 카드뉴스 생성 (카드 없는 논문 ${missingCards}건)`}
             </Button>
           )}
 
-          {/* 발행 준비 상태 */}
-          <div className={cn("rounded-xl px-4 py-3.5 text-[13px]", publish.ok ? "bg-status-done-bg text-status-done" : "bg-muted text-subtle-foreground")}>
-            <p className="flex items-center gap-1.5 font-semibold">
-              {publish.ok ? <CheckCircle2 className="size-4" /> : <CircleAlert className="size-4" />}
-              {publish.ok ? `발행 준비 완료 — 논문 ${publish.paperCount}건 = 카드 ${publish.paperCount}장` : `발행 준비 중 — 지금 ${total}건 (하루 ${MIN_PAPERS}~${MAX_PAPERS}건)`}
-            </p>
-            {!publish.ok && (
-              <ul className="mt-1.5 grid gap-0.5 pl-[22px]">
-                {publish.reasons.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            )}
-          </div>
+          {locked && (
+            <p className="rounded-xl bg-status-done-bg px-4 py-3 text-[13px] font-medium text-status-done">발행된 묶음이에요. 글·카드·순서를 고치려면 아래에서 발행을 취소해 주세요.</p>
+          )}
+
+          {/* 발행: 예약 · 지금 발행 · 취소 + 알림 상태 */}
+          <PublishPanel
+            issue={issue}
+            issueDate={issueDate}
+            status={status}
+            publish={publish}
+            paperCount={total}
+            papersKey={papersKey}
+            disabled={!!busy || textDirty || metaDirty}
+            onIssueChange={setIssue}
+          />
         </section>
 
         {/* ───────── 오른쪽: 그 논문의 카드 1장 ───────── */}
@@ -566,10 +573,10 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
                 </p>
                 {current && total > 1 && (
                   <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="size-8" disabled={!!busy || index <= 0} onClick={() => handleMove(-1)} aria-label="이 논문을 앞으로">
+                    <Button variant="ghost" size="icon" className="size-8" disabled={blocked || index <= 0} onClick={() => handleMove(-1)} aria-label="이 논문을 앞으로">
                       <ArrowUp className="size-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="size-8" disabled={!!busy || index >= total - 1} onClick={() => handleMove(1)} aria-label="이 논문을 뒤로">
+                    <Button variant="ghost" size="icon" className="size-8" disabled={blocked || index >= total - 1} onClick={() => handleMove(1)} aria-label="이 논문을 뒤로">
                       <ArrowDown className="size-4" />
                     </Button>
                   </div>
@@ -625,24 +632,24 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
           {/* 카드 다루기 */}
           {current && card && (
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className="h-10 rounded-lg" disabled={!!busy} onClick={() => setEditOpen(true)}>
+              <Button variant="outline" className="h-10 rounded-lg" disabled={blocked} onClick={() => setEditOpen(true)}>
                 <Pencil className="size-4" /> 글·템플릿 고치기
               </Button>
               {current.previous_card_content && (
-                <Button variant="outline" className="h-10 rounded-lg" disabled={!!busy} onClick={handleRestore}>
+                <Button variant="outline" className="h-10 rounded-lg" disabled={blocked} onClick={handleRestore}>
                   <Undo2 className="size-4" /> 이전 카드로
                 </Button>
               )}
-              <Button variant="outline" className="h-10 rounded-lg" disabled={!!busy} onClick={handleGenerate}>
+              <Button variant="outline" className="h-10 rounded-lg" disabled={blocked} onClick={handleGenerate}>
                 <RotateCcw className="size-4" /> 다시 만들기
               </Button>
-              <Button variant="outline" className="ml-auto h-10 rounded-lg text-status-late hover:bg-status-late-bg hover:text-status-late" disabled={!!busy} onClick={() => setDeleteOpen(true)}>
+              <Button variant="outline" className="ml-auto h-10 rounded-lg text-status-late hover:bg-status-late-bg hover:text-status-late" disabled={blocked} onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="size-4" /> 논문 지우기
               </Button>
             </div>
           )}
           {current && !card && (
-            <Button variant="outline" className="h-10 self-start rounded-lg text-status-late hover:bg-status-late-bg hover:text-status-late" disabled={!!busy} onClick={() => setDeleteOpen(true)}>
+            <Button variant="outline" className="h-10 self-start rounded-lg text-status-late hover:bg-status-late-bg hover:text-status-late" disabled={blocked} onClick={() => setDeleteOpen(true)}>
               <Trash2 className="size-4" /> 논문 지우기
             </Button>
           )}
@@ -653,12 +660,12 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
               <div className="flex items-center gap-3 rounded-xl bg-status-done-bg px-4 py-3">
                 <CheckCircle2 className="size-5 shrink-0 text-status-done" />
                 <p className="min-w-0 flex-1 text-sm font-semibold text-status-done">검수를 마친 논문이에요.</p>
-                <Button variant="outline" size="sm" className="h-9 rounded-lg" disabled={!!busy} onClick={() => handleReview(false)}>
+                <Button variant="outline" size="sm" className="h-9 rounded-lg" disabled={blocked} onClick={() => handleReview(false)}>
                   검수 취소
                 </Button>
               </div>
             ) : (
-              <Button className="h-12 rounded-xl text-base font-bold" disabled={!!busy || textDirty} onClick={() => handleReview(true)}>
+              <Button className="h-12 rounded-xl text-base font-bold" disabled={blocked || textDirty} onClick={() => handleReview(true)}>
                 <CheckCircle2 className="size-5" />
                 {textDirty ? "글을 먼저 저장해 주세요" : "원문과 맞는지 확인했어요 · 검수 완료"}
               </Button>
@@ -681,7 +688,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
             <DialogClose asChild>
               <Button variant="outline">취소</Button>
             </DialogClose>
-            <Button variant="destructive" onClick={handleDelete} disabled={!!busy}>
+            <Button variant="destructive" onClick={handleDelete} disabled={blocked}>
               {busy === "delete" ? "지우는 중…" : "지우기"}
             </Button>
           </DialogFooter>
