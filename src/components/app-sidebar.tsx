@@ -30,7 +30,7 @@ export function NavCount({ count, urgent, className }: { count: number; urgent: 
   return urgent ? (
     <span
       className={cn(
-        "inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-destructive px-[5px] text-[11px] font-bold tabular-nums text-white",
+        "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-bold tabular-nums text-white",
         className
       )}
     >

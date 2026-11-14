@@ -13,7 +13,7 @@ import type { TopItemData } from "@/lib/types/dashboard";
 const chartConfig = {
   count: {
     label: "주문 수",
-    color: "#1166A7",
+    color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
 
@@ -43,18 +43,18 @@ export function TopItemsChart({ data }: TopItemsChartProps) {
       <CardContent>
         <ChartContainer id="top-items" config={chartConfig} className="aspect-auto h-[300px] w-full">
           <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, bottom: 0, left: 0 }}>
-            <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} allowDecimals={false} />
+            <XAxis type="number" tickLine={false} axisLine={false} fontSize={12} allowDecimals={false} />
             <YAxis
               type="category"
               dataKey="name"
               tickLine={false}
               axisLine={false}
               width={100}
-              fontSize={11}
+              fontSize={12}
               tickFormatter={(v: string) => (v.length > 8 ? v.slice(0, 8) + "…" : v)}
             />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar dataKey="count" fill="#1166A7" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="count" fill="var(--color-count)" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ChartContainer>
       </CardContent>

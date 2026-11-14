@@ -1,23 +1,17 @@
+import { PageHeader } from "@/components/page-header";
+import { ListSkeleton } from "@/components/workspace/feedback";
+
 export default function BloodLoading() {
   return (
     <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <h1 className="text-lg font-bold">혈액 대장</h1>
-      </header>
-      <div className="p-4 space-y-3">
-        <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="rounded-xl bg-card p-4 shadow-card animate-pulse">
-            <div className="flex items-center justify-between">
-              <div className="h-4 w-28 rounded bg-muted" />
-              <div className="h-5 w-14 rounded-full bg-muted" />
-            </div>
-            <div className="mt-2.5 flex items-center gap-2">
-              <div className="h-3 w-20 rounded bg-muted" />
-              <div className="h-3 w-24 rounded bg-muted" />
-            </div>
-          </div>
-        ))}
+      <PageHeader title="혈액 대장" />
+      <div className="space-y-3 p-4 lg:px-6">
+        <div className="flex gap-1.5" aria-hidden="true">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-8 w-16 animate-pulse rounded-full bg-muted" />
+          ))}
+        </div>
+        <ListSkeleton rows={8} />
       </div>
     </div>
   );

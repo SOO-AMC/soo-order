@@ -11,7 +11,7 @@ import {
 import type { SpendData } from "@/lib/types/dashboard";
 
 const chartConfig = {
-  amount: { label: "추정 지출", color: "#1166A7" },
+  amount: { label: "추정 지출", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
 const won = (n: number) => `${n.toLocaleString()}원`;
@@ -49,8 +49,8 @@ export function SpendChart({ data }: { data: SpendData }) {
             </div>
             <ChartContainer id="spend" config={chartConfig} className="aspect-auto h-[200px] w-full">
               <BarChart data={data.monthly} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
-                <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} fontSize={11} width={48} tickFormatter={(v) => `${Math.round(Number(v) / 10000)}만`} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
+                <YAxis tickLine={false} axisLine={false} fontSize={12} width={48} tickFormatter={(v) => `${Math.round(Number(v) / 10000)}만`} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar dataKey="amount" fill="var(--color-amount)" radius={4} />
               </BarChart>

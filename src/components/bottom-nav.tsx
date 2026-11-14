@@ -75,7 +75,7 @@ export function BottomNav() {
                     : undefined
               }
               className={cn(
-                "flex flex-col items-center gap-0.5 py-1.5 text-[11px] transition-colors",
+                "flex flex-col items-center gap-0.5 py-1.5 text-xs transition-colors",
                 isActive ? "font-semibold text-primary" : "font-medium text-muted-foreground"
               )}
             >
@@ -85,7 +85,7 @@ export function BottomNav() {
                   // 평소: 흰 바탕 회색 숫자, 긴급 포함: 빨간 원
                   <span
                     className={cn(
-                      "absolute -right-3.5 -top-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none tabular-nums",
+                      "absolute -right-4 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-bold leading-none tabular-nums",
                       hasUrgent
                         ? "bg-destructive text-white"
                         : "bg-card text-subtle-foreground ring-1 ring-border"

@@ -2,15 +2,17 @@
 
 import { Cell, Pie, PieChart } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { StatusIcon, type StatusTone } from "@/components/ui/status-badge";
 import type { SummaryData } from "@/lib/types/dashboard";
 
 // "검수완료(inspecting)"는 사실상 종료 상태라 제외 — 처리 대기 중인 주문만
-const SLICES = [
-  { key: "pending", label: "주문신청", color: "#eab308" },
-  { key: "ordered", label: "검수대기", color: "#22c55e" },
-  { key: "returnRequested", label: "반품신청", color: "#f97316" },
-] as const;
+// 색은 앱 상태 규칙과 같게: 주문신청=회색(아직), 검수대기=파랑(진행), 반품신청=주황(확인 필요)
+const SLICES: { key: string; label: string; color: string; tone: StatusTone }[] = [
+  { key: "pending", label: "주문신청", color: "var(--chart-todo)", tone: "todo" },
+  { key: "ordered", label: "검수대기", color: "var(--chart-doing)", tone: "doing" },
+  { key: "returnRequested", label: "반품신청", color: "var(--chart-ask)", tone: "ask" },
+];
 
 export function StatusDonut({ data }: { data: SummaryData }) {
   const counts: Record<string, number> = {
@@ -29,13 +31,14 @@ export function StatusDonut({ data }: { data: SummaryData }) {
       </CardHeader>
       <CardContent>
         {total === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">처리 대기 중인 주문이 없습니다 👍</p>
+          <p className="py-12 text-center text-sm text-muted-foreground">처리할 주문이 없어요</p>
         ) : (
           <div className="flex flex-col items-center">
             <div className="relative">
               <ChartContainer id="status-donut" config={config} className="h-[180px] w-[180px]">
                 <PieChart>
-                  <Pie data={rows} dataKey="value" nameKey="label" innerRadius={56} outerRadius={82} paddingAngle={2} strokeWidth={0}>
+                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                  <Pie data={rows} dataKey="value" nameKey="label" innerRadius={56} outerRadius={82} paddingAngle={2} strokeWidth={2} stroke="var(--card)">
                     {rows.map((r) => (
                       <Cell key={r.key} fill={r.color} />
                     ))}
@@ -51,9 +54,10 @@ export function StatusDonut({ data }: { data: SummaryData }) {
               {rows.map((r) => (
                 <li key={r.key} className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: r.color }} />
+                  <StatusIcon tone={r.tone} className="size-3.5 shrink-0 text-subtle-foreground" />
                   <span className="min-w-0 flex-1 truncate text-muted-foreground">{r.label}</span>
                   <span className="font-medium tabular-nums">{Math.round((r.value / total) * 100)}%</span>
-                  <span className="text-xs text-muted-foreground">({r.value}건)</span>
+                  <span className="w-12 text-right text-xs tabular-nums text-muted-foreground">{r.value}건</span>
                 </li>
               ))}
             </ul>

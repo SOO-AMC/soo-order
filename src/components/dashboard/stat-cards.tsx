@@ -57,13 +57,13 @@ export function StatCards({ summary, spend }: { summary: SummaryData; spend?: Sp
             <CardContent className="flex items-start justify-between gap-2 p-4">
               <div className="min-w-0">
                 <p className="text-[13px] font-medium text-subtle-foreground">{it.label}</p>
-                <p className="mt-1 text-2xl font-bold leading-tight tabular-nums">
+                <p className="mt-1 whitespace-nowrap text-xl font-bold leading-tight tabular-nums sm:text-2xl">
                   {it.value}
                   {it.unit && <span className="ml-0.5 text-sm font-medium text-muted-foreground">{it.unit}</span>}
                 </p>
                 <div className="mt-1">{it.delta}</div>
               </div>
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-subtle-foreground">
+              <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-subtle-foreground sm:flex">
                 <Icon className="h-5 w-5" />
               </span>
             </CardContent>

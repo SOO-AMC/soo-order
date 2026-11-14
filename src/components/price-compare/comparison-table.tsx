@@ -748,7 +748,7 @@ export function ComparisonTable({
   const categoryTag = (notes: string | null | undefined) =>
     notes ? (
       <span
-        className={`inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-bold ${
+        className={`inline-flex h-[22px] shrink-0 items-center rounded-md px-1.5 text-xs font-bold ${
           notes === "약품" ? "bg-status-doing-bg text-status-doing" : "bg-secondary text-subtle-foreground"
         }`}
       >
@@ -989,7 +989,7 @@ export function ComparisonTable({
                         <th key={vendor.id} className="min-w-[110px] border-b border-border bg-muted px-3 py-2.5 text-right">
                           <span className="block leading-tight">{vendor.name}</span>
                           {rate > 0 && (
-                            <span className="block text-[11px] font-normal leading-tight text-muted-foreground">
+                            <span className="block text-xs font-normal leading-tight text-muted-foreground">
                               할인 {rate}%
                             </span>
                           )}

@@ -119,6 +119,13 @@
   --chart-3: oklch(0.65 0.12 200);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /* 대시보드 차트 전용 색 (dataviz validate_palette 통과, 상태 순서: 아직·진행·확인) */
+  --chart-todo: #7b8a99;
+  --chart-doing: #1166a7;
+  --chart-ask: #c46a12;
+  --chart-total: #1166a7;
+  --chart-received: #0f9b96;
+  --chart-bad: #be312c;
   /* 사이드바 = 화면 틀(수링크 inset 패턴). 브랜드 파랑을 옅게 깐 틀 위에 본문이 둥근 패널로 올라간다.
      선택 메뉴는 흰 칸, 글자는 3단계 그대로(틀 위에서도 4.5:1 이상). */
   /* 사이드바 = 수링크와 동일: 회색 틀(#F2F4F7) 위에 흰 본문 패널. 선택 메뉴 = 흰 칸 + 1px 선 + 얕은 그림자 */
@@ -176,6 +183,12 @@
   --chart-3: oklch(0.65 0.12 200);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  --chart-todo: #66727e;
+  --chart-doing: #4b9be0;
+  --chart-ask: #cf7f2c;
+  --chart-total: #3a78bd;
+  --chart-received: #3aab88;
+  --chart-bad: #d0574f;
   --sidebar: oklch(0.145 0.015 250); /* 틀이 패널(card)보다 어두워야 구분됨 */
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-muted: oklch(0.72 0.02 260);

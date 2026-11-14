@@ -44,7 +44,7 @@ function RoleTag({ role }: { role: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-bold",
+        "inline-flex h-[22px] shrink-0 items-center rounded-md px-1.5 text-xs font-bold",
         role === "admin"
           ? "bg-status-doing-bg text-status-doing"
           : role === "team_manager"

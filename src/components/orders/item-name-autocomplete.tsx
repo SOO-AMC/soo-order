@@ -143,11 +143,11 @@ export function ItemNameAutocomplete({
               }}
             >
               {s.isUnified && (
-                <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary">표준</span>
+                <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">표준</span>
               )}
               <span className="min-w-0 flex-1 truncate">{s.name}</span>
               {s.isUnified && s.notes && (
-                <span className="shrink-0 text-[11px] text-muted-foreground">{s.notes}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{s.notes}</span>
               )}
             </li>
           ))}

@@ -15,11 +15,11 @@ import type { VendorData } from "@/lib/types/dashboard";
 const chartConfig = {
   total: {
     label: "발주 건수",
-    color: "#1166A7",
+    color: "var(--chart-total)",
   },
   invoiceReceived: {
     label: "명세서 수령",
-    color: "#1D4ED8",
+    color: "var(--chart-received)",
   },
 } satisfies ChartConfig;
 
@@ -54,10 +54,10 @@ export function VendorStatusChart({ data }: VendorStatusChartProps) {
               dataKey="vendor"
               tickLine={false}
               axisLine={false}
-              fontSize={11}
+              fontSize={12}
               tickFormatter={(v: string) => (v.length > 6 ? v.slice(0, 6) + "…" : v)}
             />
-            <YAxis tickLine={false} axisLine={false} fontSize={11} allowDecimals={false} />
+            <YAxis tickLine={false} axisLine={false} fontSize={12} allowDecimals={false} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <ChartLegend content={<ChartLegendContent />} />
             <Bar dataKey="total" fill="var(--color-total)" radius={[4, 4, 0, 0]} />

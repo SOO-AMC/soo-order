@@ -1,21 +1,17 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Search } from "lucide-react";
+import { useState, useCallback, useRef } from "react";
+import { History, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Spinner } from "@/components/ui/spinner";
+import { PageHeader } from "@/components/page-header";
+import { BackButton } from "@/components/back-button";
+import { SavedViews } from "@/components/workspace/saved-views";
+import { FilterBar, SearchField } from "@/components/workspace/filter-bar";
+import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
+import { PeriodPicker } from "@/components/workspace/period-picker";
+import { kstToday, type DateRange } from "@/lib/utils/period";
 import { formatDateTime } from "@/lib/utils/format";
 
 interface ActivityLog {
@@ -27,54 +23,50 @@ interface ActivityLog {
   created_at: string;
 }
 
-const CATEGORIES = [
+type Category = "all" | "auth" | "order" | "dispatch" | "inspection" | "return" | "account" | "price" | "blood";
+
+const CATEGORIES: { value: Category; label: string }[] = [
   { value: "all", label: "전체" },
-  { value: "auth", label: "인증" },
   { value: "order", label: "주문" },
   { value: "dispatch", label: "발주" },
   { value: "inspection", label: "검수" },
   { value: "return", label: "반품" },
-  { value: "account", label: "계정" },
-  { value: "price", label: "가격비교" },
   { value: "blood", label: "혈액" },
-] as const;
+  { value: "price", label: "가격비교" },
+  { value: "account", label: "계정" },
+  { value: "auth", label: "로그인" },
+];
 
-const CATEGORY_COLORS: Record<string, string> = {
-  auth: "bg-blue-100 text-blue-700",
-  order: "bg-green-100 text-green-700",
-  dispatch: "bg-purple-100 text-purple-700",
-  inspection: "bg-amber-100 text-amber-700",
-  return: "bg-orange-100 text-orange-700",
-  account: "bg-slate-100 text-slate-700",
-  price: "bg-pink-100 text-pink-700",
-  blood: "bg-red-100 text-red-700",
+/** 분류 이름 — 예전 인사(leave) 기록도 이름은 보여 준다 */
+const CATEGORY_LABEL: Record<string, string> = {
+  ...Object.fromEntries(CATEGORIES.filter((c) => c.value !== "all").map((c) => [c.value, c.label])),
+  leave: "인사",
 };
 
-const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
-  CATEGORIES.filter((c) => c.value !== "all").map((c) => [c.value, c.label])
-);
+const PAGE = 50;
 
 interface ActivityLogListProps {
   initialData: ActivityLog[];
 }
 
+/** 활동 로그 (관리자). 누가 언제 무엇을 했는지 — 분류 보기 · 설명 검색 · 기간 · 50건씩 더 보기 */
 export function ActivityLogList({ initialData }: ActivityLogListProps) {
   const [logs, setLogs] = useState<ActivityLog[]>(initialData);
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState<Category>("all");
   const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [range, setRange] = useState<DateRange>({ start: "", end: "" });
+  const [today] = useState(kstToday);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(initialData.length === 50);
+  const [hasMore, setHasMore] = useState(initialData.length === PAGE);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const supabase = createClient();
 
   const fetchLogs = useCallback(
-    async (opts?: { cat?: string; q?: string; from?: string; to?: string; cursor?: string }) => {
+    async (opts?: { cat?: Category; q?: string; range?: DateRange; cursor?: string }) => {
       setIsLoading(true);
       const cat = opts?.cat ?? category;
       const q = opts?.q ?? search;
-      const from = opts?.from ?? dateFrom;
-      const to = opts?.to ?? dateTo;
+      const r = opts?.range ?? range;
 
       let query = supabase
         .from("activity_logs")
@@ -83,178 +75,133 @@ export function ActivityLogList({ initialData }: ActivityLogListProps) {
 
       if (cat !== "all") query = query.eq("category", cat);
       if (q.trim()) query = query.ilike("description", `%${q.trim()}%`);
-      if (from) query = query.gte("created_at", `${from}T00:00:00+09:00`);
-      if (to) query = query.lte("created_at", `${to}T23:59:59+09:00`);
+      if (r.start) query = query.gte("created_at", `${r.start}T00:00:00+09:00`);
+      if (r.end) query = query.lte("created_at", `${r.end}T23:59:59+09:00`);
       if (opts?.cursor) query = query.lt("created_at", opts.cursor);
-      query = query.limit(50);
+      query = query.limit(PAGE);
 
       const { data } = await query;
       const newLogs = (data as ActivityLog[]) ?? [];
 
-      if (opts?.cursor) {
-        setLogs((prev) => [...prev, ...newLogs]);
-      } else {
-        setLogs(newLogs);
-      }
+      if (opts?.cursor) setLogs((prev) => [...prev, ...newLogs]);
+      else setLogs(newLogs);
 
-      setHasMore(newLogs.length === 50);
+      setHasMore(newLogs.length === PAGE);
       setIsLoading(false);
     },
-    [supabase, category, search, dateFrom, dateTo]
+    [supabase, category, search, range]
   );
 
-  const handleCategoryChange = (value: string) => {
+  const changeCategory = (value: Category) => {
     setCategory(value);
     fetchLogs({ cat: value });
   };
 
-  const handleSearch = () => {
-    fetchLogs();
+  const changeSearch = (value: string) => {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchLogs({ q: value }), 400);
   };
 
-  const handleDateChange = (from: string, to: string) => {
-    setDateFrom(from);
-    setDateTo(to);
-    fetchLogs({ from, to });
+  const changeRange = (r: DateRange) => {
+    setRange(r);
+    // 직접 입력 중 한쪽만 바뀐 상태여도 그대로 조회(빈 칸은 제한 없음)
+    fetchLogs({ range: r });
   };
 
   return (
-    <div className="mx-auto max-w-md md:max-w-2xl lg:max-w-full">
-      <header className="sticky top-[var(--page-top)] z-40 flex items-center gap-2 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <h1 className="text-lg font-bold">활동 로그</h1>
-      </header>
-
-      <div className="p-4 space-y-4">
-        {/* 검색 + 날짜 필터 */}
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="설명 검색..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="pl-9 bg-card"
-            />
+    <>
+      <PageHeader
+        title="활동 로그"
+        description={<span className="hidden sm:inline">누가 언제 무엇을 했는지</span>}
+        leading={
+          <div className="lg:hidden">
+            <BackButton fallbackHref="/more" />
           </div>
-          <div className="flex gap-2">
-            <Input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => handleDateChange(e.target.value, dateTo)}
-              className="w-36 bg-card"
-            />
-            <span className="flex items-center text-muted-foreground">~</span>
-            <Input
-              type="date"
-              value={dateTo}
-              onChange={(e) => handleDateChange(dateFrom, e.target.value)}
-              className="w-36 bg-card"
-            />
-          </div>
-        </div>
+        }
+      />
 
-        {/* 카테고리 탭 */}
-        <Tabs value={category} onValueChange={handleCategoryChange}>
-          <TabsList className="w-full overflow-x-auto justify-start">
-            {CATEGORIES.map((cat) => (
-              <TabsTrigger key={cat.value} value={cat.value}>
-                {cat.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+      <div className="mx-auto max-w-md space-y-3 p-4 md:max-w-2xl lg:max-w-6xl lg:px-6">
+        <SavedViews<Category> value={category} onValueChange={changeCategory} views={CATEGORIES} ariaLabel="분류" />
+        <FilterBar>
+          <SearchField id="log-search" value={search} onChange={changeSearch} placeholder="설명 검색 (품목·이름 등)" />
+        </FilterBar>
+        <PeriodPicker value={range} onChange={changeRange} today={today} presets={["thisMonth", "lastMonth", "last3", "all"]} idPrefix="log" />
 
         {isLoading && logs.length === 0 ? (
-          <div className="flex items-center justify-center py-16">
-            <Spinner text="불러오는 중..." />
-          </div>
+          <ListSkeleton rows={10} />
         ) : logs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-muted-foreground">활동 로그가 없습니다.</p>
+          <div className="rounded-xl bg-card ring-1 ring-border">
+            <EmptyState icon={History} title="조건에 맞는 기록이 없어요" description="분류·검색어·기간을 바꿔 보세요." />
           </div>
         ) : (
           <>
-            {/* PC 테이블 뷰 */}
-            <div className="hidden lg:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-40">시간</TableHead>
-                    <TableHead className="w-24">사용자</TableHead>
-                    <TableHead className="w-24">카테고리</TableHead>
-                    <TableHead>설명</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            {/* PC 표 */}
+            <section className="hidden overflow-hidden rounded-xl bg-card ring-1 ring-border lg:block">
+              <table className="w-full table-fixed border-separate border-spacing-0 text-[13px]">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-muted-foreground">
+                    <th className="w-44 border-b border-border bg-muted py-2 pl-4 font-semibold">시간</th>
+                    <th className="w-28 border-b border-border bg-muted px-3 py-2 font-semibold">사람</th>
+                    <th className="w-24 border-b border-border bg-muted px-3 py-2 font-semibold">분류</th>
+                    <th className="border-b border-border bg-muted px-3 py-2 pr-4 font-semibold">한 일</th>
+                  </tr>
+                </thead>
+                <tbody>
                   {logs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        {formatDateTime(log.created_at)}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {log.user_name}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="secondary"
-                          className={CATEGORY_COLORS[log.category] ?? ""}
-                        >
-                          {CATEGORY_LABEL[log.category] ?? log.category}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{log.description}</TableCell>
-                    </TableRow>
+                    <tr key={log.id} className="hover:bg-muted/60">
+                      <td className="whitespace-nowrap border-b border-border py-2.5 pl-4 tabular-nums text-subtle-foreground">{formatDateTime(log.created_at)}</td>
+                      <td className="truncate border-b border-border px-3 py-2.5 font-semibold">{log.user_name}</td>
+                      <td className="border-b border-border px-3 py-2.5">
+                        <CategoryTag category={log.category} />
+                      </td>
+                      <td className="border-b border-border px-3 py-2.5 pr-4 text-sm">{log.description}</td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
-            </div>
+                </tbody>
+              </table>
+            </section>
 
-            {/* 모바일 카드 뷰 */}
-            <div className="lg:hidden space-y-2">
-              {logs.map((log) => (
-                <div
-                  key={log.id}
-                  className="rounded-xl bg-card p-4 shadow-card"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="secondary"
-                        className={CATEGORY_COLORS[log.category] ?? ""}
-                      >
-                        {CATEGORY_LABEL[log.category] ?? log.category}
-                      </Badge>
-                      <span className="font-medium text-sm">
-                        {log.user_name}
-                      </span>
-                    </div>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDateTime(log.created_at)}
-                    </span>
+            {/* 모바일 */}
+            <section className="overflow-hidden rounded-xl bg-card ring-1 ring-border lg:hidden">
+              {logs.map((log, i) => (
+                <div key={log.id} className={cn("px-4 py-3", i > 0 && "border-t border-border")}>
+                  <div className="flex items-center gap-2">
+                    <CategoryTag category={log.category} />
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{log.user_name}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatDateTime(log.created_at)}</span>
                   </div>
-                  <p className="mt-1.5 text-sm text-muted-foreground">
-                    {log.description}
-                  </p>
+                  <p className="mt-1 text-sm text-subtle-foreground">{log.description}</p>
                 </div>
               ))}
-            </div>
+            </section>
 
-            {/* 더보기 */}
-            {hasMore && (
-              <div className="flex justify-center pt-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[13px] tabular-nums text-muted-foreground">{logs.length}건 표시</span>
+              {hasMore && (
                 <Button
                   variant="outline"
+                  className="h-9 rounded-lg"
                   onClick={() => fetchLogs({ cursor: logs[logs.length - 1]?.created_at })}
                   disabled={isLoading}
                 >
-                  {isLoading ? "불러오는 중..." : "더보기"}
+                  {isLoading && <Loader2 className="size-4 animate-spin" />}
+                  {isLoading ? "불러오는 중…" : `${PAGE}건 더 보기`}
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
       </div>
-    </div>
+    </>
+  );
+}
+
+/** 분류 배지 — 상태색은 상태에만 쓰므로 분류는 차분한 회색 하나 */
+function CategoryTag({ category }: { category: string }) {
+  return (
+    <span className="inline-flex h-6 shrink-0 items-center rounded-md bg-secondary px-2 text-xs font-semibold text-subtle-foreground">
+      {CATEGORY_LABEL[category] ?? category}
+    </span>
   );
 }

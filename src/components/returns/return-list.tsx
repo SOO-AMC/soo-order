@@ -490,7 +490,7 @@ function ReturnSection({
           disabled={count === 0}
           aria-label={`${title} 전체 선택`}
         />
-        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-card text-[11px] font-bold tabular-nums text-subtle-foreground ring-1 ring-border">
+        <span className="grid size-[22px] shrink-0 place-items-center rounded-full bg-card text-xs font-bold tabular-nums text-subtle-foreground ring-1 ring-border">
           {step}
         </span>
         <StatusIcon tone={tone} className={cn("size-4", STATUS_TONE_TEXT[tone])} />

@@ -171,7 +171,7 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
             aria-activedescendant={entries[active] ? `cmd-${active}` : undefined}
             className="h-14 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
           />
-          <kbd className="hidden rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-subtle-foreground sm:block">Esc</kbd>
+          <kbd className="hidden rounded bg-secondary px-1.5 py-0.5 font-mono text-xs text-subtle-foreground sm:block">Esc</kbd>
         </div>
         <div ref={listRef} id="command-list" role="listbox" className="max-h-[min(60dvh,440px)] overflow-y-auto py-1.5">
           {loading && entries.length === 0 && <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">찾는 중…</p>}
@@ -239,7 +239,7 @@ export function QuickActionButton() {
     >
       <Search className="size-[15px]" aria-hidden="true" />
       빠른 실행
-      <kbd className="ml-auto rounded bg-secondary px-1.5 py-px font-mono text-[11px] text-subtle-foreground">Ctrl K</kbd>
+      <kbd className="ml-auto rounded bg-secondary px-1.5 py-px font-mono text-xs text-subtle-foreground">Ctrl K</kbd>
     </button>
   );
 }

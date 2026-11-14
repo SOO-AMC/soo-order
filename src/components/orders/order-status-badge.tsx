@@ -29,7 +29,7 @@ export function StatusLegend() {
   ];
 
   const Item = ({ status, label }: { status: OrderStatus; label: string }) => (
-    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
       <StatusIcon tone={ORDER_STATUS_TONE[status]} className={`size-3 ${STATUS_TONE_TEXT[ORDER_STATUS_TONE[status]]}`} />
       {label}
     </span>
