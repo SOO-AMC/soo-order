@@ -19,6 +19,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { toKSTDateString } from "@/lib/utils/format";
 import { useAuth } from "@/hooks/use-auth";
+import { applyDiscount, parsePriceInput, priceToSave, reverseDiscount } from "@/lib/utils/discount";
 import { createUnifiedProduct, updateUnifiedProduct, upsertVendorPrice, updateVendorDiscountRate } from "@/app/(main)/price-compare/actions";
 import type {
   Vendor,
@@ -43,19 +44,10 @@ interface EditForm {
   name: string;
   notes: string;
   remarks: string;
-  prices: Record<string, string>; // vendorId → price string
-}
-
-function applyDiscount(price: number | null, rate: number): number | null {
-  if (price == null) return null;
-  if (!rate) return price;
-  return Math.round(price * (1 - rate / 100));
-}
-
-function reverseDiscount(price: number | null, rate: number): number | null {
-  if (price == null) return null;
-  if (!rate) return price;
-  return Math.round(price / (1 - rate / 100));
+  /** vendorId → 입력칸 글자. 추가·수정 모두 **할인전(업체 정가)** 기준 */
+  prices: Record<string, string>;
+  /** 수정을 열 때의 값. 손대지 않은 칸은 저장하지 않으려고 둔다 (추가 폼에는 없음) */
+  initialPrices?: Record<string, string>;
 }
 
 export function ComparisonTable({
@@ -73,6 +65,7 @@ export function ComparisonTable({
   /** 최저가 업체 필터 (저장값=할인후 기준) */
   const [minVendorFilter, setMinVendorFilter] = useState<string | null>(null);
   const [createError, setCreateError] = useState("");
+  const [editError, setEditError] = useState("");
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -176,20 +169,25 @@ export function ComparisonTable({
     const prices: Record<string, string> = {};
     for (const vendor of vendors) {
       const entry = row.prices.get(vendor.id);
-      prices[vendor.id] = entry?.price != null ? String(entry.price) : "";
+      // 저장값은 할인후 → 입력칸에는 할인전(업체 정가)으로 되돌려 채운다. 추가·엑셀 업로드와 같은 기준.
+      const listPrice = reverseDiscount(entry?.price ?? null, vendor.discount_rate ?? 0);
+      prices[vendor.id] = listPrice != null ? String(listPrice) : "";
     }
     setEditForm({
       name: row.unified.name,
       notes: row.unified.notes || "",
       remarks: row.unified.remarks || "",
       prices,
+      initialPrices: { ...prices },
     });
+    setEditError("");
     setExpandedId(row.unified.id);
   }, [vendors]);
 
   const closeEdit = useCallback(() => {
     setExpandedId(null);
     setEditForm(null);
+    setEditError("");
   }, []);
 
   const handleToggle = useCallback((row: ComparisonRow) => {
@@ -204,23 +202,32 @@ export function ComparisonTable({
   const handleSave = async (unified: UnifiedProduct) => {
     if (!editForm) return;
     setIsSaving(true);
+    setEditError("");
 
     try {
-      const priceUpdates = vendors.map((vendor) => {
-        const raw = editForm.prices[vendor.id]?.trim();
-        const price = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
-        const rawPrice = price != null && !isNaN(price) ? price : null;
-        const validPrice = applyDiscount(rawPrice, vendor.discount_rate ?? 0);
-        return upsertVendorPrice(unified.id, vendor.id, validPrice, editForm.name);
-      });
+      // 손댄 칸만 저장한다. 손대지 않은 칸까지 다시 저장하면 할인율이 또 곱해지거나 값이 흔들린다.
+      const priceUpdates: ReturnType<typeof upsertVendorPrice>[] = [];
+      for (const vendor of vendors) {
+        const plan = priceToSave(editForm.prices[vendor.id], editForm.initialPrices?.[vendor.id], vendor.discount_rate ?? 0);
+        if (plan.changed) priceUpdates.push(upsertVendorPrice(unified.id, vendor.id, plan.price, editForm.name));
+      }
 
-      await Promise.all([
+      const results = await Promise.all([
         updateUnifiedProduct(unified.id, editForm.name, unified.mg, unified.tab, editForm.notes, editForm.remarks),
         ...priceUpdates,
       ]);
+      const failed = results.find((r) => r?.error);
+      if (failed?.error) {
+        // 일부만 저장됐을 수 있으니 표는 새로 읽고, 수정 칸은 열어 둔다
+        setEditError(failed.error);
+        onDataChange();
+        return;
+      }
 
       closeEdit();
       onDataChange();
+    } catch {
+      setEditError("저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     } finally {
       setIsSaving(false);
     }
@@ -321,7 +328,7 @@ export function ComparisonTable({
               className="h-9 text-sm text-right tabular-nums"
             />
             {rate > 0 && discounted != null && (
-              <p className="text-xs text-right text-status-done mt-0.5">→ {discounted.toLocaleString()}</p>
+              <p className="text-xs text-right text-status-done mt-0.5">→ 할인후 {discounted.toLocaleString()}</p>
             )}
           </TableCell>
         );
@@ -389,7 +396,7 @@ export function ComparisonTable({
         </div>
       </div>
       <div>
-        <label className="mb-2 block text-[13px] font-medium text-subtle-foreground">업체별 단가</label>
+        <label className="mb-2 block text-[13px] font-medium text-subtle-foreground">업체별 단가 · 할인전(업체 정가)으로 입력</label>
         <div className="grid grid-cols-2 gap-2">
           {vendors.map((vendor) => {
             const rate = vendor.discount_rate ?? 0;
@@ -414,7 +421,7 @@ export function ComparisonTable({
                   className="h-9 text-sm"
                 />
                 {rate > 0 && discounted != null && (
-                  <p className="text-xs text-status-done">→ {discounted.toLocaleString()}원</p>
+                  <p className="text-xs text-status-done">→ 할인후 {discounted.toLocaleString()}원</p>
                 )}
               </div>
             );
@@ -459,12 +466,12 @@ export function ComparisonTable({
               onKeyDown={(e) => { if (e.key === "Enter") handleSave(row.unified); if (e.key === "Escape") closeEdit(); }}
             />
         </div>
+        {editError && <p role="alert" className="mt-1 text-xs font-medium text-status-late">{editError}</p>}
       </TableCell>
       {vendors.map((vendor) => {
         const rate = vendor.discount_rate ?? 0;
         const raw = editForm?.prices[vendor.id] ?? "";
-        const parsed = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
-        const preDiscount = parsed != null && !isNaN(parsed) ? reverseDiscount(parsed, rate) : null;
+        const afterDiscount = applyDiscount(parsePriceInput(raw), rate);
         return (
           <TableCell key={vendor.id}>
             <Input
@@ -479,8 +486,8 @@ export function ComparisonTable({
               }
               className="h-9 text-sm text-right tabular-nums"
             />
-            {rate > 0 && preDiscount != null && (
-              <p className="text-xs text-right text-muted-foreground mt-0.5">→ 할인전 {preDiscount.toLocaleString()}</p>
+            {rate > 0 && afterDiscount != null && (
+              <p className="text-xs text-right text-status-done mt-0.5">→ 할인후 {afterDiscount.toLocaleString()}</p>
             )}
           </TableCell>
         );
@@ -544,13 +551,12 @@ export function ComparisonTable({
         </div>
       </div>
       <div>
-        <label className="mb-2 block text-[13px] font-medium text-subtle-foreground">업체별 단가</label>
+        <label className="mb-2 block text-[13px] font-medium text-subtle-foreground">업체별 단가 · 할인전(업체 정가)으로 입력</label>
         <div className="grid grid-cols-2 gap-2">
           {vendors.map((vendor) => {
             const rate = vendor.discount_rate ?? 0;
             const raw = editForm?.prices[vendor.id] ?? "";
-            const parsed = raw ? parseInt(raw.replace(/[^0-9]/g, ""), 10) : null;
-            const preDiscount = parsed != null && !isNaN(parsed) ? reverseDiscount(parsed, rate) : null;
+            const afterDiscount = applyDiscount(parsePriceInput(raw), rate);
             return (
               <div key={vendor.id} className="space-y-1">
                 <label className="text-xs font-medium">
@@ -568,14 +574,17 @@ export function ComparisonTable({
                   }
                   className="h-9 text-sm"
                 />
-                {rate > 0 && preDiscount != null && (
-                  <p className="text-xs text-muted-foreground">→ 할인전 {preDiscount.toLocaleString()}원</p>
+                {rate > 0 && afterDiscount != null && (
+                  <p className="text-xs text-status-done">→ 할인후 {afterDiscount.toLocaleString()}원</p>
                 )}
               </div>
             );
           })}
         </div>
       </div>
+      {editError && (
+        <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">{editError}</p>
+      )}
       <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={closeEdit} disabled={isSaving}>취소</Button>
         <Button size="sm" onClick={() => handleSave(row.unified)} disabled={isSaving}>
@@ -963,7 +972,7 @@ export function ComparisonTable({
                     open={!!row && !!editForm}
                     onOpenChange={(o) => { if (!o) closeEdit(); }}
                     title={row?.unified.name ?? "품목 수정"}
-                    description="단가는 할인후 기준이에요"
+                    description="단가는 할인전(업체 정가)으로 넣어요. 할인후는 자동으로 계산돼요"
                     tall
                   >
                     {row && editForm && renderMobileEditPanel(row)}
@@ -1059,7 +1068,7 @@ export function ComparisonTable({
             </div>
           </div>
           <p className="hidden px-1 text-xs text-muted-foreground lg:block">
-            초록 칸 = 그 품목의 최저가 · 업체 칸에 마우스를 올리면 업체 쪽 품목명이 보여요 · 수정 칸은 할인후 단가
+            초록 칸 = 그 품목의 최저가 · 업체 칸에 마우스를 올리면 업체 쪽 품목명이 보여요 · 추가·수정 칸에는 할인전(업체 정가)을 넣어요. 할인후는 자동 계산
             {isAdmin ? " · 행을 누르면 바로 수정" : ""}
           </p>
         </>
