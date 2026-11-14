@@ -60,6 +60,8 @@ export function AppSidebar() {
   const isActiveHref = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard" || (fromDashboard && pathname.startsWith("/orders"));
     if (href === "/dashboard/admin") return pathname.startsWith("/dashboard/admin");
+    // 논문 브리핑(열람)과 논문 브리핑 관리는 주소가 겹치므로 따로 가린다
+    if (href === "/briefing") return pathname.startsWith("/briefing") && !pathname.startsWith("/briefing/admin");
     if (fromDashboard && pathname.startsWith("/orders")) return false;
     return pathname.startsWith(href);
   };

@@ -13,6 +13,7 @@ import { StatusSummary, SUMMARY_TILES, type SummaryKey } from "./status-summary"
 import { ActiveOrderList } from "./active-order-list";
 import { RecentCompleted } from "./recent-completed";
 import { formatTimeAgo } from "./time-ago";
+import { TodayBriefingCard } from "@/components/briefing/reader/today-briefing-card";
 
 /**
  * 내 현황 (일반 직원 모바일 첫 탭, 디자인 시스템 "모바일 · 일반 직원").
@@ -86,6 +87,9 @@ export function MyOrdersPage({ initialData }: { initialData?: MyOrdersData }) {
             </>
           ) : null}
         </div>
+
+        {/* 오늘의 논문 브리핑 (오늘 발행분이 있을 때만) */}
+        <TodayBriefingCard />
 
         {loading ? (
           <ListSkeleton rows={5} />
