@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, Newspaper, Settings2 } from "lucide-react";
+import { CalendarDays, ChevronRight, MonitorPlay, Newspaper, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { BackButton } from "@/components/back-button";
@@ -93,6 +93,14 @@ export function TodayPage({
               ))}
             </p>
           )}
+          {/* 세미나실 큰 화면용 */}
+          <Link
+            href="/briefing/rounding"
+            className="relative mt-5 hidden h-11 items-center gap-2 rounded-full bg-[var(--bf-gold-400)] pl-4 pr-3 text-[15px] font-bold text-[var(--bf-navy-950)] transition-transform hover:scale-[1.02] md:inline-flex lg:absolute lg:bottom-9 lg:right-9 lg:mt-0 lg:h-12 lg:pl-5"
+          >
+            <MonitorPlay className="size-5" aria-hidden="true" /> 라운딩 대기 모드 시작
+            <ChevronRight className="size-4" aria-hidden="true" />
+          </Link>
         </section>
 
         {total === 0 ? (

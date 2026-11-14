@@ -56,7 +56,7 @@ export async function createStaff(
   }
 
   // profile 업데이트 (role, position)
-  const roleToSet = role === "admin" || role === "team_manager" ? role : null;
+  const roleToSet = role === "admin" || role === "team_manager" || role === "display" ? role : null;
   if (data.user && (roleToSet || position)) {
     await adminClient
       .from("profiles")

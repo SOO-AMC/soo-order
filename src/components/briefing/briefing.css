@@ -38,7 +38,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bf-fade {
+  .bf-fade,
+  .bf-fade-off {
     animation: none !important;
     transition: none !important;
   }

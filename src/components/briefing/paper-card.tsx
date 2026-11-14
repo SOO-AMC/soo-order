@@ -275,7 +275,7 @@ function RoundingFace({ card, chrome, className }: { card: PaperCardContent; chr
               {Array.from({ length: chrome.total }).map((_, i) => (
                 <span key={i} className="relative h-[0.42cqw] w-[4.4cqw] overflow-hidden rounded-full bg-white/20">
                   <span
-                    className="absolute inset-y-0 left-0 rounded-full bg-[var(--bf-gold-400)]"
+                    className="bf-fade-off absolute inset-y-0 left-0 rounded-full bg-[var(--bf-gold-400)] transition-[width] duration-300 ease-linear"
                     style={{ width: i < chrome.index ? "100%" : i === chrome.index ? `${Math.round((chrome.elapsed ?? 1) * 100)}%` : "0%" }}
                   />
                 </span>
@@ -298,7 +298,8 @@ function RoundingFace({ card, chrome, className }: { card: PaperCardContent; chr
         </>
       )}
 
-      <div className="absolute inset-0 flex flex-col px-[6cqw] pb-[7.2cqw] pt-[8.2cqw]">
+      {/* key: 논문이 바뀌면 본문만 다시 나타난다 (공통 머리·바닥은 그대로) */}
+      <div key={card.headline} className={cn("absolute inset-0 flex flex-col px-[6cqw] pb-[7.2cqw] pt-[8.2cqw]", chrome && "bf-fade")}>
         <CategoryChip card={card} className="self-start text-[1.35cqw]" />
 
         <h2 className="mt-[1.6cqw] text-[4.1cqw] font-extrabold leading-[1.22] tracking-tight">{card.headline}</h2>

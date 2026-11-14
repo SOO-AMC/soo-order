@@ -25,8 +25,8 @@ import { fetchMembers, type MemberData } from "@/lib/actions/members-action";
 import { formatDate } from "@/lib/utils/format";
 import { POSITION_LABEL, ROLE_LABEL, type Position, type Role } from "@/lib/types/member";
 
-const roleRank = (r: string) => (r === "admin" ? 0 : r === "team_manager" ? 1 : 2);
-const ROLES: Role[] = ["user", "team_manager", "admin"];
+const roleRank = (r: string) => (r === "admin" ? 0 : r === "team_manager" ? 1 : r === "display" ? 3 : 2);
+const ROLES: Role[] = ["display", "user", "team_manager", "admin"];
 const POSITIONS = Object.keys(POSITION_LABEL) as Position[];
 
 /** 권한 설명 — 고를 때 무엇이 달라지는지 한 줄 */
@@ -34,6 +34,7 @@ const ROLE_HINT: Record<Role, string> = {
   user: "주문·반품 신청, 내 현황, 혈액 대장",
   team_manager: "지금은 일반과 같아요 (팀 기능은 연차·근무표와 함께 빠짐)",
   admin: "모든 관리 기능(발주·검수·가격·직원)",
+  display: "세미나실 공용 PC용. 논문 브리핑 라운딩 화면만 열려요",
 };
 
 type ViewKey = "all" | Position | "none";

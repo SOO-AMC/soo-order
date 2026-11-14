@@ -1,9 +1,11 @@
-export type Role = "admin" | "team_manager" | "user";
+/** display = 세미나실 화면 전용 계정 (라운딩 대기 모드만 열 수 있다) */
+export type Role = "admin" | "team_manager" | "user" | "display";
 
 export const ROLE_LABEL: Record<Role, string> = {
   admin: "전체관리자",
   team_manager: "팀관리자",
   user: "일반",
+  display: "세미나실 화면",
 };
 
 export type Position =
