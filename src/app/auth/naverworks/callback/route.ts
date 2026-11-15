@@ -4,6 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logActivity } from "@/lib/utils/activity-log";
 import { checkIdToken, exchangeCode, FLOW_COOKIE, nwConfig, parseFlow, redirectUri, verifyIdTokenSignature } from "@/lib/naverworks/oidc";
 import { isMissingTable, LINK_TABLE, normalizeNwEmail, resolveLogin } from "@/lib/naverworks/links";
+import { directoryConfig } from "@/lib/naverworks/directory";
+import { isActiveMember } from "@/lib/naverworks/directory-rules";
+import { autoCreateAccount, readDirectoryUser, syncPosition } from "@/lib/naverworks/provision";
 
 /**
  * 네이버웍스에서 돌아오는 곳.
@@ -87,11 +90,29 @@ export async function GET(request: NextRequest) {
     console.error("[naverworks] 연결 조회 실패:", link.error);
     return back(isMissingTable(link.error) ? "setup" : "failed");
   }
-  if (!link.userId) return back("unlinked");
 
-  const { data: profile } = await admin.from("profiles").select("id, email, full_name, is_active").eq("id", link.userId).maybeSingle();
+  // 직원 정보(부서·상태)를 읽을 수 있으면: 정지·퇴사면 막고, 연결이 없으면 계정을 자동으로 만들고, 직책을 맞춘다
+  const dirCfg = directoryConfig();
+  const dir = await readDirectoryUser(dirCfg, nw);
+  if (dirCfg && dir && !isActiveMember(dir, dirCfg.domainId)) return back("inactive");
+
+  let userId = link.userId;
+  let created = false;
+  if (!userId) {
+    if (!dirCfg || !dir) return back("unlinked");
+    const made = await autoCreateAccount(admin, dirCfg, dir, nw);
+    if (!made.ok) return back(made.code);
+    userId = made.userId;
+    created = true;
+  }
+
+  const { data: profile } = await admin.from("profiles").select("id, email, full_name, is_active, position").eq("id", userId).maybeSingle();
   if (!profile?.email) return back("unlinked");
   if (profile.is_active === false) return back("inactive");
+  if (dirCfg && dir && !created) {
+    const changed = await syncPosition(admin, profile.id as string, (profile.position as string | null) ?? null, dir, dirCfg.domainId);
+    if (changed) void logActivity({ userId: profile.id as string, userName: (profile.full_name as string) ?? "", category: "account", action: "naverworks_position_sync", description: `네이버웍스 부서에 맞춰 직책 변경: ${profile.position ?? "없음"} → ${changed}` });
+  }
 
   const { data: gen, error: genErr } = await admin.auth.admin.generateLink({ type: "magiclink", email: profile.email as string });
   const tokenHash = gen?.properties?.hashed_token;

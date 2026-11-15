@@ -21,6 +21,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { createStaff, updateStaff, resetStaffPassword, deleteStaff, type StaffActionState } from "@/app/(main)/members/actions";
+import { NaverWorksRosterDialog } from "@/components/account/naverworks-roster";
 import { fetchMembers, type MemberData } from "@/lib/actions/members-action";
 import { formatDate } from "@/lib/utils/format";
 import { POSITION_LABEL, ROLE_LABEL, type Position, type Role } from "@/lib/types/member";
@@ -38,7 +39,7 @@ const ROLE_HINT: Record<Role, string> = {
 };
 
 type ViewKey = "all" | Position | "none";
-type DialogType = "create" | "edit" | "resetPassword" | "delete" | null;
+type DialogType = "create" | "edit" | "resetPassword" | "delete" | "naverworks" | null;
 
 /** 권한 배지 */
 function RoleTag({ role }: { role: string }) {
@@ -131,10 +132,15 @@ export function StaffManagement({ initialMembers }: { initialMembers?: MemberDat
           </div>
         }
         action={
-          <Button className="h-9 rounded-lg px-3 text-[13px]" onClick={() => setDialog("create")}>
-            <Plus className="size-4" />
-            직원 추가
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="h-9 rounded-lg px-3 text-[13px]" onClick={() => setDialog("naverworks")}>
+              네이버웍스 맞추기
+            </Button>
+            <Button className="h-9 rounded-lg px-3 text-[13px]" onClick={() => setDialog("create")}>
+              <Plus className="size-4" />
+              직원 추가
+            </Button>
+          </div>
         }
       />
 
@@ -318,6 +324,7 @@ export function StaffManagement({ initialMembers }: { initialMembers?: MemberDat
 
       {/* 직원 추가/수정은 열 때마다 새로 그려 입력값이 남지 않게(key) */}
       {dialog === "create" && <StaffFormDialog key="create" mode="create" onClose={closeDialog} />}
+      {dialog === "naverworks" && <NaverWorksRosterDialog onClose={closeDialog} />}
       {dialog === "edit" && detail && <StaffFormDialog key={`edit-${detail.id}`} mode="edit" member={detail} onClose={closeDialog} />}
       {dialog === "resetPassword" && detail && <ResetPasswordDialog member={detail} onClose={closeDialog} />}
       {dialog === "delete" && detail && (
