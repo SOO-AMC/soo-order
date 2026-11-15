@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiModel } from "./ai-designer";
 import { configuredProvider } from "./designer";
+import { naverWorksMockNote, naverWorksSendStatus, naverWorksSender } from "./naverworks-send";
 import { loadPlanConfig } from "./plan-sync";
 import { runDuePublish, warnIfStockLow, warnIfTodayMissing, type DueRunResult, type EngineOptions } from "./publish-engine";
 import { createSupabasePublishStore } from "./supabase-publish-store";
@@ -13,13 +14,16 @@ import { createSupabasePublishStore } from "./supabase-publish-store";
  *      꺼져 있으면(기본) 내용만 기록하고 넣지 않는다 — 개발 PC가 운영 DB에 붙어 있을 때 직원에게 알림이 가지 않게 하는 안전장치.
  *  - BRIEFING_APP_URL : 네이버웍스 메시지에 넣을 앱 주소 (예: https://…). 없으면 경로만.
  *  - BRIEFING_AI_PROVIDER=anthropic (+ ANTHROPIC_API_KEY) : 카드를 실제 AI로 만든다. 없으면 규칙 정리. BRIEFING_AI_MODEL 로 모델 변경.
- *  - 네이버웍스 자격 증명은 아직 읽지 않는다 (연결 전 — 보낼 내용 기록만).
+ *  - 네이버웍스 단체방 발송: BRIEFING_NAVERWORKS_SEND=on + 단체방 Channel ID 등 — naverworks-send.ts 참고.
+ *      스위치가 꺼져 있거나 설정이 하나라도 빠지면 보낼 내용 기록(mock)만 남긴다.
  */
 export type BriefingRuntimeConfig = {
   internalLive: boolean;
   baseUrl: string | null;
-  /** 네이버웍스: 아직 연결하지 않음 */
-  naverWorks: "not-connected";
+  /** 네이버웍스 단체방 발송: off(꺼짐) · misconfigured(켰지만 설정이 덜 됨 — 보내지 않음) · live(실제로 보냄) */
+  naverWorks: "off" | "misconfigured" | "live";
+  /** misconfigured 일 때 빠진 설정 이름 (값은 담지 않는다) */
+  naverWorksMissing: string[];
   ai: "rule" | "anthropic";
   /** AI를 켰을 때 쓰는 모델 이름 (꺼져 있으면 null) */
   aiModel: string | null;
@@ -27,10 +31,13 @@ export type BriefingRuntimeConfig = {
 
 export function briefingRuntimeConfig(): BriefingRuntimeConfig {
   const url = (process.env.BRIEFING_APP_URL ?? "").trim();
+  const nw = naverWorksSendStatus();
   return {
     internalLive: process.env.BRIEFING_INTERNAL_NOTIFY === "on",
-    baseUrl: /^https?:\/\//i.test(url) ? url : null,
-    naverWorks: "not-connected",
+    // 실제로 보낼 때는 https 주소(briefingAppUrl)를 쓴다 — 버튼이 localhost 로 나가지 않게
+    baseUrl: nw.state === "live" ? nw.appUrl : /^https?:\/\//i.test(url) ? url : null,
+    naverWorks: nw.state,
+    naverWorksMissing: nw.state === "misconfigured" ? nw.missing : [],
     ai: configuredProvider(),
     aiModel: configuredProvider() === "anthropic" ? aiModel() : null,
   };
@@ -38,7 +45,7 @@ export function briefingRuntimeConfig(): BriefingRuntimeConfig {
 
 export function engineOptions(now: Date = new Date()): EngineOptions {
   const c = briefingRuntimeConfig();
-  return { now, internalLive: c.internalLive, baseUrl: c.baseUrl };
+  return { now, internalLive: c.internalLive, baseUrl: c.baseUrl, naverWorksSend: naverWorksSender(), naverWorksMockNote: naverWorksMockNote(naverWorksSendStatus()) };
 }
 
 export function publishStore() {

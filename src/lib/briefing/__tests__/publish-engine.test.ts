@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { scheduledAtFor } from "../kst";
-import { STALE_PENDING_MS, buildInternalNotification, buildNaverWorksMessage, claimDecision, deliveryKey, type Channel, type DeliveryState } from "../notify";
+import { MAX_DELIVERY_ATTEMPTS, RETRY_AFTER_MS, STALE_PENDING_MS, buildInternalNotification, buildNaverWorksMessage, claimDecision, deliveryKey, type Channel, type DeliveryState } from "../notify";
 import { publishIssue, runDuePublish, warnIfStockLow, warnIfTodayMissing, type EngineIssue, type EngineOptions, type EnginePaper, type NotificationRow, type PublishStore } from "../publish-engine";
 import { designCardByRules } from "../rule-designer";
 
@@ -57,7 +57,7 @@ class MemoryStore implements PublishStore {
       this.logs.set(key, { issueId, channel, state: "pending", attempts: 1, updatedAt: now.toISOString() });
       return "claimed" as const;
     }
-    const d = claimDecision({ state: ex.state, updatedAt: ex.updatedAt }, now);
+    const d = claimDecision({ state: ex.state, updatedAt: ex.updatedAt, attempts: ex.attempts }, now);
     if (d !== "claim") return d;
     ex.state = "pending";
     ex.attempts += 1;
@@ -189,7 +189,11 @@ describe("중복 방지", () => {
     expect(first.ok && first.deliveries.find((d) => d.channel === "internal")!.outcome).toBe("failed");
     expect(store.logs.get("internal:2026-11-14")!.state).toBe("failed");
     expect(store.issues.get("i1")!.status).toBe("published"); // 발행 자체는 유지
-    const retry = await publishIssue(store, "i1", at(NOW));
+    // 곧바로 다시 불리면(직원이 화면을 여는 등) 기다린다 — 외부를 두드리지 않게
+    const soon = await publishIssue(store, "i1", at(NOW));
+    expect(soon.ok && soon.deliveries.find((d) => d.channel === "internal")!.outcome).toBe("in-progress");
+    const later = new Date(new Date(NOW).getTime() + RETRY_AFTER_MS).toISOString();
+    const retry = await publishIssue(store, "i1", at(later));
     expect(retry.ok && retry.deliveries.find((d) => d.channel === "internal")!.outcome).toBe("sent");
     expect(store.notifications).toHaveLength(3);
     expect(store.logs.get("internal:2026-11-14")!.attempts).toBe(2);
@@ -307,8 +311,11 @@ describe("이미 기록이 있을 때 다시 보낼지", () => {
   it("끝난 것(보냄·테스트 기록·건너뜀)은 다시 보내지 않는다", () => {
     for (const state of ["sent", "mock", "skipped"] as const) expect(claimDecision({ state, updatedAt: ago(1000) }, now)).toBe("done");
   });
-  it("실패한 것은 다시 시도한다", () => {
-    expect(claimDecision({ state: "failed", updatedAt: ago(1000) }, now)).toBe("claim");
+  it("실패한 것은 조금 쉬었다가 다시 시도하고, 너무 많이 실패하면 그만둔다", () => {
+    expect(claimDecision({ state: "failed", updatedAt: ago(1000) }, now)).toBe("busy");
+    expect(claimDecision({ state: "failed", updatedAt: ago(RETRY_AFTER_MS) }, now)).toBe("claim");
+    expect(claimDecision({ state: "failed", updatedAt: ago(RETRY_AFTER_MS), attempts: MAX_DELIVERY_ATTEMPTS - 1 }, now)).toBe("claim");
+    expect(claimDecision({ state: "failed", updatedAt: ago(RETRY_AFTER_MS), attempts: MAX_DELIVERY_ATTEMPTS }, now)).toBe("done");
   });
   it("보내는 중인 것은 건드리지 않고, 오래 멈춰 있으면 다시 맡는다", () => {
     expect(claimDecision({ state: "pending", updatedAt: ago(5000) }, now)).toBe("busy");
@@ -381,5 +388,69 @@ describe("준비분이 모자라면 관리자에게 알린다", () => {
     store.papers.set("d", [paper(1), paper(2)]);
     expect((await publishIssue(store, "d", live)).ok).toBe(false); // 예전 규칙 3~4건
     expect((await publishIssue(store, "d", { ...live, limits: { min: 2, max: 3 } })).ok).toBe(true);
+  });
+});
+
+describe("네이버웍스 단체방 실제 발송", () => {
+  const plus = (ms: number) => new Date(new Date(NOW).getTime() + ms).toISOString();
+
+  it("보내는 함수가 없으면 보내지 않고 이유와 함께 기록만 남긴다", async () => {
+    const store = setup(4);
+    const out = await publishIssue(store, "i1", at(NOW, { naverWorksMockNote: "꺼짐" }));
+    expect(out.ok && out.deliveries.find((d) => d.channel === "naverworks-group")!.outcome).toBe("mock");
+    expect((store.logs.get("naverworks-group:2026-11-14")!.payload as { note: string }).note).toBe("꺼짐");
+  });
+
+  it("보내는 함수가 있으면 논문을 묶은 메시지 1건을 보내고 sent 로 남긴다", async () => {
+    const store = setup(4);
+    const sent: { summary: string; link: string }[] = [];
+    const out = await publishIssue(store, "i1", at(NOW, { naverWorksSend: async (m) => void sent.push({ summary: m.summary, link: m.link }) }));
+    expect(out.ok && out.deliveries.find((d) => d.channel === "naverworks-group")!.outcome).toBe("sent");
+    expect(sent).toHaveLength(1);
+    expect(sent[0].summary).not.toContain("수오더에서 보기"); // 링크는 버튼으로
+    expect(sent[0].link).toBe("https://app.example/auth/naverworks/start?next=%2Fbriefing");
+    expect(store.logs.get("naverworks-group:2026-11-14")!.state).toBe("sent");
+  });
+
+  it("동시에 다섯 번 실행돼도 단체방에는 1건만 간다", async () => {
+    const store = setup(4);
+    let calls = 0;
+    const send = async () => {
+      calls += 1;
+      await new Promise((r) => setTimeout(r, 5));
+    };
+    await Promise.all(Array.from({ length: 5 }, () => publishIssue(store, "i1", at(NOW, { naverWorksSend: send }))));
+    expect(calls).toBe(1);
+  });
+
+  it("보내기가 실패하면 failed 로 남고, 쉬었다가 다시 보내 1건만 성공한다", async () => {
+    const store = setup(4);
+    let calls = 0;
+    let ok = 0;
+    const flaky = async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("네이버웍스 500");
+      ok += 1;
+    };
+    const first = await publishIssue(store, "i1", at(NOW, { naverWorksSend: flaky }));
+    expect(first.ok && first.deliveries.find((d) => d.channel === "naverworks-group")!.outcome).toBe("failed");
+    expect(store.logs.get("naverworks-group:2026-11-14")!.state).toBe("failed");
+    await publishIssue(store, "i1", at(plus(1000), { naverWorksSend: flaky })); // 너무 이르다 → 건드리지 않음
+    expect(calls).toBe(1);
+    await publishIssue(store, "i1", at(plus(RETRY_AFTER_MS), { naverWorksSend: flaky }));
+    await publishIssue(store, "i1", at(plus(2 * RETRY_AFTER_MS), { naverWorksSend: flaky }));
+    expect(ok).toBe(1);
+    expect(store.logs.get("naverworks-group:2026-11-14")!.state).toBe("sent");
+  });
+
+  it("계속 실패하면 정해진 횟수까지만 시도한다", async () => {
+    const store = setup(4);
+    let calls = 0;
+    const broken = async () => {
+      calls += 1;
+      throw new Error("네이버웍스 403");
+    };
+    for (let i = 0; i < MAX_DELIVERY_ATTEMPTS + 3; i++) await publishIssue(store, "i1", at(plus(i * RETRY_AFTER_MS), { naverWorksSend: broken }));
+    expect(calls).toBe(MAX_DELIVERY_ATTEMPTS);
   });
 });

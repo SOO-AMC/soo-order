@@ -95,7 +95,18 @@ export function BriefingSettings({ data }: { data: BriefingSettingsData | null }
                     : "발행해도 직원 알림함에는 넣지 않고, 보낼 내용만 아래 기록에 남겨요. 서버 설정 BRIEFING_INTERNAL_NOTIFY=on 으로 켜요."
                 }
               />
-              <Row label="네이버웍스" value="연결 전 (보내지 않음)" tone="test" hint="그날의 논문을 메시지 1건에 묶은 내용을 미리보기와 기록으로만 남겨요. 실제 전송은 하지 않아요." />
+              <Row
+                label="네이버웍스 단체방"
+                value={data.config.naverWorks === "live" ? "실제로 보냄" : data.config.naverWorks === "misconfigured" ? "설정이 덜 됨 (보내지 않음)" : "꺼짐 (보내지 않음)"}
+                tone={data.config.naverWorks === "live" ? "on" : "test"}
+                hint={
+                  data.config.naverWorks === "live"
+                    ? "발행하면 단체방에 그날 논문을 묶은 메시지 1건과 \"오늘 논문 보기\" 버튼이 가요."
+                    : data.config.naverWorks === "misconfigured"
+                      ? `발송 스위치는 켜졌지만 빠진 설정이 있어 보내지 않아요: ${data.config.naverWorksMissing.join(", ")}`
+                      : "그날의 논문을 메시지 1건에 묶은 내용을 미리보기와 기록으로만 남겨요. 서버 설정 BRIEFING_NAVERWORKS_SEND=on 과 단체방 Channel ID 로 켜요."
+                }
+              />
               <Row label="브라우저 푸시" value="쓰지 않음" hint="알림 권한을 묻지 않아요. 알림은 수오더 안 알림함으로만 가요." />
               <Row label="앱 주소" value={data.config.baseUrl ?? "설정 안 됨"} hint="네이버웍스 메시지의 링크에 써요. 없으면 경로(/briefing)만 넣어요." />
               <Row label="서버 시각" value={formatKstDateTime(data.serverNow)} hint={`UTC ${data.serverNow.slice(0, 16).replace("T", " ")} — 서버가 UTC여도 발행은 한국시간으로 계산해요.`} />

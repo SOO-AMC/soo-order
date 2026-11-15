@@ -54,7 +54,7 @@ export function createSupabasePublishStore(sb: SupabaseClient): PublishStore {
       const { data: ex, error } = await sb.from("briefing_notification_logs").select("id, state, attempt_count, updated_at").eq("delivery_key", key).maybeSingle();
       if (error) throw fail("발송 기록", error.message);
       if (!ex) return "busy";
-      const decision = claimDecision({ state: ex.state as DeliveryState, updatedAt: ex.updated_at as string }, now);
+      const decision = claimDecision({ state: ex.state as DeliveryState, updatedAt: ex.updated_at as string, attempts: ex.attempt_count as number }, now);
       if (decision !== "claim") return decision;
       // 다시 맡기도 조건부(시도 횟수가 그대로일 때만) — 둘이 동시에 다시 맡지 못한다
       const upd = await sb

@@ -34,8 +34,21 @@ export async function sendToUser(cfg: DirectoryConfig, bot: string, userIdOrEmai
     if (!u?.userId) return { ok: false, status: 404, error: "user-not-found" };
     userId = u.userId;
   }
+  return postMessage(cfg, `bots/${encodeURIComponent(bot)}/users/${encodeURIComponent(userId)}/messages`, body, fetchImpl);
+}
+
+/**
+ * 메시지방(단체방)에 1건. 봇이 그 방에 들어가 있어야 한다 — Bot 정책이 "1:N 메시지방 참여 가능"이어야 초대할 수 있다.
+ * channelId 는 네이버웍스 메시지방 메뉴(서랍)의 "Channel ID" 에서 확인한다.
+ * 문서: https://developers.worksmobile.com/kr/docs/bot-channel-message-send
+ */
+export async function sendToChannel(cfg: DirectoryConfig, bot: string, channelId: string, body: unknown, fetchImpl: typeof fetch = fetch): Promise<SendResult> {
+  return postMessage(cfg, `bots/${encodeURIComponent(bot)}/channels/${encodeURIComponent(channelId)}/messages`, body, fetchImpl);
+}
+
+async function postMessage(cfg: DirectoryConfig, path: string, body: unknown, fetchImpl: typeof fetch): Promise<SendResult> {
   const token = await serviceToken(cfg, "bot", fetchImpl);
-  const res = await fetchImpl(`https://www.worksapis.com/v1.0/bots/${encodeURIComponent(bot)}/users/${encodeURIComponent(userId)}/messages`, {
+  const res = await fetchImpl(`https://www.worksapis.com/v1.0/${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),

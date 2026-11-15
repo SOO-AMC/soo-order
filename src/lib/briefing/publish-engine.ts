@@ -1,5 +1,5 @@
 import { isPastPublishTime, kstDate } from "./kst";
-import { buildInternalNotification, buildMissedWarning, buildNaverWorksMessage, buildStockLowWarning, deliveryKey, stockLowKey, warningKey, type Channel, type DeliveryState, type NotifyPaper } from "./notify";
+import { buildInternalNotification, buildMissedWarning, buildNaverWorksMessage, buildStockLowWarning, deliveryKey, stockLowKey, warningKey, type Channel, type DeliveryState, type NaverWorksMessage, type NotifyPaper } from "./notify";
 import { checkPublishable } from "./publish-rules";
 import { QUEUE_DATE, type BriefingIssue, type BriefingPaper, type PublishLimits } from "./types";
 
@@ -13,7 +13,7 @@ import { QUEUE_DATE, type BriefingIssue, type BriefingPaper, type PublishLimits 
  *  - 같은 날짜는 한 번만 발행된다 (상태를 조건부로 바꾼다 — 먼저 바꾼 쪽만 "내가 발행했다").
  *  - 알림은 채널마다 하루 한 번 (delivery_key 유니크). 여러 번·동시에 돌려도 한 번만 나간다.
  *  - 발행이 끝난 뒤에만 알림을 만든다.
- *  - 네이버웍스는 연결하지 않았다: 보낼 내용과 "보내지 않음(mock)" 기록만 남긴다. 외부 호출 없음.
+ *  - 네이버웍스: opts.naverWorksSend 가 있을 때만 실제로 보낸다(단체방 1건). 없으면 보낼 내용과 "보내지 않음(mock)" 기록만 — 외부 호출 없음.
  */
 
 export type EnginePaper = Pick<BriefingPaper, "id" | "headline" | "review_status" | "card_content" | "display_order">;
@@ -50,6 +50,13 @@ export type EngineOptions = {
   baseUrl?: string | null;
   /** 발행 조건의 건수 범위. 없으면 예전 규칙(3~4건) */
   limits?: PublishLimits;
+  /**
+   * 네이버웍스 단체방에 실제로 보내는 함수. 없으면 보내지 않고 기록(mock)만 남긴다.
+   * 실패하면 throw — 기록이 failed 로 남고, 쉬었다가 다음 실행에서 다시 시도한다.
+   */
+  naverWorksSend?: ((msg: NaverWorksMessage) => Promise<void>) | null;
+  /** 실제로 보내지 않는 이유 (기록에 남길 문구). naverWorksSend 가 없을 때만 쓴다 */
+  naverWorksMockNote?: string;
 };
 
 export type DeliveryResult = { channel: Channel; key: string; outcome: "sent" | "mock" | "failed" | "already-done" | "in-progress"; recipients?: number; error?: string };
@@ -97,23 +104,27 @@ export async function deliverNotifications(store: PublishStore, issue: EngineIss
     }
   }
 
-  // 2) 네이버웍스 단체방 — 연결 전: 한 메시지로 묶은 내용만 기록하고 보내지 않는다
+  // 2) 네이버웍스 단체방 — 그날 논문을 메시지 1건에 묶는다. 보내는 함수가 없으면 기록만
   {
     const key = deliveryKey("naverworks-group", issue.issue_date);
     const claim = await store.claimDelivery(key, issue.id, "naverworks-group", opts.now);
     if (claim !== "claimed") {
       results.push({ channel: "naverworks-group", key, outcome: claim === "done" ? "already-done" : "in-progress" });
     } else {
+      const live = !!opts.naverWorksSend;
       try {
         const msg = buildNaverWorksMessage(issue.issue_date, list, opts.baseUrl);
-        await store.finishDelivery(key, {
-          state: "mock",
-          nowIso,
-          payloadPreview: { messageCount: msg.messageCount, itemCount: msg.itemCount, text: msg.text, note: "네이버웍스 미연결 — 실제로 보내지 않았어요" },
-        });
-        results.push({ channel: "naverworks-group", key, outcome: "mock" });
+        const preview = { messageCount: msg.messageCount, itemCount: msg.itemCount, text: msg.text };
+        if (opts.naverWorksSend) {
+          await opts.naverWorksSend(msg);
+          await store.finishDelivery(key, { state: "sent", nowIso, payloadPreview: preview });
+          results.push({ channel: "naverworks-group", key, outcome: "sent" });
+        } else {
+          await store.finishDelivery(key, { state: "mock", nowIso, payloadPreview: { ...preview, note: opts.naverWorksMockNote ?? "네이버웍스 발송 꺼짐 — 실제로 보내지 않았어요" } });
+          results.push({ channel: "naverworks-group", key, outcome: "mock" });
+        }
       } catch (e) {
-        await store.finishDelivery(key, { state: "failed", nowIso, errorCode: "preview_error", errorMessage: short(e) }).catch(() => {});
+        await store.finishDelivery(key, { state: "failed", nowIso, errorCode: live ? "send_error" : "preview_error", errorMessage: short(e) }).catch(() => {});
         results.push({ channel: "naverworks-group", key, outcome: "failed", error: short(e) });
       }
     }

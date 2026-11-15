@@ -228,7 +228,7 @@ export function PublishPanel({
           <p className="font-semibold text-subtle-foreground">알림</p>
           {logs.length === 0 ? (
             <p className="mt-1 text-muted-foreground">
-              {panel.config.internalLive ? "발행하면 직원 알림함에 알림 1건이 가요." : "지금은 테스트 모드예요. 발행해도 직원 알림함에는 넣지 않고 기록만 남겨요."} 네이버웍스는 아직 연결하지 않았어요.
+              {panel.config.internalLive ? "발행하면 직원 알림함에 알림 1건이 가요." : "지금은 테스트 모드예요. 발행해도 직원 알림함에는 넣지 않고 기록만 남겨요."} {panel.config.naverWorks === "live" ? "네이버웍스 단체방에도 메시지 1건이 가요." : "네이버웍스로는 보내지 않아요."}
             </p>
           ) : (
             <ul className="mt-1 grid gap-1">
@@ -253,12 +253,12 @@ export function PublishPanel({
                 className="mt-2 inline-flex items-center gap-1 font-semibold text-subtle-foreground hover:text-foreground"
               >
                 <ChevronRight className={cn("size-4 transition-transform", previewOpen && "rotate-90")} />
-                네이버웍스 메시지 미리보기 (전송 안 함)
+                네이버웍스 메시지 미리보기{panel.config.naverWorks === "live" ? "" : " (전송 안 함)"}
               </button>
               {previewOpen && (
                 <div className="mt-2">
                   <p className="text-xs text-muted-foreground">
-                    논문 {panel.naverWorksPreview.itemCount}건을 메시지 {panel.naverWorksPreview.messageCount}건에 묶어요. 연결 전이라 실제로는 보내지 않아요.
+                    논문 {panel.naverWorksPreview.itemCount}건을 메시지 {panel.naverWorksPreview.messageCount}건에 묶어요. 링크는 &quot;오늘 논문 보기&quot; 버튼으로 붙어요.{panel.config.naverWorks === "live" ? "" : " 지금은 실제로 보내지 않아요."}
                   </p>
                   <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded-lg bg-muted px-3 py-2.5 font-sans text-[13px] leading-[1.6] [overflow-wrap:anywhere]">{panel.naverWorksPreview.text}</pre>
                 </div>

@@ -6,7 +6,8 @@ import { notificationLink } from "@/lib/naverworks/oidc";
  *
  * 채널은 둘:
  *  - internal          : 수오더 안 알림함 (기존 notifications 테이블)
- *  - naverworks-group  : 네이버웍스 단체방 (지금은 연결하지 않음 — 보낼 내용 미리보기와 기록만)
+ *  - naverworks-group  : 네이버웍스 단체방. 발송 스위치(BRIEFING_NAVERWORKS_SEND=on)와 설정이 다 있을 때만 실제로 보내고,
+ *                        아니면 보낼 내용 미리보기와 기록(mock)만 남긴다 — run-publish.ts 참고
  *
  * 어느 채널이든 "하루 1번, 한 건"이다. 논문마다 따로 보내지 않는다.
  */
@@ -65,8 +66,10 @@ export type NaverWorksMessage = {
   /** 논문이 몇 건이든 메시지는 항상 1건 */
   messageCount: 1;
   itemCount: number;
-  /** 단일 텍스트 메시지 (목록 템플릿을 못 쓸 때도 같은 내용이 한 번에 간다) */
+  /** 단일 텍스트 메시지 (미리보기·기록용 — 링크 줄 포함) */
   text: string;
+  /** 실제 전송용 본문 (링크 줄 없음 — 링크는 버튼으로 붙는다) */
+  summary: string;
   /** 오늘 브리핑 링크 (로그인해야 열림 — 토큰 없음) */
   link: string;
 };
@@ -84,10 +87,9 @@ export function buildNaverWorksMessage(issueDate: string, papers: NotifyPaper[],
     `오늘 논문 ${papers.length}건이 올라왔어요.`,
     "",
     ...papers.map((p, i) => `${i + 1}. ${clipTitle(p.headline, 80)}`),
-    "",
-    `수오더에서 보기: ${link}`,
   ];
-  return { channel: "naverworks-group", messageCount: 1, itemCount: papers.length, text: lines.join("\n"), link };
+  const summary = lines.join("\n");
+  return { channel: "naverworks-group", messageCount: 1, itemCount: papers.length, text: `${summary}\n\n수오더에서 보기: ${link}`, summary, link };
 }
 
 /** 발송 기록 한 줄의 상태 */
@@ -95,16 +97,23 @@ export type DeliveryState = "pending" | "sent" | "mock" | "failed" | "skipped";
 
 /** 다른 실행이 보내는 중이라고 보고 기다려 주는 시간. 이보다 오래된 "보내는 중"은 멈춘 것으로 보고 다시 맡는다 */
 export const STALE_PENDING_MS = 10 * 60_000;
+/** 실패한 발송을 다시 시도하기 전 쉬는 시간 — 직원이 화면을 열 때마다 외부 API 를 두드리지 않게 */
+export const RETRY_AFTER_MS = 5 * 60_000;
+/** 이만큼 시도하고도 실패하면 그날은 포기한다 (기록은 failed 로 남는다) */
+export const MAX_DELIVERY_ATTEMPTS = 5;
 
 /**
  * 이미 기록이 있을 때 다시 보내도 되는가.
  *  - sent / mock / skipped : 끝난 것 → 다시 보내지 않는다(중복 방지)
- *  - failed                : 다시 시도
+ *  - failed                : 조금 쉬었다가(RETRY_AFTER_MS) 다시 시도. MAX_DELIVERY_ATTEMPTS 번 실패하면 그날은 그만둔다
  *  - pending               : 다른 실행이 보내는 중 → 건드리지 않는다. 단, 오래 멈춰 있으면 다시 맡는다
  */
-export function claimDecision(existing: { state: DeliveryState; updatedAt: string } | null, now: Date): "claim" | "done" | "busy" {
+export function claimDecision(existing: { state: DeliveryState; updatedAt: string; attempts?: number } | null, now: Date): "claim" | "done" | "busy" {
   if (!existing) return "claim";
   if (existing.state === "sent" || existing.state === "mock" || existing.state === "skipped") return "done";
-  if (existing.state === "failed") return "claim";
+  if (existing.state === "failed") {
+    if ((existing.attempts ?? 1) >= MAX_DELIVERY_ATTEMPTS) return "done";
+    return now.getTime() - new Date(existing.updatedAt).getTime() >= RETRY_AFTER_MS ? "claim" : "busy";
+  }
   return now.getTime() - new Date(existing.updatedAt).getTime() > STALE_PENDING_MS ? "claim" : "busy";
 }
