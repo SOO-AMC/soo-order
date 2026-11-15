@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { padPassword } from "@/lib/utils/auth";
 import { logActivity } from "@/lib/utils/activity-log";
+import { safeNext } from "@/lib/naverworks/oidc";
 
 export type LoginState = {
   error?: string;
@@ -52,5 +53,6 @@ export async function login(
     description: "로그인",
   });
 
-  redirect("/orders");
+  // 로그인 화면으로 오기 전에 가려던 곳(예: 네이버웍스 알림의 링크)이 있으면 그리로
+  redirect(safeNext(formData.get("next"), "/orders"));
 }

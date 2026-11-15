@@ -1,4 +1,5 @@
 import { formatIssueDate } from "./kst";
+import { notificationLink } from "@/lib/naverworks/oidc";
 
 /**
  * 발행 알림 내용 만들기 (순수 함수 — 테스트 대상).
@@ -73,11 +74,11 @@ export type NaverWorksMessage = {
 /**
  * 네이버웍스 단체방에 보낼 메시지 1건.
  * 논문 3~4건을 한 메시지에 묶는다(논문마다 따로 보내지 않는다).
- * baseUrl 이 없으면 경로만 넣는다(미리보기용).
+ * baseUrl 이 없으면 경로만 넣는다(미리보기용). 링크는 네이버웍스 로그인 입구(notificationLink)를 거친다.
  */
 export function buildNaverWorksMessage(issueDate: string, papers: NotifyPaper[], baseUrl?: string | null): NaverWorksMessage {
-  const origin = (baseUrl ?? "").replace(/\/+$/, "");
-  const link = `${origin}/briefing`;
+  // 누르면 로그인돼 있으면 바로, 아니면 네이버웍스 확인을 거쳐 오늘 브리핑으로
+  const link = notificationLink("/briefing", baseUrl);
   const lines = [
     `[오늘의 수의학 논문 브리핑] ${formatIssueDate(issueDate)}`,
     `오늘 논문 ${papers.length}건이 올라왔어요.`,

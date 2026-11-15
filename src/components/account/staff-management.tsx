@@ -287,6 +287,17 @@ export function StaffManagement({ initialMembers }: { initialMembers?: MemberDat
                       { label: "권한", value: ROLE_LABEL[detail.role as Role] ?? detail.role },
                       { label: "직책", value: detail.position ? POSITION_LABEL[detail.position] : <span className="text-muted-foreground">없음</span> },
                       { label: "등록일", value: formatDate(detail.created_at) },
+                      {
+                        label: "네이버웍스",
+                        value: detail.naverworks?.email ? (
+                          <span>
+                            {detail.naverworks.email}{" "}
+                            <span className={detail.naverworks.linked ? "text-status-done" : "text-muted-foreground"}>· {detail.naverworks.linked ? "연결됨" : "첫 로그인 전"}</span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">{detail.naverworks?.linked ? "연결됨" : "없음"}</span>
+                        ),
+                      },
                     ]}
                   />
                   <p className="rounded-xl bg-muted px-3.5 py-3 text-[13px] text-subtle-foreground">
@@ -355,6 +366,7 @@ function StaffFormDialog({
 }) {
   const [role, setRole] = useState<Role>((member?.role as Role) ?? "user");
   const [position, setPosition] = useState<Position | "">(member?.position ?? "");
+  const [nwEmail, setNwEmail] = useState(member?.naverworks?.email ?? "");
   const [state, formAction, isPending] = useActionState<StaffActionState, FormData>(async (prev, formData) => {
     const result = mode === "create" ? await createStaff(prev, formData) : await updateStaff(prev, formData);
     if (result.success) onClose(true);
@@ -366,7 +378,7 @@ function StaffFormDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "직원 추가" : `${member?.full_name} 정보 수정`}</DialogTitle>
-          <DialogDescription>{mode === "create" ? "이름과 처음 비밀번호로 로그인해요." : "이름을 바꾸면 로그인 이름도 같이 바뀌어요."}</DialogDescription>
+          <DialogDescription>{mode === "create" ? "이름과 처음 비밀번호로 로그인해요. 네이버웍스 계정을 적으면 비밀번호 없이 네이버웍스로 들어와요." : "이름을 바꾸면 로그인 이름도 같이 바뀌어요."}</DialogDescription>
         </DialogHeader>
         <form action={formAction} className="flex flex-col gap-4">
           {member && <input type="hidden" name="userId" value={member.id} />}
@@ -378,15 +390,24 @@ function StaffFormDialog({
             <Input name="name" defaultValue={member?.full_name} placeholder="이름" required className="h-11 text-base" />
           </label>
 
+          <label className="grid gap-1.5">
+            <FieldLabel>네이버웍스 계정 (선택)</FieldLabel>
+            <Input name="naverworksEmail" type="email" inputMode="email" autoComplete="off" defaultValue={member?.naverworks?.email ?? ""} onChange={(e) => setNwEmail(e.target.value.trim())} placeholder="예: hong@회사도메인" className="h-11 text-base" />
+            <p className="text-[13px] text-muted-foreground">
+              적어 두면 이 직원은 가입·비밀번호 없이 &quot;네이버웍스로 로그인&quot;으로 들어와요.
+              {member?.naverworks?.linked ? " 지금 연결돼 있어요." : member?.naverworks?.email ? " 아직 한 번도 들어오지 않았어요." : ""}
+            </p>
+          </label>
+
           {mode === "create" && (
             <label className="grid gap-1.5">
-              <FieldLabel>처음 비밀번호</FieldLabel>
+              <FieldLabel>처음 비밀번호{nwEmail ? " (선택)" : ""}</FieldLabel>
               <Input
                 name="password"
                 type="password"
                 autoComplete="new-password"
-                placeholder={role === "display" ? "세미나실 화면 계정은 1자리부터 가능" : "숫자·영문·특수문자 조합 4자리 이상"}
-                required
+                placeholder={nwEmail ? "비워 두면 네이버웍스로만 로그인해요" : role === "display" ? "세미나실 화면 계정은 1자리부터 가능" : "숫자·영문·특수문자 조합 4자리 이상"}
+                required={!nwEmail}
                 className="h-11 text-base"
               />
             </label>

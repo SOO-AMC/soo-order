@@ -10,6 +10,7 @@ import { ThemeModeSegmented } from "@/components/theme-toggle";
 import { BackButton } from "@/components/back-button";
 import { ROLE_LABEL, POSITION_LABEL, type Role, type Position } from "@/lib/types/member";
 import { changePassword, type ChangePasswordState } from "@/app/(main)/account/actions";
+import { NaverWorksLinkSection } from "@/components/account/naverworks-link";
 
 /** 내 계정: 내 정보 + 비밀번호 바꾸기 */
 export function AccountPage() {
@@ -63,6 +64,8 @@ export function AccountPage() {
         </section>
 
         {/* 화면 모드 */}
+        <NaverWorksLinkSection />
+
         <section className="rounded-2xl bg-card p-5 ring-1 ring-border">
           <h2 className="text-lg font-extrabold tracking-tight">화면 모드</h2>
           <p className="mt-0.5 text-[13px] text-muted-foreground">이 기기에서만 바뀌어요. 시스템은 휴대폰·PC 설정을 따라가요.</p>

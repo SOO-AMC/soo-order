@@ -46,6 +46,9 @@ export async function middleware(request: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession();
 
+  // 네이버웍스로 로그인 왕복(시작·돌아오기)은 로그인 전에도, 로그인한 뒤(계정 연결)에도 그대로 지나간다
+  if (request.nextUrl.pathname.startsWith("/auth/naverworks/")) return supabaseResponse;
+
   const publicPaths = ["/login"];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
@@ -53,7 +56,11 @@ export async function middleware(request: NextRequest) {
 
   if (!session && !isPublicPath) {
     const url = request.nextUrl.clone();
+    // 가려던 곳을 기억해 로그인 뒤 그리로 보낸다 (예: 네이버웍스 알림의 링크 → /briefing)
+    const wanted = request.nextUrl.pathname + request.nextUrl.search;
     url.pathname = "/login";
+    url.search = "";
+    if (request.method === "GET" && wanted !== "/" && !wanted.startsWith("/api/")) url.searchParams.set("next", wanted);
     return NextResponse.redirect(url);
   }
 

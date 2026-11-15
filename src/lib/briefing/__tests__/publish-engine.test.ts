@@ -275,7 +275,7 @@ describe("알림 내용", () => {
     expect(msg.itemCount).toBe(4);
     for (const p of papers) expect(msg.text).toContain(p.headline);
     expect(msg.text).toContain("2026.11.14 (토)");
-    expect(msg.link).toBe("https://app.example/briefing");
+    expect(msg.link).toBe("https://app.example/auth/naverworks/start?next=%2Fbriefing");
     expect(msg.text).not.toMatch(/token|secret|key=/i); // 주소에 토큰을 싣지 않는다
   });
 
@@ -284,7 +284,7 @@ describe("알림 내용", () => {
     expect(msg.itemCount).toBe(3);
     expect(msg.text).toContain("3. 논문 제목 3");
     expect(msg.text).not.toContain("4. ");
-    expect(msg.link).toBe("/briefing");
+    expect(msg.link).toBe("/auth/naverworks/start?next=%2Fbriefing");
   });
 
   it("수오더 안 알림: 한 건에 논문 수와 제목 목록, 누르면 오늘 브리핑으로", () => {

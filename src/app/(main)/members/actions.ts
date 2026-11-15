@@ -5,6 +5,13 @@ import { requireAdmin } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { nameToEmail, validatePassword, padPassword } from "@/lib/utils/auth";
 import { logActivity } from "@/lib/utils/activity-log";
+import { randomBytes } from "node:crypto";
+import { normalizeNwEmail, setLoginEmail } from "@/lib/naverworks/links";
+
+const NW_ERROR: Record<string, string> = {
+  taken: "이 네이버웍스 계정은 이미 다른 직원에게 등록돼 있어요.",
+  setup: "네이버웍스 연결 정보를 저장할 곳이 아직 없어요. supabase/migrate-naverworks-login.sql 을 먼저 실행해 주세요.",
+};
 
 export type StaffActionState = {
   error?: string;
@@ -21,14 +28,19 @@ export async function createStaff(
   const password = formData.get("password") as string;
   const role = (formData.get("role") as string) || "user";
   const position = (formData.get("position") as string) || null;
+  const nwEmail = normalizeNwEmail(formData.get("naverworksEmail"));
+  if (nwEmail === undefined) return { error: "네이버웍스 계정은 이메일 모양으로 적어 주세요. (예: hong@회사도메인)" };
 
-  if (!name || !password) {
-    return { error: "이름과 비밀번호를 입력해주세요." };
+  // 네이버웍스 계정을 적으면 비밀번호는 비워도 된다 — 그 직원은 네이버웍스로만 들어온다(아무도 모르는 긴 비밀번호를 대신 넣는다)
+  if (!name || (!password && !nwEmail)) {
+    return { error: nwEmail === null ? "이름과 비밀번호를 입력해주세요. (네이버웍스 계정을 적으면 비밀번호는 비워도 돼요)" : "이름을 입력해주세요." };
   }
 
-  const validationError = validatePassword(password, role);
-  if (validationError) {
-    return { error: validationError };
+  if (password) {
+    const validationError = validatePassword(password, role);
+    if (validationError) {
+      return { error: validationError };
+    }
   }
 
   const adminClient = createAdminClient();
@@ -46,7 +58,7 @@ export async function createStaff(
 
   const { data, error } = await adminClient.auth.admin.createUser({
     email: nameToEmail(name),
-    password: padPassword(password),
+    password: password ? padPassword(password) : randomBytes(24).toString("base64url"),
     email_confirm: true,
     user_metadata: { full_name: name },
   });
@@ -67,7 +79,15 @@ export async function createStaff(
       .eq("id", data.user.id);
   }
 
-  await logActivity({ userId: adminId, userName: adminName, category: "account", action: "create_member", description: `${name} 직원 추가` });
+  if (data.user && nwEmail) {
+    const linked = await setLoginEmail(adminClient, data.user.id, nwEmail);
+    if (!linked.ok) {
+      revalidatePath("/members");
+      return { error: `직원은 추가했지만 네이버웍스 계정은 등록하지 못했어요. ${NW_ERROR[linked.error] ?? "정보 수정에서 다시 적어 주세요."}` };
+    }
+  }
+
+  await logActivity({ userId: adminId, userName: adminName, category: "account", action: "create_member", description: `${name} 직원 추가${nwEmail ? " (네이버웍스 계정 등록)" : ""}` });
   revalidatePath("/members");
   return { success: true };
 }
@@ -82,6 +102,8 @@ export async function updateStaff(
   const newName = (formData.get("name") as string)?.trim();
   const newRole = formData.get("role") as string;
   const newPosition = (formData.get("position") as string) || null;
+  const nwEmail = normalizeNwEmail(formData.get("naverworksEmail"));
+  if (nwEmail === undefined) return { error: "네이버웍스 계정은 이메일 모양으로 적어 주세요. (예: hong@회사도메인)" };
 
   if (!userId || !newName) {
     return { error: "필수 항목을 입력해주세요." };
@@ -116,6 +138,12 @@ export async function updateStaff(
     email: nameToEmail(newName),
     user_metadata: { full_name: newName },
   });
+
+  // 네이버웍스 계정: 칸이 폼에 있을 때만 바꾼다 (비우면 연결 해제)
+  if (formData.has("naverworksEmail")) {
+    const linked = await setLoginEmail(adminClient, userId, nwEmail);
+    if (!linked.ok) return { error: NW_ERROR[linked.error] ?? "네이버웍스 계정을 저장하지 못했어요." };
+  }
 
   await logActivity({ userId: adminId, userName: adminName, category: "account", action: "update_member", description: `${newName} 직원 정보 수정` });
   revalidatePath("/members");
