@@ -15,13 +15,14 @@ import {
   type PublishPanelData,
 } from "@/lib/actions/briefing-publish-actions";
 import { formatIssueDate, formatKstDateTime, isPastPublishTime } from "@/lib/briefing/kst";
-import type { PublishCheck } from "@/lib/briefing/publish-rules";
+import { rangeLabel, type PublishCheck } from "@/lib/briefing/publish-rules";
 import { describeLog } from "@/components/briefing/admin/log-text";
-import { MAX_PAPERS, MIN_PAPERS, type BriefingIssue, type IssueStatus } from "@/lib/briefing/types";
+import type { BriefingIssue, IssueStatus, PublishLimits } from "@/lib/briefing/types";
 
 /**
  * 발행 패널 (관리자 작업 화면 왼쪽 아래).
- * 초안 → 08:30 예약 → 발행 완료. 조건(검수 완료 3~4건)이 안 맞으면 버튼 대신 이유를 보여 준다.
+ * 초안 → 08:30 예약 → 발행 완료. 조건(검수 완료 건수가 범위 안)이 안 맞으면 버튼 대신 이유를 보여 준다.
+ * 대기함 방식(planReady)에서는 예약을 앱이 한다 → 예약·예약 취소 버튼이 없고 "지금 발행"·"발행 취소"만 있다.
  * 알림 상태는 발행 상태와 따로 보여 준다. 네이버웍스는 보낼 내용 미리보기만(전송 안 함).
  */
 export function PublishPanel({
@@ -32,6 +33,8 @@ export function PublishPanel({
   paperCount,
   papersKey,
   disabled,
+  limits,
+  planReady,
   onIssueChange,
 }: {
   issue: BriefingIssue | null;
@@ -43,6 +46,10 @@ export function PublishPanel({
   /** 논문 구성이 바뀌면 달라지는 값 — 미리보기를 다시 받는 신호 */
   papersKey: string;
   disabled: boolean;
+  /** 하루 건수 범위 (설정) */
+  limits: PublishLimits;
+  /** 대기함·자동 배정을 쓰는 중인가 */
+  planReady: boolean;
   onIssueChange: (issue: BriefingIssue) => void;
 }) {
   const [panel, setPanel] = useState<PublishPanelData | null>(null);
@@ -148,7 +155,7 @@ export function PublishPanel({
       ) : (
         <>
           <p className="flex items-center gap-1.5 text-sm font-bold text-subtle-foreground">
-            <CircleAlert className="size-[18px]" /> 발행 준비 중 — 지금 {paperCount}건 (하루 {MIN_PAPERS}~{MAX_PAPERS}건)
+            <CircleAlert className="size-[18px]" /> 발행 준비 중 — 지금 {paperCount}건 (하루 {rangeLabel(limits)})
           </p>
           <ul className="mt-1.5 grid gap-0.5 pl-6 text-[13px] text-subtle-foreground">
             {publish.reasons.map((r) => (
@@ -172,25 +179,30 @@ export function PublishPanel({
         </div>
       ) : status === "scheduled" ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="outline" className="h-10 rounded-lg" disabled={off} onClick={handleCancel}>
-            {busy === "cancel" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />} 예약 취소
-          </Button>
+          {!planReady && (
+            <Button variant="outline" className="h-10 rounded-lg" disabled={off} onClick={handleCancel}>
+              {busy === "cancel" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />} 예약 취소
+            </Button>
+          )}
           <Button variant="outline" className="h-10 rounded-lg" disabled={off} onClick={() => setConfirm("publish")}>
             <Send className="size-4" /> 지금 발행
           </Button>
         </div>
       ) : publish.ok ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button className="h-11 flex-1 rounded-xl font-bold" disabled={off || pastTime} onClick={handleSchedule}>
-            {busy === "schedule" ? <Loader2 className="size-4 animate-spin" /> : <CalendarClock className="size-4" />}
-            {pastTime ? "08:30이 지났어요" : `${formatIssueDate(issueDate)} 08:30 발행 예약`}
-          </Button>
+          {!planReady && (
+            <Button className="h-11 flex-1 rounded-xl font-bold" disabled={off || pastTime} onClick={handleSchedule}>
+              {busy === "schedule" ? <Loader2 className="size-4 animate-spin" /> : <CalendarClock className="size-4" />}
+              {pastTime ? "08:30이 지났어요" : `${formatIssueDate(issueDate)} 08:30 발행 예약`}
+            </Button>
+          )}
           <Button variant="outline" className="h-11 rounded-xl" disabled={off} onClick={() => setConfirm("publish")}>
             <Send className="size-4" /> 지금 발행
           </Button>
         </div>
       ) : null}
-      {status === "published" && <p className="mt-2 text-xs text-muted-foreground">발행된 논문은 고칠 수 없어요. 고치려면 발행을 취소한 뒤 고치고 다시 발행해 주세요.</p>}
+      {status === "published" && <p className="mt-2 text-xs text-muted-foreground">카드의 글(오타)은 발행을 취소하지 않고 고칠 수 있어요.{planReady ? " 발행을 취소하면 이 논문들은 다음 발행일로 넘어가요." : ""}</p>}
+      {planReady && status !== "published" && <p className="mt-2 text-xs text-muted-foreground">예약은 자동이에요. 그날 논문이 모두 검수되면 08:30 발행이 예약돼요.</p>}
 
       {error && (
         <div role="alert" className="mt-3 rounded-lg bg-status-late-bg px-3 py-2.5 text-sm text-status-late">
@@ -262,7 +274,7 @@ export function PublishPanel({
             <DialogTitle>{confirm === "unpublish" ? "발행을 취소할까요?" : "지금 발행할까요?"}</DialogTitle>
             <DialogDescription>
               {confirm === "unpublish"
-                ? "직원 화면과 라운딩 화면에서 바로 사라져요. 이미 나간 알림은 되돌릴 수 없고, 다시 발행해도 이 날짜 알림은 또 나가지 않아요."
+                ? `직원 화면과 라운딩 화면에서 바로 사라져요. 이미 나간 알림은 되돌릴 수 없고, 다시 발행해도 이 날짜 알림은 또 나가지 않아요.${planReady ? " 취소한 논문들은 다음 발행일부터 다시 들어가요. 오타만 고치려면 취소하지 말고 \"오타 고치기\"를 쓰세요." : ""}`
                 : `논문 ${publish.ok ? publish.paperCount : paperCount}건이 직원에게 바로 보여요. ${
                     panel?.config.internalLive ? "직원 알림함에 알림 1건이 가요." : "테스트 모드라 직원 알림은 보내지 않고 기록만 남겨요."
                   } 네이버웍스로는 보내지 않아요.`}

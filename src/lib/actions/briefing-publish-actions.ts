@@ -7,8 +7,9 @@ import { formatIssueDate, isPastPublishTime, scheduledAtFor } from "@/lib/briefi
 import { buildNaverWorksMessage } from "@/lib/briefing/notify";
 import { publishIssue, type DeliveryResult } from "@/lib/briefing/publish-engine";
 import { checkPublishable } from "@/lib/briefing/publish-rules";
-import { briefingRuntimeConfig, engineOptions, publishStore, type BriefingRuntimeConfig } from "@/lib/briefing/run-publish";
-import type { BriefingIssue, BriefingPaper } from "@/lib/briefing/types";
+import { loadPlanConfig, syncPlan } from "@/lib/briefing/plan-sync";
+import { briefingRuntimeConfig, engineOptionsLive, publishStore, type BriefingRuntimeConfig } from "@/lib/briefing/run-publish";
+import { QUEUE_DATE, type BriefingIssue, type BriefingPaper, type PlanSettings } from "@/lib/briefing/types";
 
 /**
  * 논문 브리핑 발행 액션 (관리자 전용).
@@ -57,7 +58,8 @@ export async function scheduleIssue(issueId: string): Promise<PublishActionResul
   const issue = await loadIssue(supabase, issueId);
   if (!issue) return { ok: false, error: "발행 묶음을 찾지 못했어요." };
   if (issue.status === "published") return { ok: false, error: "이미 발행된 묶음이에요." };
-  const check = checkPublishable(await loadPapers(supabase, issueId));
+  if (issue.issue_date === QUEUE_DATE) return { ok: false, error: "대기함은 발행할 수 없어요." };
+  const check = checkPublishable(await loadPapers(supabase, issueId), (await loadPlanConfig(supabase)).limits);
   if (!check.ok) return { ok: false, error: "아직 발행할 수 없어요.", reasons: check.reasons };
   if (isPastPublishTime(issue.issue_date)) {
     return { ok: false, error: `${formatIssueDate(issue.issue_date)} 08:30은 이미 지났어요. 바로 내보내려면 "지금 발행"을 눌러 주세요.` };
@@ -98,7 +100,7 @@ export async function publishIssueNow(issueId: string): Promise<PublishActionRes
 
   let outcome;
   try {
-    outcome = await publishIssue(publishStore(), issueId, engineOptions());
+    outcome = await publishIssue(publishStore(), issueId, (await engineOptionsLive()).opts);
   } catch {
     return { ok: false, error: "발행하지 못했어요. 잠시 뒤 다시 눌러 주세요." };
   }
@@ -129,6 +131,8 @@ export async function unpublishIssue(issueId: string): Promise<PublishActionResu
   if (!data) return { ok: false, error: "발행 상태가 아니에요. 화면을 새로 고쳐 주세요." };
   const issue = data as BriefingIssue;
   void logActivity({ userId, userName, category: "briefing", action: "unpublish_issue", description: `${issue.issue_date} 브리핑 발행 취소` });
+  // 대기함 방식이면 취소한 논문들이 다음 발행일부터 다시 채워진다
+  await syncPlan(supabase);
   touch(issue.issue_date);
   return { ok: true, data: issue };
 }
@@ -167,6 +171,9 @@ export async function fetchPublishPanel(issueId: string): Promise<PublishPanelDa
 
 export type BriefingSettingsData = {
   config: BriefingRuntimeConfig;
+  /** 하루 발행 건수 설정. planReady=false 면 아직 바꿀 수 없다(SQL 미실행) */
+  plan: PlanSettings;
+  planReady: boolean;
   /** 서버가 보는 지금 시각 (ISO, UTC) */
   serverNow: string;
   logs: (NotificationLog & { issue_date: string | null })[];
@@ -180,8 +187,11 @@ export async function fetchBriefingSettings(): Promise<BriefingSettingsData> {
   const ids = [...new Set(list.map((l) => l.issue_id))];
   const { data: issues } = ids.length > 0 ? await supabase.from("briefing_issues").select("id, issue_date").in("id", ids) : { data: [] };
   const dateOf = new Map((issues ?? []).map((i) => [i.id as string, i.issue_date as string]));
+  const plan = await loadPlanConfig(supabase);
   return {
     config: briefingRuntimeConfig(),
+    plan: plan.settings,
+    planReady: plan.ready,
     serverNow: new Date().toISOString(),
     logs: list.map((l) => ({ ...l, issue_date: dateOf.get(l.issue_id) ?? null })),
   };

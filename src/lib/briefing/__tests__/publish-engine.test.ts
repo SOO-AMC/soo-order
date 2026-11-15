@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { scheduledAtFor } from "../kst";
 import { STALE_PENDING_MS, buildInternalNotification, buildNaverWorksMessage, claimDecision, deliveryKey, type Channel, type DeliveryState } from "../notify";
-import { publishIssue, runDuePublish, warnIfTodayMissing, type EngineIssue, type EngineOptions, type EnginePaper, type NotificationRow, type PublishStore } from "../publish-engine";
+import { publishIssue, runDuePublish, warnIfStockLow, warnIfTodayMissing, type EngineIssue, type EngineOptions, type EnginePaper, type NotificationRow, type PublishStore } from "../publish-engine";
 import { designCardByRules } from "../rule-designer";
 
 /** DB 대신 쓰는 메모리 저장소. 실제 DB와 같은 규칙: 상태 전환은 조건부, 발송 키는 유니크 */
@@ -79,6 +79,10 @@ class MemoryStore implements PublishStore {
   async listAdminIds() {
     await this.tick();
     return this.admins;
+  }
+  async countScheduledAfter(date: string) {
+    await this.tick();
+    return [...this.issues.values()].filter((i) => i.status === "scheduled" && i.issue_date > date).length;
   }
   async insertNotifications(rows: NotificationRow[]) {
     await this.tick();
@@ -312,5 +316,70 @@ describe("이미 기록이 있을 때 다시 보낼지", () => {
   });
   it("기록이 없으면 맡는다", () => {
     expect(claimDecision(null, now)).toBe("claim");
+  });
+});
+
+describe("준비분이 모자라면 관리자에게 알린다", () => {
+  const NOW = new Date("2026-11-16T01:00:00Z"); // 11-16 10:00 KST
+  const QUEUE = "9999-12-31";
+  const make = (scheduledDates: string[], withQueue = true) => {
+    const s = new MemoryStore();
+    scheduledDates.forEach((d, i) => s.issues.set("i" + i, { id: "i" + i, issue_date: d, status: "scheduled", scheduled_at: d + "T00:00:00.000Z", published_at: null }));
+    if (withQueue) s.issues.set("q", { id: "q", issue_date: QUEUE, status: "draft", scheduled_at: null, published_at: null });
+    return s;
+  };
+  const live: EngineOptions = { now: NOW, internalLive: true };
+
+  it("내일부터 예약된 날이 2일치보다 적으면 하루 한 번 알린다", async () => {
+    const store = make(["2026-11-17"]);
+    expect(await warnIfStockLow(store, live)).toBe(1);
+    expect(store.notifications).toHaveLength(1);
+    expect(store.notifications[0]).toMatchObject({ user_id: "a1", type: "briefing_warning", link: "/briefing/admin" });
+    expect(store.notifications[0].title).toContain("1일치");
+    // 같은 날 다시 불러도 또 보내지 않는다
+    expect(await warnIfStockLow(store, live)).toBeNull();
+    expect(store.notifications).toHaveLength(1);
+  });
+
+  it("오늘 것은 세지 않는다 (내일 이후만)", async () => {
+    const store = make(["2026-11-16"]);
+    expect(await warnIfStockLow(store, live)).toBe(0);
+    expect(store.notifications[0].title).toContain("내일");
+  });
+
+  it("2일치 이상 준비돼 있으면 알리지 않는다", async () => {
+    const store = make(["2026-11-17", "2026-11-18"]);
+    expect(await warnIfStockLow(store, live)).toBeNull();
+    expect(store.notifications).toHaveLength(0);
+    expect(store.logs.size).toBe(0);
+  });
+
+  it("대기함을 한 번도 쓰지 않았으면 알리지 않는다", async () => {
+    const store = make([], false);
+    expect(await warnIfStockLow(store, live)).toBeNull();
+    expect(store.notifications).toHaveLength(0);
+  });
+
+  it("테스트 모드에서는 기록만 남기고 알림함에 넣지 않는다", async () => {
+    const store = make([]);
+    expect(await warnIfStockLow(store, { now: NOW, internalLive: false })).toBe(0);
+    expect(store.notifications).toHaveLength(0);
+    expect([...store.logs.values()][0].state).toBe("mock");
+  });
+
+  it("대기함은 발행할 수 없다", async () => {
+    const store = make([]);
+    store.papers.set("q", [paper(1), paper(2), paper(3)]);
+    const out = await publishIssue(store, "q", live);
+    expect(out.ok).toBe(false);
+    expect(store.issues.get("q")!.status).toBe("draft");
+  });
+
+  it("건수 범위를 주면 그 범위로 발행을 판단한다", async () => {
+    const store = make([]);
+    store.issues.set("d", { id: "d", issue_date: "2026-11-16", status: "draft", scheduled_at: null, published_at: null });
+    store.papers.set("d", [paper(1), paper(2)]);
+    expect((await publishIssue(store, "d", live)).ok).toBe(false); // 예전 규칙 3~4건
+    expect((await publishIssue(store, "d", { ...live, limits: { min: 2, max: 3 } })).ok).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { isPastPublishTime, kstDate } from "./kst";
-import { buildInternalNotification, buildMissedWarning, buildNaverWorksMessage, deliveryKey, warningKey, type Channel, type DeliveryState, type NotifyPaper } from "./notify";
+import { buildInternalNotification, buildMissedWarning, buildNaverWorksMessage, buildStockLowWarning, deliveryKey, stockLowKey, warningKey, type Channel, type DeliveryState, type NotifyPaper } from "./notify";
 import { checkPublishable } from "./publish-rules";
-import type { BriefingIssue, BriefingPaper } from "./types";
+import { QUEUE_DATE, type BriefingIssue, type BriefingPaper, type PublishLimits } from "./types";
 
 /**
  * 발행 엔진.
@@ -9,7 +9,7 @@ import type { BriefingIssue, BriefingPaper } from "./types";
  * 저장소(PublishStore)만 바꿔 끼우면 실제 DB로도, 테스트용 메모리로도 똑같이 돈다.
  *
  * 지키는 것:
- *  - 검수 완료 3~4건일 때만 발행한다. 조건이 안 맞으면 골라서 내보내지 않고 이유를 돌려준다.
+ *  - 검수 완료 건수가 범위(opts.limits — 설정의 하루 건수, 없으면 예전 규칙 3~4건) 안일 때만 발행한다. 조건이 안 맞으면 골라서 내보내지 않고 이유를 돌려준다.
  *  - 같은 날짜는 한 번만 발행된다 (상태를 조건부로 바꾼다 — 먼저 바꾼 쪽만 "내가 발행했다").
  *  - 알림은 채널마다 하루 한 번 (delivery_key 유니크). 여러 번·동시에 돌려도 한 번만 나간다.
  *  - 발행이 끝난 뒤에만 알림을 만든다.
@@ -37,6 +37,8 @@ export interface PublishStore {
   /** 알림을 받을 직원(재직 중, 세미나실 화면 계정 제외) */
   listRecipientIds(): Promise<string[]>;
   listAdminIds(): Promise<string[]>;
+  /** 그 날짜 뒤로 예약돼 있는 묶음 수 (= 앞으로 며칠치가 준비됐나) */
+  countScheduledAfter(issueDate: string): Promise<number>;
   insertNotifications(rows: NotificationRow[]): Promise<void>;
 }
 
@@ -46,6 +48,8 @@ export type EngineOptions = {
   internalLive: boolean;
   /** 네이버웍스 메시지 링크에 쓸 앱 주소. 없으면 경로만 */
   baseUrl?: string | null;
+  /** 발행 조건의 건수 범위. 없으면 예전 규칙(3~4건) */
+  limits?: PublishLimits;
 };
 
 export type DeliveryResult = { channel: Channel; key: string; outcome: "sent" | "mock" | "failed" | "already-done" | "in-progress"; recipients?: number; error?: string };
@@ -122,8 +126,10 @@ export async function deliverNotifications(store: PublishStore, issue: EngineIss
 export async function publishIssue(store: PublishStore, issueId: string, opts: EngineOptions): Promise<PublishOutcome> {
   const issue = await store.getIssue(issueId);
   if (!issue) return { ok: false, reasons: ["발행 묶음을 찾지 못했어요."] };
+  // 대기함은 발행하는 묶음이 아니다
+  if (issue.issue_date === QUEUE_DATE) return { ok: false, reasons: ["대기함은 발행할 수 없어요."] };
   const papers = await store.listPapers(issueId);
-  const check = checkPublishable(papers);
+  const check = checkPublishable(papers, opts.limits);
   if (!check.ok) return { ok: false, reasons: check.reasons };
 
   // 조건부 전환: 동시에 여러 번 불려도 한 쪽만 true
@@ -173,7 +179,7 @@ export async function warnIfTodayMissing(store: PublishStore, opts: EngineOption
 
   const nowIso = opts.now.toISOString();
   const papers = await store.listPapers(issue.id);
-  const check = checkPublishable(papers);
+  const check = checkPublishable(papers, opts.limits);
   const reasons = check.ok ? ["검수는 끝났지만 발행 예약이 되어 있지 않아요."] : check.reasons;
   const n = buildMissedWarning(today, reasons);
   try {
@@ -185,6 +191,42 @@ export async function warnIfTodayMissing(store: PublishStore, opts: EngineOption
       payloadPreview: { title: n.title, body: n.body, link: n.link, recipientCount: admins.length, ...(opts.internalLive ? {} : { note: "테스트 모드 — 알림함에 넣지 않았어요" }) },
     });
     return today;
+  } catch (e) {
+    await store.finishDelivery(key, { state: "failed", nowIso, errorCode: "internal_error", errorMessage: short(e) }).catch(() => {});
+    return null;
+  }
+}
+
+/** 준비분이 이 날 수보다 적으면 알린다 */
+export const STOCK_LOW_DAYS = 2;
+
+/**
+ * 내일부터 예약돼 있는 날이 STOCK_LOW_DAYS 보다 적으면 관리자에게 하루 한 번 알린다.
+ * (대기함 방식을 쓸 때만 부른다. 대기함 묶음이 없으면 = 아직 한 번도 안 썼으면 알리지 않는다)
+ * 돌려주는 값: 알렸으면 남은 날 수, 아니면 null
+ */
+export async function warnIfStockLow(store: PublishStore, opts: EngineOptions): Promise<number | null> {
+  const today = kstDate(opts.now);
+  const left = await store.countScheduledAfter(today);
+  if (left >= STOCK_LOW_DAYS) return null;
+  const queue = await store.getIssueByDate(QUEUE_DATE);
+  if (!queue) return null;
+
+  const key = stockLowKey(today);
+  const claim = await store.claimDelivery(key, queue.id, "internal", opts.now);
+  if (claim !== "claimed") return null;
+
+  const nowIso = opts.now.toISOString();
+  const n = buildStockLowWarning(left);
+  try {
+    const admins = await store.listAdminIds();
+    if (opts.internalLive && admins.length > 0) await store.insertNotifications(admins.map((user_id) => ({ user_id, ...n })));
+    await store.finishDelivery(key, {
+      state: opts.internalLive ? "sent" : "mock",
+      nowIso,
+      payloadPreview: { title: n.title, body: n.body, link: n.link, recipientCount: admins.length, ...(opts.internalLive ? {} : { note: "테스트 모드 — 알림함에 넣지 않았어요" }) },
+    });
+    return left;
   } catch (e) {
     await store.finishDelivery(key, { state: "failed", nowIso, errorCode: "internal_error", errorMessage: short(e) }).catch(() => {});
     return null;

@@ -22,6 +22,11 @@ export function warningKey(issueDate: string): string {
   return `internal-warning:${issueDate}`;
 }
 
+/** 준비된 날이 모자랄 때 관리자에게 보내는 알림 (하루 1번) */
+export function stockLowKey(today: string): string {
+  return `internal-stock-low:${today}`;
+}
+
 const clipTitle = (t: string, max = 60) => (t.length > max ? `${t.slice(0, max - 1)}…` : t);
 
 /** 수오더 안 알림 1건 (받는 사람마다 같은 내용) */
@@ -31,6 +36,16 @@ export function buildInternalNotification(issueDate: string, papers: NotifyPaper
     title: "오늘의 논문 브리핑이 올라왔어요",
     body: [`${formatIssueDate(issueDate)} · 논문 ${papers.length}건`, ...papers.map((p) => `· ${clipTitle(p.headline)}`)].join("\n"),
     link: "/briefing",
+  };
+}
+
+/** 앞으로 발행할 준비분이 모자랄 때 관리자 알림 */
+export function buildStockLowWarning(daysLeft: number) {
+  return {
+    type: "briefing_warning",
+    title: daysLeft <= 0 ? "내일 나갈 논문 브리핑이 없어요" : `논문 브리핑이 ${daysLeft}일치만 남았어요`,
+    body: "대기함에 논문을 올리고 검수하면 다음 날짜부터 자동으로 채워져요.",
+    link: "/briefing/admin",
   };
 }
 

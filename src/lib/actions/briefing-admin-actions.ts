@@ -6,9 +6,10 @@ import { requireAdmin } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/utils/activity-log";
 import { designCard } from "@/lib/briefing/designer";
 import { checkFidelity, type FidelityWarning } from "@/lib/briefing/fidelity";
-import { checkPublishable } from "@/lib/briefing/publish-rules";
+import { loadPlanConfig, syncPlan } from "@/lib/briefing/plan-sync";
+import { checkPublishable, isIssueVisible } from "@/lib/briefing/publish-rules";
 import { CATEGORY_KEYS, parseCard, type CategoryKey, type PaperCardContent } from "@/lib/briefing/schema";
-import { MAX_PAPERS, type BriefingIssue, type BriefingPaper, type IssueWithPapers } from "@/lib/briefing/types";
+import { MAX_PAPERS, QUEUE_DATE, type BriefingIssue, type BriefingPaper, type IssueWithPapers } from "@/lib/briefing/types";
 
 /**
  * 논문 브리핑 관리자 액션. 전부 requireAdmin() — 일반 직원은 서버에서 막힌다(RLS도 관리자만 쓰기).
@@ -17,6 +18,8 @@ import { MAX_PAPERS, type BriefingIssue, type BriefingPaper, type IssueWithPaper
  *  - 저장에 필요한 값은 요약 글(raw_summary_text) 하나뿐.
  *  - 논문 1건에 카드는 1장. 다시 만들면 이전 카드를 previous_card_content 에 한 번 보관한다.
  *  - 만들기가 실패해도 원본 글과 기존 카드는 그대로 둔다.
+ *  - 논문이 바뀔 때마다 settle() 로 날짜 배치를 다시 맞춘다 (lib/briefing/plan-sync.ts).
+ *    배치 기능을 켜기 전(migrate-briefing-planner.sql 미실행)에는 예전처럼 그 날짜 묶음의 예약 상태만 살핀다.
  */
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -50,11 +53,26 @@ async function syncIssueState(supabase: Sb, issueId: string): Promise<boolean> {
   return true;
 }
 
-/** 발행된 묶음의 논문은 고칠 수 없다(직원이 보고 있는 내용이 조용히 바뀌거나 사라지지 않게). 고치려면 발행 취소 → 수정 → 다시 발행 */
-const PUBLISHED_LOCK = { ok: false as const, error: "이미 발행된 논문이에요. 고치려면 먼저 발행을 취소해 주세요." };
-async function isPublished(supabase: Sb, issueId: string): Promise<boolean> {
-  const { data } = await supabase.from("briefing_issues").select("status").eq("id", issueId).maybeSingle();
-  return data?.status === "published";
+/**
+ * 발행된 묶음의 논문은 고칠 수 없다(직원이 보고 있는 내용이 조용히 바뀌거나 사라지지 않게).
+ * 예외는 카드 글 고치기(saveCardEdit) 하나 — 오타를 고치려고 발행을 취소하지 않아도 되게.
+ */
+const PUBLISHED_LOCK = { ok: false as const, error: "이미 발행된 논문이에요. 카드의 글만 고칠 수 있어요. 그 밖의 것은 먼저 발행을 취소해 주세요." };
+type IssueInfo = { status: string; issue_date: string; scheduled_at: string | null } | null;
+async function issueInfo(supabase: Sb, issueId: string): Promise<IssueInfo> {
+  const { data } = await supabase.from("briefing_issues").select("status, issue_date, scheduled_at").eq("id", issueId).maybeSingle();
+  return (data as IssueInfo) ?? null;
+}
+/** 직원에게 이미 보이는 묶음인가 (발행 완료, 또는 예약 시각이 지난 예약) */
+const isLive = (info: IssueInfo) => !!info && isIssueVisible({ status: info.status as BriefingIssue["status"], scheduled_at: info.scheduled_at });
+/** 대기함에 있고 검수 전인 논문은 날짜 배치와 무관하다 → 배치를 다시 맞추지 않아도 된다 */
+const isQuiet = (info: IssueInfo, paper: Pick<BriefingPaper, "review_status">) => info?.issue_date === QUEUE_DATE && paper.review_status !== "reviewed";
+
+/** 논문이 바뀐 뒤: 날짜 배치를 다시 맞춘다. 배치 기능을 켜기 전이면 예전 방식(그 묶음의 예약 상태만 확인) */
+async function settle(supabase: Sb, issueId: string, quiet = false): Promise<void> {
+  if (quiet) return;
+  const r = await syncPlan(supabase);
+  if (!r.ready) await syncIssueState(supabase, issueId);
 }
 
 function touch(issueDate?: string) {
@@ -77,7 +95,7 @@ export type IssueSummary = BriefingIssue & { paperCount: number; reviewedCount: 
 /** 최근 묶음 목록 (관리자 첫 화면) */
 export async function fetchIssueSummaries(limit = 30): Promise<IssueSummary[]> {
   const { supabase } = await requireAdmin();
-  const { data: issues } = await supabase.from("briefing_issues").select("*").order("issue_date", { ascending: false }).limit(limit);
+  const { data: issues } = await supabase.from("briefing_issues").select("*").neq("issue_date", QUEUE_DATE).order("issue_date", { ascending: false }).limit(limit);
   const list = (issues as BriefingIssue[] | null) ?? [];
   if (list.length === 0) return [];
   const { data: papers } = await supabase
@@ -124,8 +142,18 @@ export async function addPaper(issueDate: string, rawText: string): Promise<Acti
 
   const { data: existing } = await supabase.from("briefing_papers").select("display_order").eq("issue_id", issue.id).order("display_order", { ascending: false });
   const count = existing?.length ?? 0;
-  if (count >= MAX_PAPERS) {
-    return { ok: false, error: `하루에 논문 ${MAX_PAPERS}건까지만 넣을 수 있어요. 다른 날짜에 넣어 주세요.` };
+  const isQueue = issueDate === QUEUE_DATE;
+  if (!isQueue) {
+    const config = await loadPlanConfig(supabase);
+    const cap = config.ready ? config.settings.perDay : MAX_PAPERS;
+    if (count >= cap) {
+      return {
+        ok: false,
+        error: config.ready
+          ? `이 날짜는 ${cap}건이 다 찼어요. 대기함에 올리면 다음 빈 날짜에 자동으로 들어가요.`
+          : `하루에 논문 ${MAX_PAPERS}건까지만 넣을 수 있어요. 다른 날짜에 넣어 주세요.`,
+      };
+    }
   }
   const nextOrder = (existing?.[0]?.display_order ?? 0) + 1;
 
@@ -136,7 +164,7 @@ export async function addPaper(issueDate: string, rawText: string): Promise<Acti
     .single();
   if (error || !data) return { ok: false, error: "논문을 저장하지 못했어요. 잠시 뒤 다시 눌러 주세요." };
 
-  await syncIssueState(supabase, issue.id);
+  await settle(supabase, issue.id, isQueue);
   touch(issueDate);
   return { ok: true, data: data as BriefingPaper };
 }
@@ -148,7 +176,8 @@ export async function updatePaperRaw(paperId: string, rawText: string): Promise<
   if (!raw) return { ok: false, error: "요약 글이 비어 있어요." };
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
-  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
+  const info = await issueInfo(supabase, paper.issue_id);
+  if (info?.status === "published") return PUBLISHED_LOCK;
   if (paper.raw_summary_text === raw) return { ok: true, data: paper };
 
   const { data, error } = await supabase
@@ -158,7 +187,7 @@ export async function updatePaperRaw(paperId: string, rawText: string): Promise<
     .select(PAPER_COLS)
     .single();
   if (error || !data) return { ok: false, error: "글을 저장하지 못했어요." };
-  await syncIssueState(supabase, paper.issue_id);
+  await settle(supabase, paper.issue_id, isQuiet(info, paper));
   touch();
   return { ok: true, data: data as BriefingPaper };
 }
@@ -173,7 +202,8 @@ export async function generatePaperCard(paperId: string): Promise<ActionResult<G
   const { supabase, userId, userName } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
-  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
+  const info = await issueInfo(supabase, paper.issue_id);
+  if (info?.status === "published") return PUBLISHED_LOCK;
 
   try {
     const result = await designCard(paper.raw_summary_text, {
@@ -200,7 +230,7 @@ export async function generatePaperCard(paperId: string): Promise<ActionResult<G
       .single();
     if (error || !data) throw new Error("save-failed");
 
-    await syncIssueState(supabase, paper.issue_id);
+    await settle(supabase, paper.issue_id, isQuiet(info, paper));
     logActivity({ userId, userName, category: "briefing", action: "generate_card", description: `논문 카드 만들기: ${result.card.headline}` });
     touch();
     return { ok: true, data: { paper: data as BriefingPaper, notice: result.notice, warnings: result.warnings } };
@@ -216,7 +246,9 @@ export async function saveCardEdit(paperId: string, card: unknown): Promise<Acti
   const { supabase, userId, userName } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
-  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
+  const info = await issueInfo(supabase, paper.issue_id);
+  // 발행된 논문: 카드 글만 고칠 수 있다. 검수 상태는 그대로 둔다(직원 화면에서 사라지지 않게) — 누가 언제 고쳤는지는 활동 로그에 남는다
+  const published = isLive(info);
   const parsed = parseCard(card);
   if (!parsed.ok) return { ok: false, error: `카드 형식이 맞지 않아요 (${parsed.error})` };
 
@@ -228,18 +260,17 @@ export async function saveCardEdit(paperId: string, card: unknown): Promise<Acti
       headline: parsed.card.headline,
       layout_variant: parsed.card.layoutVariant,
       category: parsed.card.category ?? paper.category,
-      review_status: "draft",
-      reviewed_by: null,
-      reviewed_at: null,
+      ...(published ? {} : { review_status: "draft", reviewed_by: null, reviewed_at: null }),
     })
     .eq("id", paperId)
     .select(PAPER_COLS)
     .single();
   if (error || !data) return { ok: false, error: "카드를 저장하지 못했어요." };
 
-  await syncIssueState(supabase, paper.issue_id);
-  logActivity({ userId, userName, category: "briefing", action: "edit_card", description: `논문 카드 수정: ${parsed.card.headline}` });
+  if (!published) await settle(supabase, paper.issue_id, isQuiet(info, paper));
+  logActivity({ userId, userName, category: "briefing", action: published ? "edit_published_card" : "edit_card", description: `${published ? "발행 후 카드 수정" : "논문 카드 수정"}: ${parsed.card.headline}` });
   touch();
+  if (published) revalidatePath("/briefing");
   const saved = data as BriefingPaper;
   return { ok: true, data: { paper: saved, warnings: checkFidelity(saved.raw_summary_text, parsed.card, [saved.source_url ?? "", saved.doi ?? ""]) } };
 }
@@ -249,7 +280,8 @@ export async function restorePreviousCard(paperId: string): Promise<ActionResult
   const { supabase } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
-  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
+  const info = await issueInfo(supabase, paper.issue_id);
+  if (info?.status === "published") return PUBLISHED_LOCK;
   if (!paper.previous_card_content) return { ok: false, error: "되돌릴 이전 카드가 없어요." };
   const prev = paper.previous_card_content as PaperCardContent;
   const { data, error } = await supabase
@@ -267,7 +299,7 @@ export async function restorePreviousCard(paperId: string): Promise<ActionResult
     .select(PAPER_COLS)
     .single();
   if (error || !data) return { ok: false, error: "되돌리지 못했어요." };
-  await syncIssueState(supabase, paper.issue_id);
+  await settle(supabase, paper.issue_id, isQuiet(info, paper));
   touch();
   return { ok: true, data: data as BriefingPaper };
 }
@@ -280,7 +312,8 @@ export async function updatePaperMeta(
   const { supabase } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
-  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
+  const info = await issueInfo(supabase, paper.issue_id);
+  if (info?.status === "published") return PUBLISHED_LOCK;
 
   const url = cleanUrl(meta.sourceUrl);
   if (url === undefined) return { ok: false, error: "원문 링크는 http:// 또는 https:// 로 시작해야 해요." };
@@ -310,7 +343,8 @@ export async function setPaperReviewed(paperId: string, reviewed: boolean): Prom
   const { supabase, userId, userName } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
-  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
+  const info = await issueInfo(supabase, paper.issue_id);
+  if (info?.status === "published") return PUBLISHED_LOCK;
   if (reviewed && !paper.card_content) return { ok: false, error: "카드를 먼저 만들어 주세요." };
 
   const { data, error } = await supabase
@@ -324,7 +358,7 @@ export async function setPaperReviewed(paperId: string, reviewed: boolean): Prom
     .select(PAPER_COLS)
     .single();
   if (error || !data) return { ok: false, error: "검수 상태를 바꾸지 못했어요." };
-  await syncIssueState(supabase, paper.issue_id);
+  await settle(supabase, paper.issue_id);
   if (reviewed) logActivity({ userId, userName, category: "briefing", action: "review_paper", description: `논문 검수 완료: ${paper.headline ?? ""}` });
   touch();
   return { ok: true, data: data as BriefingPaper };
@@ -335,10 +369,11 @@ export async function deletePaper(paperId: string): Promise<ActionResult<{ id: s
   const { supabase, userId, userName } = await requireAdmin();
   const paper = await loadPaper(supabase, paperId);
   if (!paper) return { ok: false, error: "논문을 찾지 못했어요." };
-  if (await isPublished(supabase, paper.issue_id)) return PUBLISHED_LOCK;
+  const info = await issueInfo(supabase, paper.issue_id);
+  if (info?.status === "published") return PUBLISHED_LOCK;
   const { error } = await supabase.from("briefing_papers").delete().eq("id", paperId);
   if (error) return { ok: false, error: "지우지 못했어요." };
-  await syncIssueState(supabase, paper.issue_id);
+  await settle(supabase, paper.issue_id, isQuiet(info, paper));
   logActivity({ userId, userName, category: "briefing", action: "delete_paper", description: `논문 삭제: ${paper.headline ?? "(카드 만들기 전)"}` });
   touch();
   return { ok: true, data: { id: paperId } };
@@ -347,7 +382,7 @@ export async function deletePaper(paperId: string): Promise<ActionResult<{ id: s
 /** 논문 순서 바꾸기 (같은 날짜 안에서). 같은 논문 안의 "장 순서"는 없다. */
 export async function reorderPapers(issueId: string, paperIds: string[]): Promise<ActionResult<{ ids: string[] }>> {
   const { supabase } = await requireAdmin();
-  if (await isPublished(supabase, issueId)) return PUBLISHED_LOCK;
+  if ((await issueInfo(supabase, issueId))?.status === "published") return PUBLISHED_LOCK;
   const { error } = await supabase.rpc("briefing_reorder_papers", { p_issue_id: issueId, p_paper_ids: paperIds });
   if (error) return { ok: false, error: "순서를 바꾸지 못했어요." };
   touch();

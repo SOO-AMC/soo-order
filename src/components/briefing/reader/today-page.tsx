@@ -38,7 +38,7 @@ export function BriefingHeader({ isAdmin }: { isAdmin: boolean }) {
 
 /**
  * 오늘의 논문 브리핑 (전 직원).
- * 오늘 발행된 논문 3~4건을 보여 준다 — 한 줄(모바일)·카드 하나(PC)가 논문 1건이다.
+ * 오늘 발행된 논문을 보여 준다 — 한 줄(모바일)·카드 하나(PC)가 논문 1건이다.
  * 오늘 발행분이 없으면 없다고 말한다. 전날 것을 오늘 것처럼 보여 주지 않는다.
  */
 export function TodayPage({
@@ -110,7 +110,7 @@ export function TodayPage({
             </span>
             <p className="mt-3 text-[15px] font-semibold">{past ? "오늘 발행된 논문이 없어요" : "아직 발행 전이에요"}</p>
             <p className="mx-auto mt-1 max-w-sm text-[13px] text-muted-foreground">
-              {past ? "지난 브리핑에서 이전 논문을 볼 수 있어요." : `매일 ${publishTime}에 새 논문 3~4건이 올라와요. 그동안 지난 브리핑을 볼 수 있어요.`}
+              {past ? "지난 브리핑에서 이전 논문을 볼 수 있어요." : `매일 ${publishTime}에 새 논문이 올라와요. 그동안 지난 브리핑을 볼 수 있어요.`}
             </p>
             <Button asChild variant="outline" size="sm" className="mt-4">
               <Link href="/briefing/archive">지난 브리핑 보기</Link>

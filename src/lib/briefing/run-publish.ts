@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiModel } from "./ai-designer";
 import { configuredProvider } from "./designer";
-import { runDuePublish, warnIfTodayMissing, type DueRunResult, type EngineOptions } from "./publish-engine";
+import { loadPlanConfig } from "./plan-sync";
+import { runDuePublish, warnIfStockLow, warnIfTodayMissing, type DueRunResult, type EngineOptions } from "./publish-engine";
 import { createSupabasePublishStore } from "./supabase-publish-store";
 
 /**
@@ -44,16 +45,36 @@ export function publishStore() {
   return createSupabasePublishStore(createAdminClient());
 }
 
-/** 예약 시각이 지난 묶음을 발행 완료로 (첫 조회 때 · 크론 공통). 여러 번 불러도 결과는 같다 */
-export async function runDueNow(): Promise<DueRunResult> {
-  return runDuePublish(publishStore(), engineOptions());
+/** 엔진 옵션 + 설정의 하루 건수 범위. planReady = 대기함 방식(migrate-briefing-planner.sql)을 쓰는 중인가 */
+export async function engineOptionsLive(now: Date = new Date()): Promise<{ opts: EngineOptions; planReady: boolean }> {
+  const config = await loadPlanConfig(createAdminClient());
+  return { opts: { ...engineOptions(now), limits: config.limits }, planReady: config.ready };
 }
 
-/** 크론 전용: 발행 + 오늘 발행이 없으면 관리자 경고 */
-export async function runDailyCron(): Promise<DueRunResult & { warned: string | null }> {
+/** 준비분이 모자라면 관리자에게 알린다. 실패해도 발행에는 영향을 주지 않는다 */
+async function stockWarning(store: ReturnType<typeof publishStore>, opts: EngineOptions, planReady: boolean): Promise<number | null> {
+  if (!planReady) return null;
+  return warnIfStockLow(store, opts).catch((e) => {
+    console.error("[briefing] 준비분 알림 실패:", e instanceof Error ? e.message : e);
+    return null;
+  });
+}
+
+/** 예약 시각이 지난 묶음을 발행 완료로 (첫 조회 때 · 크론 공통). 여러 번 불러도 결과는 같다 */
+export async function runDueNow(): Promise<DueRunResult> {
   const store = publishStore();
-  const opts = engineOptions();
+  const { opts, planReady } = await engineOptionsLive();
+  const due = await runDuePublish(store, opts);
+  await stockWarning(store, opts, planReady);
+  return due;
+}
+
+/** 크론 전용: 발행 + 오늘 발행이 없으면 관리자 경고 + 준비분이 모자라면 알림 */
+export async function runDailyCron(): Promise<DueRunResult & { warned: string | null; stockLow: number | null }> {
+  const store = publishStore();
+  const { opts, planReady } = await engineOptionsLive();
   const due = await runDuePublish(store, opts);
   const warned = await warnIfTodayMissing(store, opts);
-  return { ...due, warned };
+  const stockLow = await stockWarning(store, opts, planReady);
+  return { ...due, warned, stockLow };
 }

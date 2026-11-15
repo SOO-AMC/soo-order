@@ -8,6 +8,7 @@ import type { BriefingSettingsData } from "@/lib/actions/briefing-publish-action
 import { PUBLISH_HOUR, PUBLISH_MINUTE, formatIssueDate, formatKstDateTime } from "@/lib/briefing/kst";
 import { DEFAULT_INTERVAL, MAX_INTERVAL, MIN_INTERVAL } from "@/lib/briefing/rounding-loop";
 import { MAX_PAPERS, MIN_PAPERS } from "@/lib/briefing/types";
+import { PlanSettingsForm } from "@/components/briefing/admin/plan-settings-form";
 
 const publishTime = `${String(PUBLISH_HOUR).padStart(2, "0")}:${String(PUBLISH_MINUTE).padStart(2, "0")}`;
 
@@ -48,9 +49,20 @@ export function BriefingSettings({ data }: { data: BriefingSettingsData | null }
           </div>
         ) : (
           <>
+            {data.planReady && (
+              <section>
+                <h2 className="mb-2 px-1 text-[13px] font-semibold text-subtle-foreground">하루 발행 건수</h2>
+                <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+                  <PlanSettingsForm initial={data.plan} />
+                </div>
+              </section>
+            )}
+
             <Group title="운영 규칙 (고정)">
               <Row label="발행 시각" value={`매일 ${publishTime} · 한국시간(Asia/Seoul)`} hint="주말 포함. 예약한 브리핑은 이 시각부터 직원에게 보여요." />
-              <Row label="하루 논문 수" value={`${MIN_PAPERS}~${MAX_PAPERS}건 (논문 1건 = 카드 1장)`} hint="수가 맞지 않거나 검수가 덜 됐으면 발행하지 않고 관리자에게 알려요. 대신 골라서 내보내지 않아요." />
+              {!data.planReady && (
+                <Row label="하루 논문 수" value={`${MIN_PAPERS}~${MAX_PAPERS}건 (논문 1건 = 카드 1장)`} hint="수가 맞지 않거나 검수가 덜 됐으면 발행하지 않고 관리자에게 알려요. supabase/migrate-briefing-planner.sql 을 실행하면 건수를 바꿀 수 있어요." />
+              )}
               <Row label="라운딩 화면" value={`기본 ${DEFAULT_INTERVAL}초마다 다음 논문`} hint={`라운딩 화면에서 ${MIN_INTERVAL}~${MAX_INTERVAL}초 사이로 직접 입력할 수 있어요. 그 PC에 기억돼요.`} />
             </Group>
 
@@ -75,7 +87,7 @@ export function BriefingSettings({ data }: { data: BriefingSettingsData | null }
                     : "발행해도 직원 알림함에는 넣지 않고, 보낼 내용만 아래 기록에 남겨요. 서버 설정 BRIEFING_INTERNAL_NOTIFY=on 으로 켜요."
                 }
               />
-              <Row label="네이버웍스" value="연결 전 (보내지 않음)" tone="test" hint="논문 3~4건을 메시지 1건에 묶은 내용을 미리보기와 기록으로만 남겨요. 실제 전송은 하지 않아요." />
+              <Row label="네이버웍스" value="연결 전 (보내지 않음)" tone="test" hint="그날의 논문을 메시지 1건에 묶은 내용을 미리보기와 기록으로만 남겨요. 실제 전송은 하지 않아요." />
               <Row label="브라우저 푸시" value="쓰지 않음" hint="알림 권한을 묻지 않아요. 알림은 수오더 안 알림함으로만 가요." />
               <Row label="앱 주소" value={data.config.baseUrl ?? "설정 안 됨"} hint="네이버웍스 메시지의 링크에 써요. 없으면 경로(/briefing)만 넣어요." />
               <Row label="서버 시각" value={formatKstDateTime(data.serverNow)} hint={`UTC ${data.serverNow.slice(0, 16).replace("T", " ")} — 서버가 UTC여도 발행은 한국시간으로 계산해요.`} />

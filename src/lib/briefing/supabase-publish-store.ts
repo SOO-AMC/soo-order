@@ -91,6 +91,11 @@ export function createSupabasePublishStore(sb: SupabaseClient): PublishStore {
       if (error) throw fail("관리자 조회", error.message);
       return (data ?? []).map((p) => p.id as string);
     },
+    async countScheduledAfter(issueDate) {
+      const { count, error } = await sb.from("briefing_issues").select("id", { count: "exact", head: true }).eq("status", "scheduled").gt("issue_date", issueDate);
+      if (error) throw fail("예약 수 조회", error.message);
+      return count ?? 0;
+    },
     async insertNotifications(rows: NotificationRow[]) {
       for (let i = 0; i < rows.length; i += 500) {
         const { error } = await sb.from("notifications").insert(rows.slice(i, i + 500));

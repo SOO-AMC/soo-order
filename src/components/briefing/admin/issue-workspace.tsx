@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
@@ -44,6 +45,7 @@ import { PublishPanel } from "@/components/briefing/admin/publish-panel";
 import {
   addPaper,
   deletePaper,
+  fetchIssueByDate,
   generatePaperCard,
   reorderPapers,
   restorePreviousCard,
@@ -56,7 +58,7 @@ import { checkFidelity } from "@/lib/briefing/fidelity";
 import { checkPublishable, progressLabel } from "@/lib/briefing/publish-rules";
 import { addDays, formatIssueDate } from "@/lib/briefing/kst";
 import { CATEGORY_KEYS, CATEGORY_LABEL, type PaperCardContent } from "@/lib/briefing/schema";
-import { ISSUE_STATUS_LABEL, MAX_PAPERS, type BriefingPaper, type BriefingIssue, type IssueStatus, type IssueWithPapers } from "@/lib/briefing/types";
+import { ISSUE_STATUS_LABEL, QUEUE_DATE, type BriefingPaper, type BriefingIssue, type IssueStatus, type IssueWithPapers, type PublishLimits } from "@/lib/briefing/types";
 
 const NEW = "__new__";
 type Meta = { category: string; sourceUrl: string; doi: string; adminMemo: string };
@@ -73,12 +75,40 @@ const metaOf = (p?: BriefingPaper): Meta => ({
  * 핵심 흐름: 큰 글상자 하나에 요약을 붙여넣기 → "AI 카드뉴스 만들기" → 오른쪽에 그 논문의 카드 1장.
  * 필수 입력은 요약 글뿐이다(분야·링크 등은 접힌 고급 설정).
  * "새 논문 추가" = 논문 1건(글상자 1개) 추가. 같은 논문에 장을 더하는 기능은 없다.
- * 아래 썸네일은 그날의 서로 다른 논문(최대 4건)이다.
+ * 아래 썸네일은 그날의 서로 다른 논문이다.
+ *
+ * 대기함 방식(planReady)일 때:
+ *  - 날짜가 QUEUE_DATE 이면 대기함(검수 전 논문) — 발행 패널이 없고, 검수 완료한 논문은 목록에서 빠져 발행 예정으로 간다.
+ *  - 날짜 묶음의 논문 구성은 서버가 다시 채운다(지우면 뒤 날짜의 논문이 당겨진다) → 지운 뒤에는 목록을 다시 읽는다.
+ *  - 발행된 논문도 카드의 글은 고칠 수 있다(오타).
  */
-export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDate: string; initialIssue: IssueWithPapers | null; startNew?: boolean }) {
+export function IssueWorkspace({
+  issueDate,
+  initialIssue,
+  startNew,
+  selectPaperId,
+  limits,
+  planReady,
+}: {
+  issueDate: string;
+  initialIssue: IssueWithPapers | null;
+  startNew?: boolean;
+  /** 처음에 열어 둘 논문 */
+  selectPaperId?: string;
+  /** 하루 건수 범위 (설정) */
+  limits: PublishLimits;
+  /** 대기함·자동 배정을 쓰는 중인가 */
+  planReady: boolean;
+}) {
+  const router = useRouter();
+  const isQueue = issueDate === QUEUE_DATE;
   const [issue, setIssue] = useState<BriefingIssue | null>(initialIssue);
   const [papers, setPapers] = useState<BriefingPaper[]>(initialIssue?.papers ?? []);
-  const [selected, setSelected] = useState<string>(() => (startNew || (initialIssue?.papers.length ?? 0) === 0 ? NEW : initialIssue!.papers[0].id));
+  const [selected, setSelected] = useState<string>(() => {
+    const list = initialIssue?.papers ?? [];
+    if (startNew || list.length === 0) return NEW;
+    return list.some((p) => p.id === selectPaperId) ? selectPaperId! : list[0].id;
+  });
   /** 글상자 내용 (논문 id → 글). 저장 전 편집 중인 값 */
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [metas, setMetas] = useState<Record<string, Meta>>({});
@@ -96,17 +126,17 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
   const meta = metas[selected] ?? metaOf(current ?? undefined);
   const textDirty = isNew ? text.trim().length > 0 : !!current && text.trim() !== current.raw_summary_text;
   const metaDirty = !!current && JSON.stringify(meta) !== JSON.stringify(metaOf(current));
-  const canAddMore = papers.length < MAX_PAPERS;
+  const canAddMore = isQueue || papers.length < limits.max;
   const total = papers.length;
   const index = current ? papers.findIndex((p) => p.id === current.id) : -1;
-  const dateLabel = formatIssueDate(issueDate);
+  const dateLabel = isQueue ? "발행일 미정" : formatIssueDate(issueDate);
 
   const card = current?.card_content ?? null;
   const warnings = useMemo(
     () => (current && card ? checkFidelity(current.raw_summary_text, card, [current.source_url ?? "", current.doi ?? ""]) : []),
     [current, card]
   );
-  const publish = useMemo(() => checkPublishable(papers), [papers]);
+  const publish = useMemo(() => checkPublishable(papers, limits), [papers, limits]);
 
   const replacePaper = (p: BriefingPaper) => setPapers((prev) => prev.map((x) => (x.id === p.id ? p : x)));
   const clearDraft = (id: string) => {
@@ -244,6 +274,15 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
         setError(res.error);
         return;
       }
+      if (isQueue && planReady && reviewed) {
+        // 검수한 논문은 서버가 다음 발행일로 옮긴다 → 대기함 목록에서 뺀다
+        const rest = papers.filter((p) => p.id !== current.id);
+        setPapers(rest);
+        clearDraft(current.id);
+        setSelected(rest[0]?.id ?? NEW);
+        setNotice("검수 완료 — 다음 발행일에 자동으로 들어갔어요.");
+        return;
+      }
       replacePaper(res.data);
     });
 
@@ -264,7 +303,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
     const res = await saveCardEdit(current.id, next);
     if (!res.ok) return res.error;
     replacePaper(res.data.paper);
-    setNotice("카드를 고쳤어요. 검수를 다시 해 주세요.");
+    setNotice(res.data.paper.review_status === "reviewed" ? "카드를 고쳤어요. 직원 화면에 바로 반영돼요." : "카드를 고쳤어요. 검수를 다시 해 주세요.");
     return null;
   };
 
@@ -276,7 +315,12 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
         setError(res.error);
         return;
       }
-      const rest = papers.filter((p) => p.id !== current.id);
+      let rest = papers.filter((p) => p.id !== current.id);
+      if (planReady && !isQueue) {
+        // 지운 자리에 뒤 날짜의 논문이 당겨져 들어온다 → 이 날짜의 논문을 다시 읽는다
+        const fresh = await fetchIssueByDate(issueDate).catch(() => null);
+        if (fresh) rest = fresh.papers;
+      }
       setPapers(rest);
       clearDraft(current.id);
       setSelected(rest[0]?.id ?? NEW);
@@ -309,9 +353,10 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
     <>
       <PageHeader
         title="논문 브리핑 관리"
-        description={`${dateLabel} 발행분 · ${ISSUE_STATUS_LABEL[status]}`}
+        description={isQueue ? "대기함 · 검수 전 논문" : `${dateLabel} 발행분 · ${ISSUE_STATUS_LABEL[status]}`}
         leading={<BackButton fallbackHref="/briefing/admin" />}
         action={
+          isQueue ? undefined : (
           <div className="flex items-center gap-1">
             <Button asChild variant="outline" size="icon" className="size-9 rounded-lg" aria-label="전날">
               <Link href={`/briefing/admin/${addDays(issueDate, -1)}`}>
@@ -324,6 +369,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
               </Link>
             </Button>
           </div>
+          )
         }
       />
 
@@ -331,7 +377,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
         {/* ───────── 왼쪽: 글 붙여넣기 ───────── */}
         <section className="flex min-w-0 flex-col gap-3">
           {/* 논문 탭 = 그날의 서로 다른 논문 */}
-          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="오늘 논문">
+          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label={isQueue ? "대기함 논문" : "이 날짜의 논문"}>
             {papers.map((p, i) => (
               <button
                 key={p.id}
@@ -366,7 +412,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
                 <Plus className="size-4" /> 새 논문 추가
               </button>
             )}
-            {!canAddMore && <span className="px-1 text-[13px] text-muted-foreground">하루 {MAX_PAPERS}건까지예요</span>}
+            {!canAddMore && <span className="px-1 text-[13px] text-muted-foreground">하루 {limits.max}건까지예요{planReady ? " · 더 올릴 논문은 대기함에" : ""}</span>}
           </div>
 
           <div className="rounded-xl bg-card p-5 ring-1 ring-border">
@@ -475,20 +521,35 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
           )}
 
           {locked && (
-            <p className="rounded-xl bg-status-done-bg px-4 py-3 text-[13px] font-medium text-status-done">발행된 묶음이에요. 글·카드·순서를 고치려면 아래에서 발행을 취소해 주세요.</p>
+            <p className="rounded-xl bg-status-done-bg px-4 py-3 text-[13px] font-medium text-status-done">
+              발행된 묶음이에요. 카드의 글(오타)은 오른쪽 &quot;오타 고치기&quot;로 바로 고칠 수 있어요. 요약 글·순서를 바꾸거나 지우려면 아래에서 발행을 취소해야 해요.
+            </p>
           )}
 
-          {/* 발행: 예약 · 지금 발행 · 취소 + 알림 상태 */}
-          <PublishPanel
-            issue={issue}
-            issueDate={issueDate}
-            status={status}
-            publish={publish}
-            paperCount={total}
-            papersKey={papersKey}
-            disabled={!!busy || textDirty || metaDirty}
-            onIssueChange={setIssue}
-          />
+          {isQueue ? (
+            <p className="rounded-xl bg-muted px-4 py-3 text-[13px] text-subtle-foreground">
+              대기함의 논문은 검수를 마치면 다음 발행일부터 차례로 들어가요. 날짜는 <Link href="/briefing/admin" className="font-semibold text-primary hover:underline">관리 첫 화면</Link>에서 순서를 바꿔 조정해요.
+            </p>
+          ) : (
+            /* 발행: 예약 · 지금 발행 · 취소 + 알림 상태 */
+            <PublishPanel
+              issue={issue}
+              issueDate={issueDate}
+              status={status}
+              publish={publish}
+              paperCount={total}
+              papersKey={papersKey}
+              disabled={!!busy || textDirty || metaDirty}
+              limits={limits}
+              planReady={planReady}
+              onIssueChange={(next) => {
+                const wasPublished = issue?.status === "published";
+                setIssue(next);
+                // 대기함 방식에서 발행을 취소하면 논문들이 다음 발행일로 넘어간다 → 이 화면의 목록은 낡았으니 첫 화면으로
+                if (planReady && wasPublished && next.status !== "published") router.push("/briefing/admin");
+              }}
+            />
+          )}
         </section>
 
         {/* ───────── 오른쪽: 그 논문의 카드 1장 ───────── */}
@@ -533,7 +594,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
               {viewport === "desktop" ? (
                 // PC 폭(960px)으로 그린 뒤 이 칸에 맞게 줄여서 보여 준다
                 <FitWidth width={960}>
-                  <PaperCard key={current.id} card={card} variant="desktop" dateLabel={dateLabel} progress={progressLabel(index, total)} />
+                  <PaperCard key={current.id} card={card} variant="desktop" dateLabel={dateLabel} progress={isQueue ? undefined : progressLabel(index, total)} />
                 </FitWidth>
               ) : (
                 <PaperCard
@@ -541,7 +602,7 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
                   card={card}
                   variant={viewport}
                   dateLabel={dateLabel}
-                  progress={progressLabel(index, total)}
+                  progress={isQueue ? undefined : progressLabel(index, total)}
                   rounding={{ dateLabel, index, total }}
                   className={cn(viewport === "mobile" && "w-full max-w-[380px]", viewport === "rounding" && "rounded-lg")}
                 />
@@ -567,8 +628,8 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
             <p className="text-xs font-medium text-status-late">마지막 만들기가 실패했어요. {card ? "이전 카드가 그대로 보여요." : "다시 눌러 주세요."}</p>
           )}
 
-          {/* 그날의 논문 썸네일 (논문 수만큼 — 최대 4개) */}
-          {total > 0 && (
+          {/* 그날의 논문 썸네일 (논문 수만큼). 대기함은 날짜 묶음이 아니고 논문이 많을 수 있어 보여 주지 않는다 */}
+          {total > 0 && !isQueue && (
             <div>
               <div className="flex items-center justify-between">
                 <p className="text-[13px] font-semibold text-subtle-foreground">
@@ -635,8 +696,8 @@ export function IssueWorkspace({ issueDate, initialIssue, startNew }: { issueDat
           {/* 카드 다루기 */}
           {current && card && (
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className="h-10 rounded-lg" disabled={blocked} onClick={() => setEditOpen(true)}>
-                <Pencil className="size-4" /> 글·템플릿 고치기
+              <Button variant="outline" className="h-10 rounded-lg" disabled={!!busy} onClick={() => setEditOpen(true)}>
+                <Pencil className="size-4" /> {locked ? "오타 고치기" : "글·템플릿 고치기"}
               </Button>
               {current.previous_card_content && (
                 <Button variant="outline" className="h-10 rounded-lg" disabled={blocked} onClick={handleRestore}>
