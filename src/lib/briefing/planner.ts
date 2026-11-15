@@ -1,22 +1,22 @@
 import { addDays, isPastPublishTime, scheduledAtFor } from "./kst";
-import { QUEUE_DATE, type PlanSettings } from "./types";
+import { QUEUE_DATE } from "./types";
 
 /**
- * 논문 브리핑 배치 계산 (순수 함수 — DB·시각을 직접 보지 않는다).
+ * 논문 브리핑 날짜 묶음 계산 (순수 함수 — DB·시각을 직접 보지 않는다).
  *
  * 모델:
- *  - 대기함 = 날짜가 QUEUE_DATE 인 묶음 하나. 올린 논문은 일단 여기에 있다.
- *  - 검수를 마친 대기함 논문은 "발행 예정"의 맨 뒤에 붙는다.
- *  - 발행 예정 논문은 한 줄로 순서가 있고, 시작일부터 하루 perDay 건씩 잘라 날짜를 정한다.
- *    (순서가 곧 날짜다. 앞의 논문이 빠지면 뒤의 논문이 당겨진다.)
- *  - 한 번 자리를 잡은 논문은 검수가 풀려도(글·카드를 고쳐서) 자리를 지킨다.
- *    다만 그날의 논문이 전부 검수돼 있어야 그날이 예약된다.
- *  - 발행된 날, 이미 직원에게 보이는 날은 잠겨 있다 → 건너뛴다.
+ *  - 논문은 올릴 때 정한 날짜의 묶음에 들어간다. 한 번에 올린 논문들이 그날의 브리핑이다(날마다 건수가 달라도 된다).
+ *  - 앱이 논문을 다른 날짜로 옮기지 않는다. 지워도 뒤 날짜의 논문을 당겨 채우지 않고, 발행하지 못하고 지난 날의 논문도 그 날짜에 그대로 있다.
+ *    옮기는 것은 관리자가 시켰을 때뿐이다(moves).
+ *  - 그날의 논문이 1건 이상이고 전부 카드가 있고 검수돼 있으면 08:30 발행을 예약한다. (최소 건수 없음)
+ *    08:30이 이미 지난 날짜는 예약하지 않는다 — "지금 발행"으로만 내보낸다.
+ *  - 날짜 미정 = 날짜가 QUEUE_DATE 인 묶음 하나. 날짜에서 뺀 논문이 머무는 곳이고, 절대 발행되지 않는다.
+ *  - 발행된 날, 이미 직원에게 보이는 날은 잠겨 있다 → 호출하는 쪽이 그 논문들을 넘기지 않는다.
  */
 
 export type PlanPaper = {
   id: string;
-  /** 지금 들어 있는 묶음의 날짜 (대기함이면 QUEUE_DATE) */
+  /** 지금 들어 있는 묶음의 날짜 (날짜 미정이면 QUEUE_DATE) */
   issueDate: string;
   order: number;
   reviewed: boolean;
@@ -28,92 +28,67 @@ export type PlanDay = {
   paperIds: string[];
   status: "draft" | "scheduled";
   scheduledAt: string | null;
-  /** 예약되지 않은 이유 (예약됐으면 null) */
-  blocked: "short" | "unreviewed" | "past-time" | null;
+  /** 예약되지 않은 이유 (예약됐으면 null). unreviewed = 검수(또는 카드)가 덜 됨, past-time = 08:30이 지남 */
+  blocked: "unreviewed" | "past-time" | null;
 };
 
 export type PlanItem = { id: string; date: string; ord: number };
 
+/** 논문을 다른 날짜(또는 같은 날짜의 다른 자리)로 옮기기. index 는 그 날짜 안에서의 자리(0부터), 없으면 맨 뒤 */
+export type PlanMove = { id: string; date: string; index?: number };
+
 export type Plan = {
+  /** 논문이 있는 날짜 묶음 (날짜순, 날짜 미정 제외) */
   days: PlanDay[];
-  /** 대기함에 남는 논문 (순서대로) */
+  /** 날짜 미정 논문 (순서대로) */
   queueIds: string[];
   /** 모든 논문의 최종 위치 */
   items: PlanItem[];
-  /** 발행 예정 논문의 한 줄 순서 */
-  order: string[];
 };
 
-/** 시작일부터 잠긴 날을 건너뛰며 n번째(0부터) 날짜 */
-export function nthOpenDate(startDate: string, n: number, locked: ReadonlySet<string>): string {
-  let date = startDate;
-  // 잠긴 날이 끝없이 이어질 수는 없다(발행은 과거·오늘뿐) — 그래도 안전하게 상한을 둔다
-  for (let guard = 0; guard < 3660; guard++) {
-    if (!locked.has(date)) {
-      if (n === 0) return date;
-      n -= 1;
-    }
-    date = addDays(date, 1);
-  }
-  return date;
-}
-
-export function buildPlan(input: {
-  papers: PlanPaper[];
-  settings: PlanSettings;
-  /** 첫 발행일 (오늘 08:30 전이면 오늘, 지났으면 내일. "오늘 것 지금 발행"은 오늘) */
-  startDate: string;
-  /** 발행됐거나 이미 보이는 날짜 */
-  lockedDates: ReadonlySet<string>;
-  now: Date;
-  /** 발행 예정 논문의 순서를 직접 정할 때 (옮기기). 빠진 논문은 원래 순서로 뒤에 붙는다 */
-  order?: string[];
-}): Plan {
-  const { settings, startDate, lockedDates, now } = input;
-  const perDay = Math.max(1, Math.floor(settings.perDay));
-  const min = Math.min(Math.max(1, Math.floor(settings.min)), perDay);
+export function settlePlan(input: { papers: PlanPaper[]; now: Date; moves?: PlanMove[] }): Plan {
   const byId = new Map(input.papers.map((p) => [p.id, p]));
+  const byDate = new Map<string, string[]>();
+  for (const p of [...input.papers].sort((a, b) => (a.issueDate === b.issueDate ? a.order - b.order : a.issueDate < b.issueDate ? -1 : 1))) {
+    const arr = byDate.get(p.issueDate) ?? [];
+    arr.push(p.id);
+    byDate.set(p.issueDate, arr);
+  }
 
-  const byPosition = (a: PlanPaper, b: PlanPaper) => (a.issueDate === b.issueDate ? a.order - b.order : a.issueDate < b.issueDate ? -1 : 1);
-  const placed = input.papers.filter((p) => p.issueDate !== QUEUE_DATE).sort(byPosition);
-  const inQueue = input.papers.filter((p) => p.issueDate === QUEUE_DATE).sort(byPosition);
-  const arriving = inQueue.filter((p) => p.reviewed && p.hasCard);
-  const staying = inQueue.filter((p) => !(p.reviewed && p.hasCard));
-
-  // 한 줄 순서: (직접 정한 순서 →) 원래 자리 순 → 새로 검수된 대기함 논문
-  const natural = [...placed, ...arriving].map((p) => p.id);
-  let order = natural;
-  if (input.order) {
-    const allowed = new Set(natural);
-    const seen = new Set<string>();
-    const head = input.order.filter((id) => allowed.has(id) && !seen.has(id) && (seen.add(id), true));
-    order = [...head, ...natural.filter((id) => !seen.has(id))];
+  for (const m of input.moves ?? []) {
+    if (!byId.has(m.id)) continue;
+    for (const ids of byDate.values()) {
+      const at = ids.indexOf(m.id);
+      if (at >= 0) ids.splice(at, 1);
+    }
+    const target = byDate.get(m.date) ?? [];
+    const at = m.index === undefined ? target.length : Math.max(0, Math.min(Math.floor(m.index), target.length));
+    target.splice(at, 0, m.id);
+    byDate.set(m.date, target);
   }
 
   const days: PlanDay[] = [];
   const items: PlanItem[] = [];
-  for (let i = 0; i < order.length; i += perDay) {
-    const ids = order.slice(i, i + perDay);
-    const date = nthOpenDate(startDate, i / perDay, lockedDates);
+  for (const date of [...byDate.keys()].sort()) {
+    const ids = byDate.get(date)!;
+    if (ids.length === 0) continue;
+    ids.forEach((id, k) => items.push({ id, date, ord: k + 1 }));
+    if (date === QUEUE_DATE) continue;
     const allReady = ids.every((id) => {
       const p = byId.get(id);
       return !!p && p.reviewed && p.hasCard;
     });
-    const pastTime = isPastPublishTime(date, now);
-    const blocked: PlanDay["blocked"] = !allReady ? "unreviewed" : ids.length < min ? "short" : pastTime ? "past-time" : null;
+    const blocked: PlanDay["blocked"] = !allReady ? "unreviewed" : isPastPublishTime(date, input.now) ? "past-time" : null;
     days.push({ date, paperIds: ids, status: blocked ? "draft" : "scheduled", scheduledAt: blocked ? null : scheduledAtFor(date), blocked });
-    ids.forEach((id, k) => items.push({ id, date, ord: k + 1 }));
   }
-  staying.forEach((p, k) => items.push({ id: p.id, date: QUEUE_DATE, ord: k + 1 }));
-
-  return { days, queueIds: staying.map((p) => p.id), items, order };
+  return { days, queueIds: byDate.get(QUEUE_DATE) ?? [], items };
 }
 
 export type CurrentIssue = { date: string; status: "draft" | "scheduled"; scheduledAt: string | null };
 
 /**
  * 지금 상태와 비교해서 실제로 바꿀 것만 고른다 (바꿀 게 없으면 DB를 부르지 않는다).
- * 계획에서 빠진 예약 묶음(논문이 0건이 된 날)은 초안으로 되돌린다.
+ * 논문이 0건이 된 날의 예약은 초안으로 되돌린다.
  */
 export function planChanges(papers: PlanPaper[], issues: CurrentIssue[], plan: Plan): { items: PlanItem[]; days: { date: string; status: "draft" | "scheduled"; scheduled_at: string | null }[] } {
   const now = new Map(papers.map((p) => [p.id, p]));
@@ -131,7 +106,7 @@ export function planChanges(papers: PlanPaper[], issues: CurrentIssue[], plan: P
     const cur = current.get(d.date);
     if (!cur || cur.status !== d.status || !sameTime(cur.scheduledAt, d.scheduledAt)) days.push({ date: d.date, status: d.status, scheduled_at: d.scheduledAt });
   }
-  // 대기함 묶음이 아직 없는데 대기함으로 갈 논문이 있으면 만든다
+  // 날짜 미정 묶음이 아직 없는데 그리로 갈 논문이 있으면 만든다
   if (plan.items.some((it) => it.date === QUEUE_DATE) && !current.has(QUEUE_DATE)) days.push({ date: QUEUE_DATE, status: "draft", scheduled_at: null });
   for (const i of issues) {
     if (i.date === QUEUE_DATE || planned.has(i.date)) continue;
@@ -140,30 +115,11 @@ export function planChanges(papers: PlanPaper[], issues: CurrentIssue[], plan: P
   return { items, days };
 }
 
-/** id 를 최종 위치 toIndex 로 옮긴 새 순서 */
-export function moveInOrder(order: string[], id: string, toIndex: number): string[] {
-  const rest = order.filter((x) => x !== id);
-  if (rest.length === order.length) return order;
-  const at = Math.max(0, Math.min(toIndex, rest.length));
-  return [...rest.slice(0, at), id, ...rest.slice(at)];
-}
-
-/** id 를 beforeId 바로 앞으로 옮긴 새 순서 (beforeId 가 없으면 맨 뒤) */
-export function moveBefore(order: string[], id: string, beforeId: string | null): string[] {
-  if (id === beforeId) return order;
-  const rest = order.filter((x) => x !== id);
-  if (rest.length === order.length) return order;
-  const at = beforeId ? rest.indexOf(beforeId) : -1;
-  return at < 0 ? [...rest, id] : [...rest.slice(0, at), id, ...rest.slice(at)];
-}
-
-/**
- * id 를 dayIndex 번째 날(0부터)에 들어가게 옮긴다 — 그날의 마지막 자리.
- * 그날이 꽉 차 있으면 그날의 마지막 논문이 다음 날로 밀린다. 날짜가 끝보다 뒤면 맨 뒤.
- */
-export function moveToDay(order: string[], id: string, dayIndex: number, perDay: number): string[] {
-  const target = Math.min(dayIndex * perDay + perDay - 1, order.length - 1);
-  return moveInOrder(order, id, target);
+/** start 부터 taken 에 없는 첫 날짜 — 올리기 화면의 기본 날짜(다음 빈 날짜)에 쓴다 */
+export function nextFreeDate(start: string, taken: ReadonlySet<string>): string {
+  let date = start;
+  for (let guard = 0; guard < 3660 && taken.has(date); guard++) date = addDays(date, 1);
+  return date;
 }
 
 /** 예약된 날 수 = 앞으로 며칠치가 준비됐나 */
@@ -171,7 +127,7 @@ export function stockDays(days: Pick<PlanDay, "status">[]): number {
   return days.filter((d) => d.status === "scheduled").length;
 }
 
-// ── 여러 건 한 번에 붙여넣기 ──────────────────────────────────────────────
+// ── 한 칸에 여러 건을 붙여넣었을 때 ──────────────────────────────────────
 
 /** 구분선(---, ===, ***, ___ 를 세 개 이상) 한 줄로 요약을 나눈다. 빈 덩어리는 버린다. */
 export function splitSummaries(text: string): string[] {

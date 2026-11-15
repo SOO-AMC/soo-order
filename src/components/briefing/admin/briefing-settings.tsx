@@ -51,7 +51,7 @@ export function BriefingSettings({ data }: { data: BriefingSettingsData | null }
           <>
             {data.planReady && (
               <section>
-                <h2 className="mb-2 px-1 text-[13px] font-semibold text-subtle-foreground">하루 발행 건수</h2>
+                <h2 className="mb-2 px-1 text-[13px] font-semibold text-subtle-foreground">올리기</h2>
                 <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
                   <PlanSettingsForm initial={data.plan} />
                 </div>

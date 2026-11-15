@@ -148,9 +148,9 @@ git push origin main  # 배포 (GitHub → Vercel 자동 배포)
 - **환경변수**: `ANTHROPIC_API_KEY` (`.env.local`). 프로덕션은 Vercel env에 등록 필요. 연차 롤오버 cron 보호용 `CRON_SECRET`도 Vercel env에 등록(없으면 엔드포인트가 무인증으로 열림).
 
 ## 논문 브리핑
-- 관리자가 논문 요약문을 붙여넣으면 카드뉴스 1장 → 하루 N건(설정, 기본 3)을 08:30(KST) 발행 → 직원 화면·세미나실 라운딩 화면. **상세는 `docs/paper-briefing.md`.**
-- **대기함 + 자동 배정**(`supabase/migrate-briefing-planner.sql` 실행 후): 관리자는 날짜를 고르지 않는다. 대기함(날짜 `9999-12-31` 묶음)에 올리고 검수하면 `syncPlan()`(`lib/briefing/plan-sync.ts`)이 다음 발행일부터 하루 N건씩 채우고 예약한다. **논문을 바꾸는 관리자 액션은 끝에 반드시 `settle()`/`syncPlan()` 을 부를 것** — 안 부르면 날짜 배치와 예약 상태가 어긋난다. `9999-12-31` 을 진짜 날짜로 다루는 코드를 쓰지 말 것(`QUEUE_DATE`).
-- **불변 규칙**: 논문 1건 = 카드 1장(slides/pages 구조 금지), 필수 입력은 요약문 글상자 1개, 그날 논문이 모두 검수되고 건수가 범위(`briefing_settings`) 안일 때만 발행, 라운딩은 그날 논문 수만큼만 반복.
+- 관리자가 날짜를 정해 논문 요약문을 붙여넣으면 카드뉴스 1장씩 → 그날 올린 만큼(1~6건)을 08:30(KST) 발행 → 직원 화면·세미나실 라운딩 화면. **상세는 `docs/paper-briefing.md`.**
+- **날짜 묶음 + 자동 예약**(`supabase/migrate-briefing-planner.sql` 실행 후): 한 번에 올린 논문들이 그날의 브리핑이다(날마다 건수가 달라도 됨, 최소 건수 없음). 그날 논문이 전부 검수되면 `syncPlan()`(`lib/briefing/plan-sync.ts`)이 08:30 발행을 예약한다. **앱은 논문을 다른 날짜로 옮기지 않는다**(당겨 채우기 없음) — 옮기는 것은 `movePaper` 로 시켰을 때뿐. **논문을 바꾸는 관리자 액션은 끝에 반드시 `settle()`/`syncPlan()` 을 부를 것** — 안 부르면 예약 상태가 어긋난다. `9999-12-31`(`QUEUE_DATE`)은 "날짜 미정" 묶음이지 진짜 날짜가 아니다.
+- **불변 규칙**: 논문 1건 = 카드 1장(slides/pages 구조 금지), 필수 입력은 요약문, 그날 논문이 모두 검수돼 있을 때만 발행, 라운딩은 그날 논문 수만큼만 반복.
 - 로직은 `src/lib/briefing/`(순수 함수 + `pnpm test`), 액션은 `src/lib/actions/briefing-{admin,planner,publish,reader}-actions.ts`, 화면은 `src/components/briefing/`. 라운딩은 `(display)` 그룹 — `(main)` 레이아웃 밖.
 - 직원에게 보이는 조건은 **시각 기준**(발행 완료, 또는 예약 + 예약 시각 경과)이라 크론 없이도 08:30에 열린다. RLS와 reader 액션 양쪽에 같은 조건.
 - **기본은 테스트 모드**: `BRIEFING_AI_PROVIDER`(AI) · `BRIEFING_INTERNAL_NOTIFY`(직원 알림) 가 없으면 규칙 정리 + 알림 미발송. 네이버웍스는 미연결(기록만). 개발 서버가 운영 DB에 붙어 있으므로 `BRIEFING_INTERNAL_NOTIFY` 를 로컬에서 켜지 말 것.

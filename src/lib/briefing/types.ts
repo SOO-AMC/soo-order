@@ -61,11 +61,15 @@ export const MAX_PAPERS = 4;
 export type PublishLimits = { min: number; max: number };
 export const LEGACY_LIMITS: PublishLimits = { min: MIN_PAPERS, max: MAX_PAPERS };
 
-/** 하루 발행 건수 설정 (briefing_settings). perDay = 하루에 배정하는 건수, min = 이보다 적으면 그날은 발행하지 않는다 */
-export type PlanSettings = { perDay: number; min: number };
-export const DEFAULT_PLAN_SETTINGS: PlanSettings = { perDay: 3, min: 3 };
+/**
+ * 올리기 설정 (briefing_settings). perDay = 올리기 화면에 처음 열어 두는 논문 칸 수(기본 3).
+ * 그날 몇 건이 나갈지는 그날 올린 논문 수가 정한다 — 이 값은 기본 칸 수일 뿐이다. (표의 min_papers 칸은 쓰지 않는다)
+ */
+export type PlanSettings = { perDay: number };
+export const DEFAULT_PLAN_SETTINGS: PlanSettings = { perDay: 3 };
 export const PER_DAY_RANGE = { min: 1, max: 6 } as const;
-export const limitsOf = (s: PlanSettings): PublishLimits => ({ min: Math.min(s.min, s.perDay), max: s.perDay });
+/** 날짜 묶음 방식의 발행 조건: 1건 이상이면 되고(최소 건수 없음), 하루 6건까지 */
+export const PLAN_LIMITS: PublishLimits = { min: 1, max: PER_DAY_RANGE.max };
 
-/** 대기함: 날짜가 이 값인 묶음 하나. 절대 발행되지 않고, 날짜로 다루지 않는다 */
+/** 날짜 미정: 날짜가 이 값인 묶음 하나. 날짜에서 뺀 논문이 머문다. 절대 발행되지 않고, 날짜로 다루지 않는다 */
 export const QUEUE_DATE = "9999-12-31";

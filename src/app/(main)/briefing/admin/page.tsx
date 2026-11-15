@@ -14,7 +14,7 @@ export default async function BriefingAdminPage() {
   const { isAdmin } = await getSessionProfile();
   if (!isAdmin) redirect("/dashboard");
 
-  // 대기함 방식(supabase/migrate-briefing-planner.sql)을 켰으면 새 화면. 데이터는 화면이 뜬 뒤 한 번만 읽는다.
+  // 새 올리기 화면(supabase/migrate-briefing-planner.sql)을 켰으면 그 화면. 데이터는 화면이 뜬 뒤 한 번만 읽는다.
   const config = await loadPlanConfig(await createClient());
   if (config.ready) return <BriefingPlanner />;
 

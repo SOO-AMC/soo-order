@@ -8,7 +8,7 @@ import { loadPlanConfig } from "@/lib/briefing/plan-sync";
 export const metadata: Metadata = { title: "논문 브리핑 관리" };
 export const dynamic = "force-dynamic";
 
-/** 날짜별 작업 화면: 그날의 논문을 고치고, 카드를 만들고, 검수한다. 날짜가 9999-12-31 이면 대기함(검수 전 논문) */
+/** 날짜별 작업 화면: 그날의 논문을 고치고, 카드를 만들고, 검수한다. 날짜가 9999-12-31 이면 날짜 미정 논문 */
 export default async function BriefingIssuePage({
   params,
   searchParams,

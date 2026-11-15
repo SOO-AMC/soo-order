@@ -22,7 +22,7 @@ import type { BriefingIssue, IssueStatus, PublishLimits } from "@/lib/briefing/t
 /**
  * 발행 패널 (관리자 작업 화면 왼쪽 아래).
  * 초안 → 08:30 예약 → 발행 완료. 조건(검수 완료 건수가 범위 안)이 안 맞으면 버튼 대신 이유를 보여 준다.
- * 대기함 방식(planReady)에서는 예약을 앱이 한다 → 예약·예약 취소 버튼이 없고 "지금 발행"·"발행 취소"만 있다.
+ * 자동 예약(planReady)에서는 예약을 앱이 한다 → 예약·예약 취소 버튼이 없고 "지금 발행"·"발행 취소"만 있다.
  * 알림 상태는 발행 상태와 따로 보여 준다. 네이버웍스는 보낼 내용 미리보기만(전송 안 함).
  */
 export function PublishPanel({
@@ -48,7 +48,7 @@ export function PublishPanel({
   disabled: boolean;
   /** 하루 건수 범위 (설정) */
   limits: PublishLimits;
-  /** 대기함·자동 배정을 쓰는 중인가 */
+  /** 자동 예약을 쓰는 중인가 */
   planReady: boolean;
   onIssueChange: (issue: BriefingIssue) => void;
 }) {
@@ -201,7 +201,7 @@ export function PublishPanel({
           </Button>
         </div>
       ) : null}
-      {status === "published" && <p className="mt-2 text-xs text-muted-foreground">카드의 글(오타)은 발행을 취소하지 않고 고칠 수 있어요.{planReady ? " 발행을 취소하면 이 논문들은 다음 발행일로 넘어가요." : ""}</p>}
+      {status === "published" && <p className="mt-2 text-xs text-muted-foreground">카드의 글(오타)은 발행을 취소하지 않고 고칠 수 있어요.</p>}
       {planReady && status !== "published" && <p className="mt-2 text-xs text-muted-foreground">예약은 자동이에요. 그날 논문이 모두 검수되면 08:30 발행이 예약돼요.</p>}
 
       {error && (
@@ -274,7 +274,7 @@ export function PublishPanel({
             <DialogTitle>{confirm === "unpublish" ? "발행을 취소할까요?" : "지금 발행할까요?"}</DialogTitle>
             <DialogDescription>
               {confirm === "unpublish"
-                ? `직원 화면과 라운딩 화면에서 바로 사라져요. 이미 나간 알림은 되돌릴 수 없고, 다시 발행해도 이 날짜 알림은 또 나가지 않아요.${planReady ? " 취소한 논문들은 다음 발행일부터 다시 들어가요. 오타만 고치려면 취소하지 말고 \"오타 고치기\"를 쓰세요." : ""}`
+                ? `직원 화면과 라운딩 화면에서 바로 사라져요. 이미 나간 알림은 되돌릴 수 없고, 다시 발행해도 이 날짜 알림은 또 나가지 않아요.${planReady ? " 논문은 이 날짜에 그대로 남아요. 오타만 고치려면 취소하지 말고 \"오타 고치기\"를 쓰세요." : ""}`
                 : `논문 ${publish.ok ? publish.paperCount : paperCount}건이 직원에게 바로 보여요. ${
                     panel?.config.internalLive ? "직원 알림함에 알림 1건이 가요." : "테스트 모드라 직원 알림은 보내지 않고 기록만 남겨요."
                   } 네이버웍스로는 보내지 않아요.`}

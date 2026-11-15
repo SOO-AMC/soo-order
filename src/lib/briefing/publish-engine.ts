@@ -9,7 +9,7 @@ import { QUEUE_DATE, type BriefingIssue, type BriefingPaper, type PublishLimits 
  * 저장소(PublishStore)만 바꿔 끼우면 실제 DB로도, 테스트용 메모리로도 똑같이 돈다.
  *
  * 지키는 것:
- *  - 검수 완료 건수가 범위(opts.limits — 설정의 하루 건수, 없으면 예전 규칙 3~4건) 안일 때만 발행한다. 조건이 안 맞으면 골라서 내보내지 않고 이유를 돌려준다.
+ *  - 그날 논문이 전부 검수돼 있고 건수가 범위(opts.limits — 날짜 묶음 방식은 1~6건, 없으면 예전 규칙 3~4건) 안일 때만 발행한다. 조건이 안 맞으면 골라서 내보내지 않고 이유를 돌려준다.
  *  - 같은 날짜는 한 번만 발행된다 (상태를 조건부로 바꾼다 — 먼저 바꾼 쪽만 "내가 발행했다").
  *  - 알림은 채널마다 하루 한 번 (delivery_key 유니크). 여러 번·동시에 돌려도 한 번만 나간다.
  *  - 발행이 끝난 뒤에만 알림을 만든다.
@@ -126,8 +126,8 @@ export async function deliverNotifications(store: PublishStore, issue: EngineIss
 export async function publishIssue(store: PublishStore, issueId: string, opts: EngineOptions): Promise<PublishOutcome> {
   const issue = await store.getIssue(issueId);
   if (!issue) return { ok: false, reasons: ["발행 묶음을 찾지 못했어요."] };
-  // 대기함은 발행하는 묶음이 아니다
-  if (issue.issue_date === QUEUE_DATE) return { ok: false, reasons: ["대기함은 발행할 수 없어요."] };
+  // 날짜 미정 묶음은 발행하는 묶음이 아니다
+  if (issue.issue_date === QUEUE_DATE) return { ok: false, reasons: ["날짜가 정해지지 않은 논문은 발행할 수 없어요."] };
   const papers = await store.listPapers(issueId);
   const check = checkPublishable(papers, opts.limits);
   if (!check.ok) return { ok: false, reasons: check.reasons };
@@ -202,7 +202,7 @@ export const STOCK_LOW_DAYS = 2;
 
 /**
  * 내일부터 예약돼 있는 날이 STOCK_LOW_DAYS 보다 적으면 관리자에게 하루 한 번 알린다.
- * (대기함 방식을 쓸 때만 부른다. 대기함 묶음이 없으면 = 아직 한 번도 안 썼으면 알리지 않는다)
+ * (날짜 묶음 자동 예약을 쓸 때만 부른다. 알림 기록을 매달 날짜 미정 묶음이 없으면 알리지 않는다)
  * 돌려주는 값: 알렸으면 남은 날 수, 아니면 null
  */
 export async function warnIfStockLow(store: PublishStore, opts: EngineOptions): Promise<number | null> {

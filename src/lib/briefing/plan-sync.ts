@@ -1,12 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { defaultIssueDate, kstDate } from "./kst";
-import { buildPlan, planChanges, type CurrentIssue, type Plan, type PlanPaper } from "./planner";
-import { DEFAULT_PLAN_SETTINGS, LEGACY_LIMITS, PER_DAY_RANGE, QUEUE_DATE, limitsOf, type PlanSettings, type PublishLimits } from "./types";
+import { kstDate } from "./kst";
+import { planChanges, settlePlan, type CurrentIssue, type Plan, type PlanMove, type PlanPaper } from "./planner";
+import { DEFAULT_PLAN_SETTINGS, LEGACY_LIMITS, PER_DAY_RANGE, PLAN_LIMITS, QUEUE_DATE, type PlanSettings, type PublishLimits } from "./types";
 
 /**
- * 논문 브리핑 배치를 DB 에 맞춘다 ("use server" 밖 — 액션들이 같이 쓴다).
+ * 논문 브리핑 날짜 묶음의 예약 상태를 DB 에 맞춘다 ("use server" 밖 — 액션들이 같이 쓴다).
  *
  * 관리자가 논문을 올리고·검수하고·지우고·옮길 때마다, 그리고 관리 화면을 열 때 부른다.
+ * 논문은 스스로 옮기지 않는다 — moves 로 시킨 것만 옮긴다. 그날 논문이 전부 검수돼 있으면 08:30 예약, 아니면 초안.
  * 계산은 planner.ts(순수 함수)가 하고, 여기서는 지금 상태를 읽고 → 바뀐 것만 briefing_apply_plan() 으로 한 번에 적용한다.
  *
  * supabase/migrate-briefing-planner.sql 을 아직 실행하지 않았으면 ready=false 로 돌려주고 아무것도 하지 않는다
@@ -33,14 +34,12 @@ export type PlanConfig = {
 };
 
 export async function loadPlanConfig(sb: SupabaseClient): Promise<PlanConfig> {
-  const { data, error } = await sb.from("briefing_settings").select("papers_per_day, min_papers").maybeSingle();
+  const { data, error } = await sb.from("briefing_settings").select("papers_per_day").maybeSingle();
   if (error) {
     if (!isMissing(error)) console.error("[briefing] 설정 조회 실패:", error.message);
     return { ready: false, settings: DEFAULT_PLAN_SETTINGS, limits: LEGACY_LIMITS };
   }
-  const perDay = clamp(data?.papers_per_day, DEFAULT_PLAN_SETTINGS.perDay);
-  const settings = { perDay, min: Math.min(clamp(data?.min_papers, perDay), perDay) };
-  return { ready: true, settings, limits: limitsOf(settings) };
+  return { ready: true, settings: { perDay: clamp(data?.papers_per_day, DEFAULT_PLAN_SETTINGS.perDay) }, limits: PLAN_LIMITS };
 }
 
 export type SyncResult = {
@@ -57,7 +56,7 @@ type IssueRow = { id: string; issue_date: string; status: "draft" | "scheduled" 
 
 export async function syncPlan(
   sb: SupabaseClient,
-  opts: { now?: Date; /** 발행 예정 논문의 순서를 직접 정한다 (옮기기) */ order?: string[]; /** "오늘 것 지금 발행": 08:30이 지났어도 오늘부터 채운다 */ startToday?: boolean; config?: PlanConfig } = {},
+  opts: { now?: Date; /** 논문을 다른 날짜·자리로 옮긴다 (관리자가 시킨 것만) */ moves?: PlanMove[]; config?: PlanConfig } = {},
 ): Promise<SyncResult> {
   const now = opts.now ?? new Date();
   const config = opts.config ?? (await loadPlanConfig(sb));
@@ -73,6 +72,8 @@ export async function syncPlan(
   const issues = (issueRows as IssueRow[] | null) ?? [];
   const isLocked = (i: IssueRow) => i.status === "published" || (i.status === "scheduled" && !!i.scheduled_at && new Date(i.scheduled_at).getTime() <= now.getTime());
   const lockedDates = new Set(issues.filter(isLocked).map((i) => i.issue_date));
+  // 잠긴 날짜(발행됨·이미 보임)로는 옮기지 않는다
+  if ((opts.moves ?? []).some((m) => lockedDates.has(m.date))) return { ready: true, changed: false, error: "locked", config };
   const open = issues.filter((i) => !isLocked(i));
   const dateOf = new Map(open.map((i) => [i.id, i.issue_date]));
 
@@ -96,14 +97,7 @@ export async function syncPlan(
     }));
   }
 
-  const plan = buildPlan({
-    papers,
-    settings: config.settings,
-    startDate: opts.startToday ? today : defaultIssueDate(now),
-    lockedDates,
-    now,
-    order: opts.order,
-  });
+  const plan = settlePlan({ papers, now, moves: opts.moves });
   const current: CurrentIssue[] = open.map((i) => ({ date: i.issue_date, status: i.status as "draft" | "scheduled", scheduledAt: i.scheduled_at }));
   const changes = planChanges(papers, current, plan);
   if (changes.items.length === 0 && changes.days.length === 0) return { ready: true, changed: false, plan, config };

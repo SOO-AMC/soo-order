@@ -18,8 +18,8 @@ import { MAX_PAPERS, QUEUE_DATE, type BriefingIssue, type BriefingPaper, type Is
  *  - 저장에 필요한 값은 요약 글(raw_summary_text) 하나뿐.
  *  - 논문 1건에 카드는 1장. 다시 만들면 이전 카드를 previous_card_content 에 한 번 보관한다.
  *  - 만들기가 실패해도 원본 글과 기존 카드는 그대로 둔다.
- *  - 논문이 바뀔 때마다 settle() 로 날짜 배치를 다시 맞춘다 (lib/briefing/plan-sync.ts).
- *    배치 기능을 켜기 전(migrate-briefing-planner.sql 미실행)에는 예전처럼 그 날짜 묶음의 예약 상태만 살핀다.
+ *  - 논문이 바뀔 때마다 settle() 로 날짜 묶음의 예약 상태를 다시 맞춘다 (lib/briefing/plan-sync.ts).
+ *    자동 예약을 켜기 전(migrate-briefing-planner.sql 미실행)에는 예전처럼 깨진 예약만 초안으로 되돌린다.
  */
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -65,10 +65,10 @@ async function issueInfo(supabase: Sb, issueId: string): Promise<IssueInfo> {
 }
 /** 직원에게 이미 보이는 묶음인가 (발행 완료, 또는 예약 시각이 지난 예약) */
 const isLive = (info: IssueInfo) => !!info && isIssueVisible({ status: info.status as BriefingIssue["status"], scheduled_at: info.scheduled_at });
-/** 대기함에 있고 검수 전인 논문은 날짜 배치와 무관하다 → 배치를 다시 맞추지 않아도 된다 */
+/** 날짜 미정이고 검수 전인 논문은 어느 날의 예약과도 무관하다 → 예약 상태를 다시 맞추지 않아도 된다 */
 const isQuiet = (info: IssueInfo, paper: Pick<BriefingPaper, "review_status">) => info?.issue_date === QUEUE_DATE && paper.review_status !== "reviewed";
 
-/** 논문이 바뀐 뒤: 날짜 배치를 다시 맞춘다. 배치 기능을 켜기 전이면 예전 방식(그 묶음의 예약 상태만 확인) */
+/** 논문이 바뀐 뒤: 날짜 묶음의 예약 상태를 다시 맞춘다(전부 검수됐으면 08:30 예약, 아니면 초안). 켜기 전이면 예전 방식 */
 async function settle(supabase: Sb, issueId: string, quiet = false): Promise<void> {
   if (quiet) return;
   const r = await syncPlan(supabase);
@@ -145,12 +145,12 @@ export async function addPaper(issueDate: string, rawText: string): Promise<Acti
   const isQueue = issueDate === QUEUE_DATE;
   if (!isQueue) {
     const config = await loadPlanConfig(supabase);
-    const cap = config.ready ? config.settings.perDay : MAX_PAPERS;
+    const cap = config.ready ? config.limits.max : MAX_PAPERS;
     if (count >= cap) {
       return {
         ok: false,
         error: config.ready
-          ? `이 날짜는 ${cap}건이 다 찼어요. 대기함에 올리면 다음 빈 날짜에 자동으로 들어가요.`
+          ? `하루에 논문 ${cap}건까지만 넣을 수 있어요. 다른 날짜에 넣어 주세요.`
           : `하루에 논문 ${MAX_PAPERS}건까지만 넣을 수 있어요. 다른 날짜에 넣어 주세요.`,
       };
     }

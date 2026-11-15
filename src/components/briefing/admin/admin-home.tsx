@@ -28,7 +28,7 @@ export function BriefingAdminHome({
   /** 새 논문의 기본 발행일 */
   nextDate: string;
   loadError: boolean;
-  /** 대기함 방식을 아직 켜지 않았다는 안내를 보여 준다 */
+  /** 새 올리기 화면을 아직 켜지 않았다는 안내를 보여 준다 */
   setupNotice?: boolean;
 }) {
   return (
@@ -60,7 +60,7 @@ export function BriefingAdminHome({
       <div className="mx-auto max-w-md space-y-3 p-4 md:max-w-2xl lg:max-w-4xl lg:px-6">
         {setupNotice && (
           <p className="rounded-xl bg-status-ask-bg px-4 py-3 text-[13px] leading-5 text-status-ask">
-            <b className="font-semibold">대기함·자동 배정을 아직 켜지 않았어요.</b> Supabase SQL Editor에서 <code className="font-mono">supabase/migrate-briefing-planner.sql</code>을 실행하면, 여러 건을 한 번에 올리고 검수만 하면 날짜가 자동으로 채워지는 화면으로 바뀌어요. 그 전까지는 지금처럼 날짜를 골라 넣어요.
+            <b className="font-semibold">새 올리기 화면을 아직 켜지 않았어요.</b> Supabase SQL Editor에서 <code className="font-mono">supabase/migrate-briefing-planner.sql</code>을 실행하면, 날짜를 정해 여러 건을 한 번에 올리고 검수만 하면 발행이 자동으로 예약되는 화면으로 바뀌어요.
           </p>
         )}
         <p className="rounded-xl bg-status-doing-bg px-4 py-3 text-[13px] leading-5 text-status-doing">

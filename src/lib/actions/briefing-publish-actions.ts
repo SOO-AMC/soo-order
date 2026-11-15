@@ -58,7 +58,7 @@ export async function scheduleIssue(issueId: string): Promise<PublishActionResul
   const issue = await loadIssue(supabase, issueId);
   if (!issue) return { ok: false, error: "발행 묶음을 찾지 못했어요." };
   if (issue.status === "published") return { ok: false, error: "이미 발행된 묶음이에요." };
-  if (issue.issue_date === QUEUE_DATE) return { ok: false, error: "대기함은 발행할 수 없어요." };
+  if (issue.issue_date === QUEUE_DATE) return { ok: false, error: "날짜가 정해지지 않은 논문은 발행할 수 없어요." };
   const check = checkPublishable(await loadPapers(supabase, issueId), (await loadPlanConfig(supabase)).limits);
   if (!check.ok) return { ok: false, error: "아직 발행할 수 없어요.", reasons: check.reasons };
   if (isPastPublishTime(issue.issue_date)) {
@@ -131,7 +131,7 @@ export async function unpublishIssue(issueId: string): Promise<PublishActionResu
   if (!data) return { ok: false, error: "발행 상태가 아니에요. 화면을 새로 고쳐 주세요." };
   const issue = data as BriefingIssue;
   void logActivity({ userId, userName, category: "briefing", action: "unpublish_issue", description: `${issue.issue_date} 브리핑 발행 취소` });
-  // 대기함 방식이면 취소한 논문들이 다음 발행일부터 다시 채워진다
+  // 논문은 그 날짜에 그대로 남는다. 08:30 전이면 다시 자동 예약되고, 지났으면 "지금 발행"을 눌러야 나간다
   await syncPlan(supabase);
   touch(issue.issue_date);
   return { ok: true, data: issue };
@@ -171,7 +171,7 @@ export async function fetchPublishPanel(issueId: string): Promise<PublishPanelDa
 
 export type BriefingSettingsData = {
   config: BriefingRuntimeConfig;
-  /** 하루 발행 건수 설정. planReady=false 면 아직 바꿀 수 없다(SQL 미실행) */
+  /** 올리기 설정(기본 논문 칸 수). planReady=false 면 아직 바꿀 수 없다(SQL 미실행) */
   plan: PlanSettings;
   planReady: boolean;
   /** 서버가 보는 지금 시각 (ISO, UTC) */

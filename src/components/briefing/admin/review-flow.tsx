@@ -12,7 +12,8 @@ import { deletePaper, generatePaperCard, saveCardEdit, setPaperReviewed } from "
 import { checkFidelity } from "@/lib/briefing/fidelity";
 import { DUP_REASON_LABEL, type DupHit } from "@/lib/briefing/planner";
 import type { PaperCardContent } from "@/lib/briefing/schema";
-import type { BriefingPaper } from "@/lib/briefing/types";
+import { formatIssueDate } from "@/lib/briefing/kst";
+import { QUEUE_DATE, type BriefingPaper } from "@/lib/briefing/types";
 
 /** 카드를 어떤 모양으로 볼지. all = PC·라운딩·모바일을 한 화면에 같이 */
 type View = "all" | CardVariant;
@@ -37,12 +38,12 @@ function Preview({ label, children, className }: { label: string; children: Reac
 }
 
 /**
- * 넘기면서 검수 (대기함 논문을 한 장씩).
+ * 넘기면서 검수 (검수 전 논문을 한 장씩).
  *
  * 왼쪽에 카드, 오른쪽에 원문과 "원문과 다를 수 있는 곳". 검수 완료를 누르면 다음 논문으로 넘어간다.
  * 카드는 직원이 실제로 보게 될 세 가지 모양(PC·모바일·라운딩 대기 화면)으로 같이 보여 준다 — 한 가지만 크게 볼 수도 있다(고른 보기는 이 PC에 기억).
  * 검수 완료 버튼에 포커스가 있어서 Enter 만 눌러도 된다. ← → 로 앞뒤 논문을 볼 수 있다.
- * 검수한 논문은 닫을 때가 아니라 누르는 즉시 발행 예정에 들어간다(서버가 날짜를 정한다).
+ * 검수는 누르는 즉시 저장된다. 그날 논문이 전부 검수되면 서버가 08:30 발행을 예약한다.
  */
 export function ReviewFlow({
   papers,
@@ -51,17 +52,17 @@ export function ReviewFlow({
   perDay,
   onClose,
 }: {
-  /** 대기함 논문 (순서대로) */
-  papers: BriefingPaper[];
+  /** 검수 전 논문 (날짜순). issue_date 가 있으면 어느 날짜 것인지 보여 준다 */
+  papers: (BriefingPaper & { issue_date?: string })[];
   /** 이 논문부터 본다 (없으면 처음부터) */
   startId?: string | null;
   duplicates: Record<string, DupHit>;
-  /** 하루 발행 건수 — 라운딩 미리보기의 "01 / 03" 표시에 쓴다 */
+  /** 라운딩 미리보기의 "01 / 03" 표시에 쓸 총 건수 (실제 순번은 발행 때 정해진다) */
   perDay: number;
   /** 닫힐 때. changed = 무엇이든 바뀌었는가 (목록을 다시 읽어야 한다) */
   onClose: (changed: boolean) => void;
 }) {
-  const [list, setList] = useState<BriefingPaper[]>(papers);
+  const [list, setList] = useState<(BriefingPaper & { issue_date?: string })[]>(papers);
   const [idx, setIdx] = useState(() => Math.max(0, papers.findIndex((p) => p.id === startId)));
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -110,7 +111,7 @@ export function ReviewFlow({
     setIdx((i) => Math.min(i, Math.max(0, rest.length - 1)));
     setChanged(true);
   };
-  const replace = (p: BriefingPaper) => setList((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+  const replace = (p: BriefingPaper) => setList((prev) => prev.map((x) => (x.id === p.id ? { ...p, issue_date: x.issue_date } : x)));
 
   const approve = () =>
     run("approve", async () => {
@@ -167,6 +168,9 @@ export function ReviewFlow({
               {Math.min(idx, total - 1) + 1} / {total}
             </span>
           )}
+          {current?.issue_date && (
+            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[13px] font-semibold tabular-nums text-primary">{current.issue_date === QUEUE_DATE ? "날짜 미정" : `${formatIssueDate(current.issue_date)} 발행분`}</span>
+          )}
           {done > 0 && <span className="text-[13px] font-medium text-status-done">검수 {done}건 완료</span>}
           <DialogDescription className="sr-only">카드와 원문을 비교하고 검수 완료를 누르면 다음 논문으로 넘어가요. Enter 로 검수 완료, 좌우 화살표로 앞뒤 논문을 봐요.</DialogDescription>
           <div className="ml-auto inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-border" role="group" aria-label="카드 보기">
@@ -192,7 +196,7 @@ export function ReviewFlow({
             <div>
               <CheckCircle2 className="mx-auto size-9 text-status-done" />
               <p className="mt-3 text-lg font-bold">{done > 0 ? `${done}건을 검수했어요` : "검수할 논문이 없어요"}</p>
-              <p className="mt-1 text-sm text-muted-foreground">검수한 논문은 다음 발행일부터 차례로 들어가요.</p>
+              <p className="mt-1 text-sm text-muted-foreground">그날 논문이 모두 검수되면 08:30 발행이 예약돼요.</p>
               <Button className="mt-5 h-11 rounded-xl px-6 font-bold" autoFocus onClick={() => onClose(changed)}>
                 닫기
               </Button>
@@ -212,7 +216,8 @@ export function ReviewFlow({
                         <PaperCard key={`${k}-d`} card={card} variant="desktop" />
                       </FitWidth>
                     );
-                    const rounding = <PaperCard key={`${k}-r`} card={card} variant="rounding" rounding={{ dateLabel: "발행일 미정", index: 0, total: perDay }} className="rounded-lg" />;
+                    const dated = !!current.issue_date && current.issue_date !== QUEUE_DATE;
+                    const rounding = <PaperCard key={`${k}-r`} card={card} variant="rounding" rounding={{ dateLabel: dated ? formatIssueDate(current.issue_date!) : "발행일 미정", index: 0, total: perDay }} className="rounded-lg" />;
                     const mobile = <PaperCard key={`${k}-m`} card={card} variant="mobile" className="w-full max-w-[380px]" />;
                     if (view === "desktop") return <Preview label="PC 화면">{desktop}</Preview>;
                     if (view === "rounding") return <Preview label="라운딩 대기 화면 (세미나실)">{rounding}</Preview>;

@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
@@ -45,7 +44,6 @@ import { PublishPanel } from "@/components/briefing/admin/publish-panel";
 import {
   addPaper,
   deletePaper,
-  fetchIssueByDate,
   generatePaperCard,
   reorderPapers,
   restorePreviousCard,
@@ -77,9 +75,9 @@ const metaOf = (p?: BriefingPaper): Meta => ({
  * "새 논문 추가" = 논문 1건(글상자 1개) 추가. 같은 논문에 장을 더하는 기능은 없다.
  * 아래 썸네일은 그날의 서로 다른 논문이다.
  *
- * 대기함 방식(planReady)일 때:
- *  - 날짜가 QUEUE_DATE 이면 대기함(검수 전 논문) — 발행 패널이 없고, 검수 완료한 논문은 목록에서 빠져 발행 예정으로 간다.
- *  - 날짜 묶음의 논문 구성은 서버가 다시 채운다(지우면 뒤 날짜의 논문이 당겨진다) → 지운 뒤에는 목록을 다시 읽는다.
+ * 자동 예약(planReady)일 때:
+ *  - 그날 논문이 전부 검수되면 서버가 08:30 발행을 예약한다 → 예약·예약 취소 버튼이 없다.
+ *  - 날짜가 QUEUE_DATE 이면 "날짜 미정" 논문 — 발행 패널이 없다. 날짜는 관리 첫 화면에서 정한다.
  *  - 발행된 논문도 카드의 글은 고칠 수 있다(오타).
  */
 export function IssueWorkspace({
@@ -100,7 +98,6 @@ export function IssueWorkspace({
   /** 대기함·자동 배정을 쓰는 중인가 */
   planReady: boolean;
 }) {
-  const router = useRouter();
   const isQueue = issueDate === QUEUE_DATE;
   const [issue, setIssue] = useState<BriefingIssue | null>(initialIssue);
   const [papers, setPapers] = useState<BriefingPaper[]>(initialIssue?.papers ?? []);
@@ -274,15 +271,6 @@ export function IssueWorkspace({
         setError(res.error);
         return;
       }
-      if (isQueue && planReady && reviewed) {
-        // 검수한 논문은 서버가 다음 발행일로 옮긴다 → 대기함 목록에서 뺀다
-        const rest = papers.filter((p) => p.id !== current.id);
-        setPapers(rest);
-        clearDraft(current.id);
-        setSelected(rest[0]?.id ?? NEW);
-        setNotice("검수 완료 — 다음 발행일에 자동으로 들어갔어요.");
-        return;
-      }
       replacePaper(res.data);
     });
 
@@ -315,12 +303,7 @@ export function IssueWorkspace({
         setError(res.error);
         return;
       }
-      let rest = papers.filter((p) => p.id !== current.id);
-      if (planReady && !isQueue) {
-        // 지운 자리에 뒤 날짜의 논문이 당겨져 들어온다 → 이 날짜의 논문을 다시 읽는다
-        const fresh = await fetchIssueByDate(issueDate).catch(() => null);
-        if (fresh) rest = fresh.papers;
-      }
+      const rest = papers.filter((p) => p.id !== current.id);
       setPapers(rest);
       clearDraft(current.id);
       setSelected(rest[0]?.id ?? NEW);
@@ -353,7 +336,7 @@ export function IssueWorkspace({
     <>
       <PageHeader
         title="논문 브리핑 관리"
-        description={isQueue ? "대기함 · 검수 전 논문" : `${dateLabel} 발행분 · ${ISSUE_STATUS_LABEL[status]}`}
+        description={isQueue ? "날짜 미정 논문" : `${dateLabel} 발행분 · ${ISSUE_STATUS_LABEL[status]}`}
         leading={<BackButton fallbackHref="/briefing/admin" />}
         action={
           isQueue ? undefined : (
@@ -377,7 +360,7 @@ export function IssueWorkspace({
         {/* ───────── 왼쪽: 글 붙여넣기 ───────── */}
         <section className="flex min-w-0 flex-col gap-3">
           {/* 논문 탭 = 그날의 서로 다른 논문 */}
-          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label={isQueue ? "대기함 논문" : "이 날짜의 논문"}>
+          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label={isQueue ? "날짜 미정 논문" : "이 날짜의 논문"}>
             {papers.map((p, i) => (
               <button
                 key={p.id}
@@ -412,7 +395,7 @@ export function IssueWorkspace({
                 <Plus className="size-4" /> 새 논문 추가
               </button>
             )}
-            {!canAddMore && <span className="px-1 text-[13px] text-muted-foreground">하루 {limits.max}건까지예요{planReady ? " · 더 올릴 논문은 대기함에" : ""}</span>}
+            {!canAddMore && <span className="px-1 text-[13px] text-muted-foreground">하루 {limits.max}건까지예요</span>}
           </div>
 
           <div className="rounded-xl bg-card p-5 ring-1 ring-border">
@@ -528,7 +511,7 @@ export function IssueWorkspace({
 
           {isQueue ? (
             <p className="rounded-xl bg-muted px-4 py-3 text-[13px] text-subtle-foreground">
-              대기함의 논문은 검수를 마치면 다음 발행일부터 차례로 들어가요. 날짜는 <Link href="/briefing/admin" className="font-semibold text-primary hover:underline">관리 첫 화면</Link>에서 순서를 바꿔 조정해요.
+              날짜가 정해지지 않은 논문이에요. 발행하려면 <Link href="/briefing/admin" className="font-semibold text-primary hover:underline">관리 첫 화면</Link>의 &quot;날짜 미정&quot;에서 날짜를 정해 주세요.
             </p>
           ) : (
             /* 발행: 예약 · 지금 발행 · 취소 + 알림 상태 */
@@ -542,12 +525,7 @@ export function IssueWorkspace({
               disabled={!!busy || textDirty || metaDirty}
               limits={limits}
               planReady={planReady}
-              onIssueChange={(next) => {
-                const wasPublished = issue?.status === "published";
-                setIssue(next);
-                // 대기함 방식에서 발행을 취소하면 논문들이 다음 발행일로 넘어간다 → 이 화면의 목록은 낡았으니 첫 화면으로
-                if (planReady && wasPublished && next.status !== "published") router.push("/briefing/admin");
-              }}
+              onIssueChange={setIssue}
             />
           )}
         </section>
@@ -628,7 +606,7 @@ export function IssueWorkspace({
             <p className="text-xs font-medium text-status-late">마지막 만들기가 실패했어요. {card ? "이전 카드가 그대로 보여요." : "다시 눌러 주세요."}</p>
           )}
 
-          {/* 그날의 논문 썸네일 (논문 수만큼). 대기함은 날짜 묶음이 아니고 논문이 많을 수 있어 보여 주지 않는다 */}
+          {/* 그날의 논문 썸네일 (논문 수만큼). 날짜 미정은 날짜 묶음이 아니라 보여 주지 않는다 */}
           {total > 0 && !isQueue && (
             <div>
               <div className="flex items-center justify-between">
