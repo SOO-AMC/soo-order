@@ -9,6 +9,7 @@ import { PUBLISH_HOUR, PUBLISH_MINUTE, formatIssueDate, formatKstDateTime } from
 import { DEFAULT_INTERVAL, MAX_INTERVAL, MIN_INTERVAL } from "@/lib/briefing/rounding-loop";
 import { MAX_PAPERS, MIN_PAPERS } from "@/lib/briefing/types";
 import { PlanSettingsForm } from "@/components/briefing/admin/plan-settings-form";
+import { NaverWorksTestButton } from "@/components/briefing/admin/naverworks-test-button";
 
 const publishTime = `${String(PUBLISH_HOUR).padStart(2, "0")}:${String(PUBLISH_MINUTE).padStart(2, "0")}`;
 
@@ -57,6 +58,13 @@ export function BriefingSettings({ data }: { data: BriefingSettingsData | null }
                 </div>
               </section>
             )}
+
+            <section>
+              <h2 className="mb-2 px-1 text-[13px] font-semibold text-subtle-foreground">네이버웍스 알림 시험</h2>
+              <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border">
+                <NaverWorksTestButton />
+              </div>
+            </section>
 
             <Group title="운영 규칙 (고정)">
               <Row label="발행 시각" value={`매일 ${publishTime} · 한국시간(Asia/Seoul)`} hint="주말 포함. 예약한 브리핑은 이 시각부터 직원에게 보여요." />

@@ -52,29 +52,31 @@ export function serviceAccountJwt(cfg: DirectoryConfig, nowSec = Math.floor(Date
   return `${head}.${body}.${sig}`;
 }
 
-let cached: { token: string; until: number; key: string } | null = null;
+const cached = new Map<string, { token: string; until: number }>();
 
-async function accessToken(cfg: DirectoryConfig, fetchImpl: typeof fetch): Promise<string> {
-  const key = `${cfg.clientId}|${cfg.serviceAccount}`;
-  if (cached && cached.key === key && cached.until > Date.now() + 60_000) return cached.token;
+/** 서비스 계정 토큰 (권한 범위별로 따로 받아 만료 전까지 재사용) */
+export async function serviceToken(cfg: DirectoryConfig, scope: string, fetchImpl: typeof fetch = fetch): Promise<string> {
+  const key = `${cfg.clientId}|${cfg.serviceAccount}|${scope}`;
+  const hit = cached.get(key);
+  if (hit && hit.until > Date.now() + 60_000) return hit.token;
   const form = new URLSearchParams({
     assertion: serviceAccountJwt(cfg),
     grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
     client_id: cfg.clientId,
     client_secret: cfg.clientSecret,
-    scope: "user.read",
+    scope,
   });
   const res = await fetchImpl(TOKEN_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form.toString(), cache: "no-store", signal: AbortSignal.timeout(15_000) });
   const body = (await res.json().catch(() => null)) as { access_token?: string; expires_in?: string | number; error?: string } | null;
   if (!res.ok || !body?.access_token) throw new Error(`directory-token-${res.status}${body?.error ? `-${body.error}` : ""}`);
   const ttl = Number(body.expires_in ?? 3600);
-  cached = { token: body.access_token, until: Date.now() + (Number.isFinite(ttl) ? ttl : 3600) * 1000, key };
+  cached.set(key, { token: body.access_token, until: Date.now() + (Number.isFinite(ttl) ? ttl : 3600) * 1000 });
   return body.access_token;
 }
 
 /** 직원 한 명 (이메일 또는 구성원 ID). 없으면 null */
 export async function getDirectoryUser(cfg: DirectoryConfig, idOrEmail: string, fetchImpl: typeof fetch = fetch): Promise<DirUser | null> {
-  const token = await accessToken(cfg, fetchImpl);
+  const token = await serviceToken(cfg, "user.read", fetchImpl);
   const res = await fetchImpl(`${API}/users/${encodeURIComponent(idOrEmail)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`directory-user-${res.status}`);
@@ -83,7 +85,7 @@ export async function getDirectoryUser(cfg: DirectoryConfig, idOrEmail: string, 
 
 /** 직원 전체 (관리자 연결 화면용). 문서: 한 번에 최대 100명, cursor 로 다음 쪽 */
 export async function listDirectoryUsers(cfg: DirectoryConfig, fetchImpl: typeof fetch = fetch): Promise<DirUser[]> {
-  const token = await accessToken(cfg, fetchImpl);
+  const token = await serviceToken(cfg, "user.read", fetchImpl);
   const out: DirUser[] = [];
   let cursor: string | null = null;
   for (let guard = 0; guard < 50; guard++) {

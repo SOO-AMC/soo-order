@@ -192,6 +192,7 @@ git push origin main  # 배포 (GitHub → Vercel 자동 배포)
 
 - **네이버웍스로 로그인**(OIDC 인가 코드): `/auth/naverworks/start|callback` + `lib/naverworks/{oidc,links,errors}.ts`. 연결 표 `naverworks_links`(`supabase/migrate-naverworks-login.sql`)는 **정책 없음 = 서버(service_role)만** — 클라이언트에서 읽지 말 것. 연결은 (1) 관리자가 직원 관리에 네이버웍스 이메일을 적어 두면 그 직원의 첫 로그인 때 sub 가 붙거나 (2) 본인이 내 계정에서 연결. 이름으로 짐작해 붙이지 않는다. 세션은 service_role `generateLink(magiclink)` → `verifyOtp` 로 서버에서 만든다(토큰은 브라우저로 안 나감). 환경변수 `NAVERWORKS_CLIENT_ID/SECRET`(없으면 버튼 숨김), `NAVERWORKS_TENANT_ID`(서명 확인), `NAVERWORKS_REDIRECT_BASE`(배포). Developer Console 앱 "수오더 로그인"의 Redirect URL 은 https 만 받는다(예외: `http://localhost`) → **개발 시험은 `http://localhost:3002` 로**(192.168.x.x 는 거절됨). 알림 링크는 `notificationLink()` — 로그인돼 있으면 바로, 아니면 로그인 화면 없이 네이버웍스 확인으로. 미들웨어는 로그인 화면으로 보낼 때 `?next=` 를 붙이고 로그인 뒤 그리로 보낸다.
 - **네이버웍스 직원 정보 연동**(선택, `NAVERWORKS_SERVICE_ACCOUNT`+`NAVERWORKS_PRIVATE_KEY`, 앱 scope `user.read`): 연결 안 된 사람이 네이버웍스로 들어오면 대응표 부서 소속일 때 일반 사용자 계정을 자동 생성(같은 이름 계정이 있으면 만들지 않고 관리자 연결 요구), 들어올 때마다 부서로 직책을 맞춘다. 대응표·규칙은 `lib/naverworks/directory-rules.ts`(관리직은 안 바꿈, 인턴수의사 유지, 권한은 안 따라감, 공용 계정 제외). 직원 관리의 "네이버웍스 맞추기"로 기존 계정을 이름 후보로 골라 연결.
+- **네이버웍스 봇**(`NAVERWORKS_BOT_ID`, 앱 scope `bot`): `lib/naverworks/bot.ts`(button_template, 이메일이면 직원 정보로 구성원 ID 를 찾아 1:1). 지금은 논문 브리핑 설정의 "나에게 시험 메시지 보내기"(누른 관리자 본인에게만)만 실제로 보낸다. 봇은 Admin 에서 비공개·사용 권한 1명 — 직원에게 보내려면 공개·권한 전체로 바꾸고(단체방은 Bot 정책 1:N 허용) 발행 엔진의 네이버웍스 mock 을 실제 전송으로 바꿔야 한다. **실제 발송 범위를 넓히는 것은 사용자 승인 후에만.**
 
 ## 상세 규칙
 - `.claude/rules/ui-patterns.md` — 헤더/카드/반응형 패턴
