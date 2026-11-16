@@ -84,6 +84,29 @@ describe("원문에 없는 것을 만들지 않는다", () => {
     expect(card.layoutVariant).toBe("comparison");
   });
 
+  it("\"49%에서 25%로\" 처럼 값이 바뀐 문장은 비교로 만들지 않는다 (\"에서\"를 무리 이름으로 읽지 않는다)", () => {
+    const raw = [
+      "고양이 비대성 심근병증에서 클로피도그렐의 혈전 예방 효과",
+      "동맥 혈전색전증은 고양이 비대성 심근병증의 주요 합병증이다.",
+      "고양이 60마리를 클로피도그렐군과 아스피린군으로 나눠 12개월 추적했다.",
+      "클로피도그렐군의 혈전 재발률이 49%에서 25%로 낮았다.",
+    ].join("\n");
+    const card = designCardByRules(raw);
+    expect(card.blocks.some((b) => b.kind === "comparison")).toBe(false);
+    expect(cardTexts(card).some(({ text }) => / vs |vs 에서/.test(text))).toBe(false);
+    expect(checkFidelity(raw, card)).toEqual([]);
+  });
+
+  it("두 무리 비교는 한글 이름이어도 그대로 비교로 만든다", () => {
+    const raw = "개 아토피 피부염 비교\n가려움 점수 감소율은 치료군 61.5%, 대조군 34.0%였다.";
+    const cmp = designCardByRules(raw).blocks.find((b) => b.kind === "comparison");
+    expect(cmp).toBeDefined();
+    if (cmp?.kind === "comparison") {
+      expect([cmp.leftValue, cmp.rightValue]).toEqual(["61.5%", "34.0%"]);
+      expect(cmp.leftLabel).not.toBe(cmp.rightLabel);
+    }
+  });
+
   it("숫자가 없는 글에서는 숫자·비교 구역을 만들지 않는다", () => {
     const card = designCardByRules(NO_NUMBERS);
     expect(card.blocks.some((b) => b.kind === "metric" || b.kind === "comparison")).toBe(false);

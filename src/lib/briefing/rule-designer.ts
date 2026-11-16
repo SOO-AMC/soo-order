@@ -103,11 +103,18 @@ const LIMIT_HINT = /한계|제한점|제한적|주의가\s*필요|주의해야|�
 const CLINICAL_HINT = /임상적으로|임상에서|진료(에서|에)|권장|권고|고려할\s*(수|만)|고려해|추천|시사|적용할\s*수|보는\s*것이\s*좋|해\s*볼\s*만|의심해|should\s*be\s*considered|clinically|recommend/i;
 const RESULT_HINT = /결과|유의|차이|감소|증가|개선|호전|재발|생존|반응률|관해|감수성|비열등|우월|보였|나타났|확인되|관찰되|%|p\s*[<=>]/i;
 
+/** "49%에서 25%로" — 한 값이 바뀐 것이지 두 무리의 비교가 아니다 */
+const CHANGE = /\d[\d.]*\s?%\s*에서\s*\d[\d.]*\s?%\s*(?:으)?로/;
+/** 무리 이름 자리에 잡히면 안 되는 연결 말 ("49%에서 25%" 의 "에서" 등) */
+const NOT_LABEL = new Set(["에서", "에서는", "으로", "로", "보다", "대비", "및", "와", "과", "그리고", "또는", "이후", "이전"]);
+
 /** "A군 65.4%, B군 69.5%" 처럼 한 문장에 "이름 + 숫자%" 가 정확히 2쌍 있을 때만 비교 구역을 만든다 */
 function findComparison(sentences: string[]): CardBlock | null {
   const PAIR = /([A-Za-z가-힣][A-Za-z가-힣-]{1,24})\s*(?:군|그룹|투여군|치료군)?\s*(?:이|가|은|는|에서|:)?\s*(\d+(?:\.\d+)?\s?%)/g;
   for (const s of sentences) {
+    if (CHANGE.test(s)) continue;
     const pairs = [...s.matchAll(PAIR)];
+    if (pairs.some((p) => NOT_LABEL.has(p[1]))) continue;
     if (pairs.length === 2 && pairs[0][1].toLowerCase() !== pairs[1][1].toLowerCase()) {
       return {
         kind: "comparison",
