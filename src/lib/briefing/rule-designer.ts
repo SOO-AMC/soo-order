@@ -129,11 +129,19 @@ function findComparison(sentences: string[]): CardBlock | null {
   return null;
 }
 
-/** 결과 문장에서 눈에 띄는 숫자 하나 (단위까지 원문 그대로) */
+/** "49%에서 25%로" — 바뀌기 전·후 값 (단위는 원문 그대로) */
+const CHANGE_VALUES = /(\d+(?:[.,]\d+)*\s?%)\s*에서\s*(\d+(?:[.,]\d+)*\s?%)\s*(?:으)?로/;
+
+/** 결과 문장에서 눈에 띄는 숫자 하나 (단위까지 원문 그대로). 값이 바뀐 문장은 "전 → 후" 둘 다 — 앞 값만 크게 보이면 오해한다 */
 function findMetric(sentences: string[]): CardBlock | null {
   const METRIC = /\d+(?:[.,]\d+)*\s?(?:%|마리|명|건|례|배|주|개월|일|mg\/kg|mg|㎎)/;
   for (const s of sentences) {
     if (!RESULT_HINT.test(s)) continue;
+    const c = s.match(CHANGE_VALUES);
+    if (c) {
+      const value = `${c[1].replace(/\s/g, "")} → ${c[2].replace(/\s/g, "")}`;
+      if (value.length <= 28) return { kind: "metric", value, label: "핵심 수치", note: clip(s, 180) };
+    }
     const m = s.match(METRIC);
     if (m) return { kind: "metric", value: m[0].replace(/\s/g, ""), label: "핵심 수치", note: clip(s, 180) };
   }

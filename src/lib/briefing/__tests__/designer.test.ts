@@ -94,6 +94,9 @@ describe("원문에 없는 것을 만들지 않는다", () => {
     const card = designCardByRules(raw);
     expect(card.blocks.some((b) => b.kind === "comparison")).toBe(false);
     expect(cardTexts(card).some(({ text }) => / vs |vs 에서/.test(text))).toBe(false);
+    // 앞 값(49%)만 크게 보이지 않게 전·후를 같이
+    const metric = card.blocks.find((b) => b.kind === "metric");
+    expect(metric?.kind === "metric" && metric.value).toBe("49% → 25%");
     expect(checkFidelity(raw, card)).toEqual([]);
   });
 
