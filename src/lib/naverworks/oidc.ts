@@ -44,27 +44,9 @@ export function nwConfig(env: Record<string, string | undefined> = process.env):
 /** 로그인 버튼을 보여 줄지 (값은 보여 주지 않는다) */
 export const naverWorksLoginEnabled = () => nwConfig() !== null;
 
-/**
- * 로그인 뒤 돌아갈 곳. 이 앱 안의 경로만 받는다(다른 사이트로 보내는 열린 리다이렉트 방지).
- * "/briefing" ○, "//evil.com" ✕, "https://evil.com" ✕, "/\\evil" ✕
- */
-export function safeNext(next: unknown, fallback = "/"): string {
-  if (typeof next !== "string") return fallback;
-  const v = next.trim();
-  if (!v.startsWith("/") || v.startsWith("//") || v.startsWith("/\\") || /[\r\n\t]/.test(v) || v.length > 512) return fallback;
-  if (v.startsWith("/auth/") || v.startsWith("/login")) return fallback;
-  return v;
-}
-
-/**
- * 네이버웍스 알림 메시지에 넣는 링크.
- * 누르면: 이미 수오더에 로그인돼 있으면 바로 그 화면, 아니면 로그인 화면을 건너뛰고 네이버웍스 확인으로 간다 (start 라우트가 처리).
- * baseUrl 이 없으면 경로만 (미리보기용).
- */
-export function notificationLink(path: string, baseUrl?: string | null): string {
-  const origin = (baseUrl ?? "").replace(/\/+$/, "");
-  return `${origin}/auth/naverworks/start?next=${encodeURIComponent(safeNext(path))}`;
-}
+// 순수 함수는 paths.ts 에 (브라우저 화면 코드도 불러오므로 node:crypto 와 떼어 둔다). 기존 import 를 위해 다시 내보낸다.
+import { safeNext } from "./paths";
+export { notificationLink, safeNext } from "./paths";
 
 export const redirectUri = (cfg: NwConfig, requestOrigin: string) => `${cfg.redirectBase ?? requestOrigin.replace(/\/+$/, "")}${CALLBACK_PATH}`;
 

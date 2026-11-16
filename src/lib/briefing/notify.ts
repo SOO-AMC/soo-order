@@ -1,5 +1,5 @@
 import { formatIssueDate } from "./kst";
-import { notificationLink } from "@/lib/naverworks/oidc";
+import { notificationLink } from "@/lib/naverworks/paths";
 
 /**
  * 발행 알림 내용 만들기 (순수 함수 — 테스트 대상).
