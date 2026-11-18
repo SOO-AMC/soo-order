@@ -19,6 +19,25 @@ export function normalizeNwEmail(v: unknown): string | null | undefined {
 
 export const isMissingTable = (msg: string | undefined) => /does not exist|schema cache|PGRST205|42P01/i.test(msg ?? "");
 
+/** 이 사람의 네이버웍스 로그인 아이디 (관리자가 적어 둔 것 → 네이버웍스가 알려 준 것 순). 없거나 읽기 실패면 null */
+export async function loginIdForUser(sb: SupabaseClient, userId: string): Promise<string | null> {
+  const { data, error } = await sb.from(LINK_TABLE).select("nw_login_email, nw_email").eq("user_id", userId).maybeSingle();
+  if (error || !data) return null;
+  return normalizeNwEmail(data.nw_login_email) || normalizeNwEmail(data.nw_email) || null;
+}
+
+/**
+ * 로그인 화면에 적은 이름으로 네이버웍스 아이디 찾기 (네이버웍스 로그인 화면에 미리 채우는 용도).
+ * 재직 중이고 이름이 정확히 한 명과 같을 때만. 동명이인·퇴사·연결 없음이면 null(아이디 입력 화면이 그대로 나온다).
+ */
+export async function loginIdForName(sb: SupabaseClient, name: string): Promise<string | null> {
+  const n = name.trim();
+  if (!n || n.length > 40) return null;
+  const { data, error } = await sb.from("profiles").select("id, is_active").eq("full_name", n).limit(2);
+  if (error || !data || data.length !== 1 || data[0].is_active === false) return null;
+  return loginIdForUser(sb, data[0].id as string);
+}
+
 /**
  * 네이버웍스 로그인으로 들어온 사람의 수오더 계정 찾기.
  *  1) 구성원 ID(sub)가 이미 붙어 있는 연결

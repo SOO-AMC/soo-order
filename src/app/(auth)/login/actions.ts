@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { padPassword } from "@/lib/utils/auth";
 import { logActivity } from "@/lib/utils/activity-log";
-import { safeNext } from "@/lib/naverworks/oidc";
+import { cookies, headers } from "next/headers";
+import { cleanLoginHint, NW_ID_COOKIE, nwIdCookieOptions, safeNext } from "@/lib/naverworks/oidc";
+import { loginIdForUser } from "@/lib/naverworks/links";
 
 export type LoginState = {
   error?: string;
@@ -52,6 +54,18 @@ export async function login(
     action: "login",
     description: "로그인",
   });
+
+  // 네이버웍스와 연결된 사람이면 이 기기에 네이버웍스 아이디를 기억해 둔다
+  // → 나중에 네이버웍스로 로그인(알림 링크 포함)할 때 아이디를 다시 묻지 않는다
+  try {
+    const nwId = cleanLoginHint(await loginIdForUser(adminClient, profile.id));
+    if (nwId) {
+      const secure = (await headers()).get("x-forwarded-proto") === "https" || process.env.NODE_ENV === "production";
+      (await cookies()).set(NW_ID_COOKIE, nwId, nwIdCookieOptions(secure));
+    }
+  } catch {
+    // 기억 못 해도 로그인은 그대로
+  }
 
   // 로그인 화면으로 오기 전에 가려던 곳(예: 네이버웍스 알림의 링크)이 있으면 그리로
   redirect(safeNext(formData.get("next"), "/orders"));

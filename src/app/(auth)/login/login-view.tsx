@@ -29,13 +29,24 @@ function NaverWorksLogin({ enabled, next, error }: { enabled: boolean; next: str
             또는
             <span className="h-px flex-1 bg-border" />
           </div>
-          {/* 네이버웍스 로그인 화면으로 갔다가 돌아오는 이동이라 일반 링크(a)를 쓴다 */}
+          {/* 네이버웍스 로그인 화면으로 갔다가 돌아오는 이동이라 일반 링크(a)를 쓴다.
+              위 이름 칸에 이름이 적혀 있으면 같이 보낸다 → 네이버웍스 로그인 화면에 그 사람의 아이디가 미리 채워진다 */}
           <a
             href={`/auth/naverworks/start?next=${encodeURIComponent(next)}`}
+            onClick={(e) => {
+              const box = e.currentTarget.closest("[data-login-box]");
+              const name = box?.querySelector<HTMLInputElement>('input[name="name"]')?.value.trim();
+              if (name) e.currentTarget.href = `/auth/naverworks/start?next=${encodeURIComponent(next)}&name=${encodeURIComponent(name)}`;
+            }}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#00c73c] text-sm font-bold text-white shadow-md transition-opacity hover:opacity-90"
           >
             네이버웍스로 로그인
           </a>
+          <p className="mt-2.5 text-center text-xs leading-5 text-muted-foreground">
+            네이버웍스 아이디를 몰라도 돼요.
+            <br />
+            위 <b className="font-semibold text-foreground">이름</b> 칸에 이름만 적고 누르면 아이디가 채워져요.
+          </p>
         </>
       )}
     </div>
@@ -130,7 +141,7 @@ export function LoginView({ nwEnabled, next, nwError }: { nwEnabled: boolean; ne
         </div>
 
         {/* 하단: 폼 영역 (흰색 라운드) */}
-        <div className="flex-1 rounded-t-3xl bg-card px-6 pt-8 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(0,0,0,0.15)]">
+        <div data-login-box className="flex-1 rounded-t-3xl bg-card px-6 pt-8 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(0,0,0,0.15)]">
           <p className="text-sm text-muted-foreground mb-6">로그인하여 시작하세요</p>
           <form action={formAction}>
             <input type="hidden" name="next" value={next} />
@@ -141,7 +152,7 @@ export function LoginView({ nwEnabled, next, nwError }: { nwEnabled: boolean; ne
       </div>
 
       {/* PC: 플랫 폼 스타일 */}
-      <div className="hidden lg:block animate-in fade-in-0 duration-500">
+      <div data-login-box className="hidden lg:block animate-in fade-in-0 duration-500">
         <div className="mb-8">
           <Image
             src="/sooorder-brand/logo-horizontal.webp"

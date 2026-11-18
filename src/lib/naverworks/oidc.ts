@@ -50,9 +50,31 @@ export { notificationLink, safeNext } from "./paths";
 
 export const redirectUri = (cfg: NwConfig, requestOrigin: string) => `${cfg.redirectBase ?? requestOrigin.replace(/\/+$/, "")}${CALLBACK_PATH}`;
 
-export function authorizeUrl(cfg: NwConfig, p: { redirectUri: string; state: string; nonce: string }): string {
+/**
+ * 네이버웍스 로그인 화면에 미리 채울 아이디 (loginParam).
+ * 공식 문서의 파라미터가 아니라 네이버웍스 로그인 화면이 스스로 쓰는 값이다(아이디를 넣고 "로그인"을 누르면 주소에 loginParam 을 붙여 비밀번호 단계로 간다).
+ * 붙이면 "ID를 입력해주세요" 단계를 건너뛰고 비밀번호(또는 네이버 아이디로 로그인) 단계에서 시작한다.
+ * 네이버웍스가 이 값을 안 쓰게 바뀌면 그냥 무시되고 아이디 입력 화면이 나온다 — 로그인이 막히지는 않는다. (2026-11 확인)
+ */
+export const NW_LOGIN_HINT_PARAM = "loginParam";
+/** 이 기기에서 마지막으로 쓴 네이버웍스 아이디를 기억하는 쿠키 (httpOnly, /auth/naverworks 에만 실린다) */
+export const NW_ID_COOKIE = "nw_id";
+export const NW_ID_MAX_AGE_SEC = 400 * 24 * 60 * 60;
+
+export const nwIdCookieOptions = (secure: boolean) => ({ httpOnly: true, secure, sameSite: "lax" as const, path: "/auth/naverworks", maxAge: NW_ID_MAX_AGE_SEC });
+
+/** 미리 채울 아이디로 쓸 수 있는 값만 (이메일 모양, 소문자). 아니면 null */
+export function cleanLoginHint(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim().toLowerCase();
+  return /^[^\s@/?#&]{1,64}@[a-z0-9.-]{1,100}$/.test(t) ? t : null;
+}
+
+export function authorizeUrl(cfg: NwConfig, p: { redirectUri: string; state: string; nonce: string; loginHint?: string | null }): string {
   const q = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: p.redirectUri, scope: NW_SCOPE, response_type: "code", state: p.state, nonce: p.nonce });
   if (cfg.domain) q.set("domain", cfg.domain);
+  const hint = cleanLoginHint(p.loginHint);
+  if (hint) q.set(NW_LOGIN_HINT_PARAM, hint);
   return `${NW_AUTHORIZE_URL}?${q.toString()}`;
 }
 

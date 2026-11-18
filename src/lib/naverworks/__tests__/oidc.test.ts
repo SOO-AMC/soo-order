@@ -1,6 +1,6 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { authorizeUrl, checkIdToken, exchangeCode, notificationLink, nwConfig, parseFlow, redirectUri, safeNext, verifyIdTokenSignature, verifyRs256 } from "../oidc";
+import { authorizeUrl, checkIdToken, cleanLoginHint, exchangeCode, notificationLink, nwConfig, parseFlow, redirectUri, safeNext, verifyIdTokenSignature, verifyRs256 } from "../oidc";
 
 const CLIENT = "client-123";
 const NONCE = "nonce-0123456789abcdef";
@@ -39,6 +39,25 @@ describe("설정", () => {
     expect(u.origin + u.pathname).toBe("https://auth.worksmobile.com/oauth2/v2.0/authorize");
     expect(Object.fromEntries(u.searchParams)).toEqual({ client_id: "a", redirect_uri: "https://soo.example/auth/naverworks/callback", scope: "openid email profile", response_type: "code", state: "S", nonce: "N", domain: "soo.example" });
     expect(u.toString()).not.toContain("SECRET");
+  });
+  it("아이디를 알면 네이버웍스 로그인 화면에 미리 채운다 (loginParam)", () => {
+    const cfg = { clientId: "a", clientSecret: "b", redirectBase: null, tenantId: null, domain: null };
+    const base = { redirectUri: "https://soo.example/auth/naverworks/callback", state: "S", nonce: "N" };
+    expect(new URL(authorizeUrl(cfg, { ...base, loginHint: " Hong@Soo.Example " })).searchParams.get("loginParam")).toBe("hong@soo.example");
+    expect(new URL(authorizeUrl(cfg, base)).searchParams.has("loginParam")).toBe(false);
+    expect(new URL(authorizeUrl(cfg, { ...base, loginHint: "이상한값" })).searchParams.has("loginParam")).toBe(false);
+  });
+  it.each([
+    ["hong@soo.example", "hong@soo.example"],
+    ["HONG@SOO.EXAMPLE", "hong@soo.example"],
+    ["hong", null],
+    ["a b@soo.example", null],
+    ["hong@soo.example&x=1", null],
+    ["hong@evil/x", null],
+    ["", null],
+    [null, null],
+  ])("미리 채울 아이디 정리: %s → %s", (v, out) => {
+    expect(cleanLoginHint(v)).toBe(out);
   });
 });
 

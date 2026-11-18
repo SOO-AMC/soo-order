@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logActivity } from "@/lib/utils/activity-log";
-import { checkIdToken, exchangeCode, FLOW_COOKIE, nwConfig, parseFlow, redirectUri, verifyIdTokenSignature } from "@/lib/naverworks/oidc";
-import { isMissingTable, LINK_TABLE, normalizeNwEmail, resolveLogin } from "@/lib/naverworks/links";
+import { checkIdToken, cleanLoginHint, exchangeCode, FLOW_COOKIE, NW_ID_COOKIE, nwConfig, nwIdCookieOptions, parseFlow, redirectUri, verifyIdTokenSignature } from "@/lib/naverworks/oidc";
+import { isMissingTable, LINK_TABLE, loginIdForUser, normalizeNwEmail, resolveLogin } from "@/lib/naverworks/links";
 import { directoryConfig } from "@/lib/naverworks/directory";
 import { isActiveMember } from "@/lib/naverworks/directory-rules";
 import { autoCreateAccount, readDirectoryUser, syncPosition } from "@/lib/naverworks/provision";
@@ -29,6 +29,12 @@ export async function GET(request: NextRequest) {
   const done = (to: URL) => {
     const res = NextResponse.redirect(to);
     res.cookies.set(FLOW_COOKIE, "", { path: "/auth/naverworks", maxAge: 0 });
+    return res;
+  };
+  // 다음에 네이버웍스로 로그인할 때 이 기기에서는 아이디를 다시 묻지 않게 기억한다
+  const remember = (res: NextResponse, id: string | null) => {
+    const v = cleanLoginHint(id);
+    if (v) res.cookies.set(NW_ID_COOKIE, v, nwIdCookieOptions(url.protocol === "https:"));
     return res;
   };
   const back = (code: string) => {
@@ -81,7 +87,7 @@ export async function GET(request: NextRequest) {
     void logActivity({ userId: who.user.id, userName: (me?.full_name as string | undefined) ?? "", category: "auth", action: "naverworks_link", description: `네이버웍스 계정 연결${nw.name ? ` (${nw.name})` : ""}` });
     const to = new URL(flow.next, url.origin);
     to.searchParams.set("nw", "linked");
-    return done(to);
+    return remember(done(to), nw.email);
   }
 
   // ── 로그인 ──
@@ -129,5 +135,5 @@ export async function GET(request: NextRequest) {
 
   await admin.from(LINK_TABLE).update({ last_login_at: new Date().toISOString(), nw_email: nw.email, nw_name: nw.name }).eq("user_id", profile.id);
   void logActivity({ userId: profile.id as string, userName: (profile.full_name as string) ?? "", category: "auth", action: "login_naverworks", description: "네이버웍스로 로그인" });
-  return done(new URL(flow.next, url.origin));
+  return remember(done(new URL(flow.next, url.origin)), (await loginIdForUser(admin, profile.id as string)) ?? nw.email);
 }
