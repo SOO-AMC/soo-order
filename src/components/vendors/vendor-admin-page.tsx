@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Building2, Check, FileText, Link2, Loader2, Merge, Pencil, Plus, Sparkles, X } from "lucide-react";
+import { ArrowRight, Building2, Check, ChevronDown, FileText, Link2, Loader2, Merge, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,14 +26,15 @@ import {
   removeVendorAlias,
   renameVendor,
 } from "@/lib/actions/vendor-actions";
+import { VendorNameEvidencePanel, clearVendorEvidenceCache } from "@/components/vendors/vendor-name-evidence";
 import type { UnlinkedName, VendorActionResult, VendorDirectory, VendorEntry } from "@/lib/types/vendor";
 
 type Tab = "cleanup" | "vendors";
 type DialogState =
-  | { kind: "link"; item: UnlinkedName }
+  | { kind: "link"; item: UnlinkedName; pick?: string }
   | { kind: "rename"; vendor: VendorEntry }
   | { kind: "alias"; vendor: VendorEntry }
-  | { kind: "merge"; vendor: VendorEntry }
+  | { kind: "merge"; vendor: VendorEntry; into?: string }
   | null;
 
 const num = (n: number) => n.toLocaleString();
@@ -58,6 +59,15 @@ export function VendorAdminPage() {
   const [dialog, setDialog] = useState<DialogState>(null);
   /** "업체 아님"은 두 번 눌러야 실행 */
   const [confirmClear, setConfirmClear] = useState<string | null>(null);
+  /** 근거를 펼친 이름 */
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggleEvidence = (name: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
 
   // 대화상자 입력값
   const [pickId, setPickId] = useState<string | null>(null);
@@ -73,6 +83,7 @@ export function VendorAdminPage() {
   }, []);
 
   const reload = async () => {
+    clearVendorEvidenceCache();
     try {
       setDir(await fetchVendorDirectory());
     } catch (e) {
@@ -109,6 +120,25 @@ export function VendorAdminPage() {
     () => vendors.map((v) => ({ value: v.id, label: v.name, keywords: v.aliases.map((a) => a.alias).join(" ") })),
     [vendors],
   );
+  /**
+   * (주)·띄어쓰기만 다른데 따로 등록된 업체. 이름 열쇠가 같은 업체가 둘이면 주문 이름을 어느 쪽으로도 맞추지 못한다
+   * → 하나로 합쳐야 한다. 남길 쪽: 가격 비교표 업체 → 주문·명세서가 많은 쪽.
+   */
+  const twins = useMemo(() => {
+    const groups = new Map<string, VendorEntry[]>();
+    for (const v of vendors) {
+      const k = vendorKey(v.name);
+      if (k) groups.set(k, [...(groups.get(k) ?? []), v]);
+    }
+    return [...groups.values()]
+      .filter((g) => g.length > 1)
+      .flatMap((g) => {
+        const [keep, ...rest] = [...g].sort(
+          (a, b) => Number(b.showInCompare) - Number(a.showInCompare) || b.orderCount + b.invoiceCount - (a.orderCount + a.invoiceCount),
+        );
+        return rest.map((from) => ({ from, keep }));
+      });
+  }, [vendors]);
   const autoItems = useMemo(() => unlinked.filter((u) => u.autoTarget), [unlinked]);
   const autoOrders = autoItems.reduce((s, u) => s + u.count, 0);
 
@@ -123,10 +153,10 @@ export function VendorAdminPage() {
     setDialog(d);
     setError("");
     if (d?.kind === "link") {
-      setPickId(d.item.invoiceVendor?.id ?? d.item.suggestions[0]?.id ?? null);
+      setPickId(d.pick ?? d.item.invoiceVendor?.id ?? d.item.suggestions[0]?.id ?? null);
       setRemember(!d.item.ownHospital);
     } else {
-      setPickId(null);
+      setPickId(d?.kind === "merge" ? d.into ?? null : null);
     }
     setText(d?.kind === "rename" ? d.vendor.name : "");
   };
@@ -213,6 +243,29 @@ export function VendorAdminPage() {
             <Check className="mt-0.5 size-4 shrink-0" /> {notice}
           </p>
         )}
+        {twins.length > 0 && (
+          <section aria-label="같은 업체로 보이는 업체" className="space-y-2 rounded-xl bg-status-ask-bg p-3">
+            <p className="px-1 text-sm font-semibold text-status-ask">
+              같은 업체가 따로 등록돼 있어요 <span className="font-normal">· (주)·띄어쓰기만 달라요. 합쳐야 주문의 업체 이름이 하나로 맞춰져요</span>
+            </p>
+            {twins.map(({ from, keep }) => (
+              <div key={from.id} className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg bg-card px-3 py-2">
+                <RawName name={from.name} />
+                <span className="text-xs tabular-nums text-muted-foreground">주문 {num(from.orderCount)} · 명세서 {num(from.invoiceCount)}</span>
+                <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-label="에 합치기" />
+                <RawName name={keep.name} />
+                <span className="text-xs tabular-nums text-muted-foreground">주문 {num(keep.orderCount)} · 명세서 {num(keep.invoiceCount)}</span>
+                {from.showInCompare ? (
+                  <span className="ml-auto text-xs text-muted-foreground">둘 다 가격 비교표 업체예요. 가격 비교에서 한쪽을 끈 뒤 합쳐 주세요.</span>
+                ) : (
+                  <Button size="sm" variant="outline" className="ml-auto h-8" disabled={!!busy} onClick={() => openDialog({ kind: "merge", vendor: from, into: keep.id })}>
+                    <Merge className="size-4" /> 합치기
+                  </Button>
+                )}
+              </div>
+            ))}
+          </section>
+        )}
 
         {tab === "cleanup" ? (
           <>
@@ -274,6 +327,17 @@ export function VendorAdminPage() {
                           {u.invoiceCount > 0 && u.invoiceVendor ? ` · 명세서로 확인된 업체 ${u.invoiceVendor.name} (${num(u.invoiceCount)}건)` : ""}
                           {!u.autoTarget && u.suggestions.length > 0 ? ` · 비슷한 업체 ${u.suggestions.map((s) => s.name).join(", ")}` : ""}
                         </p>
+                        {!u.autoTarget && (
+                          <button
+                            type="button"
+                            aria-expanded={expanded.has(u.name)}
+                            onClick={() => toggleEvidence(u.name)}
+                            className="flex items-center gap-1 text-[13px] font-semibold text-primary hover:underline"
+                          >
+                            <ChevronDown className={cn("size-3.5 transition-transform", expanded.has(u.name) && "rotate-180")} />
+                            {expanded.has(u.name) ? "근거 접기" : "근거 보기 — 어떤 주문·명세서에 적혔나"}
+                          </button>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {u.autoTarget ? (
@@ -337,6 +401,13 @@ export function VendorAdminPage() {
                           </Button>
                         )}
                       </div>
+                      {!u.autoTarget && expanded.has(u.name) && (
+                        <VendorNameEvidencePanel
+                          name={u.name}
+                          onPickVendor={(id) => openDialog({ kind: "link", item: u, pick: id })}
+                          className="rounded-lg bg-background p-3 lg:col-span-2"
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -412,7 +483,7 @@ export function VendorAdminPage() {
       </div>
 
       <Dialog open={!!dialog} onOpenChange={(o) => { if (!o && busy !== "dialog") setDialog(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={cn("max-h-[90vh] overflow-y-auto", dialog?.kind === "link" ? "sm:max-w-xl" : "max-w-md")}>
           {dialog?.kind === "link" && (
             <>
               <DialogHeader>
@@ -437,6 +508,10 @@ export function VendorAdminPage() {
                   ))}
                 </div>
               )}
+              <details className="rounded-lg ring-1 ring-border" open={dialog.item.suggestions.length === 0 && !dialog.item.invoiceVendor}>
+                <summary className="cursor-pointer select-none px-3 py-2 text-[13px] font-semibold text-primary">근거 보기 — 어떤 주문·명세서에 적혔나</summary>
+                <VendorNameEvidencePanel name={dialog.item.name} onPickVendor={setPickId} pickedId={pickId} className="border-t border-border p-3" />
+              </details>
               <label className="flex items-start gap-2.5 rounded-lg bg-muted px-3 py-2.5 text-sm">
                 <input type="checkbox" className="mt-0.5 size-4 accent-[var(--primary)]" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
                 <span>

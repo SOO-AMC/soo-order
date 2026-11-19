@@ -1,10 +1,11 @@
 "use server";
 
 import { requireAdmin } from "@/lib/supabase/server";
-import { fetchAllPages } from "@/lib/supabase/paginate";
+import { chunk, fetchAllPages } from "@/lib/supabase/paginate";
 import { logActivity } from "@/lib/utils/activity-log";
 import { buildVendorIndex, looksLikeOwnHospital, suggestVendors, vendorKey } from "@/lib/utils/vendor-name";
-import type { UnlinkedName, VendorActionResult, VendorDirectory, VendorEntry, VendorOption } from "@/lib/types/vendor";
+import { normalizeItemName } from "@/lib/utils/normalize-item-name";
+import type { UnlinkedName, VendorActionResult, VendorDirectory, VendorEntry, VendorNameEvidence, VendorOption } from "@/lib/types/vendor";
 
 /**
  * 업체 관리 (관리자 전용).
@@ -124,6 +125,108 @@ export async function fetchVendorDirectory(): Promise<VendorDirectory> {
     });
 
   return { ready: true, vendors: entries, unlinked };
+}
+
+/**
+ * "정리할 이름"의 근거. 업체 칸에 업체 이름이 아닌 글자(품목명·메모·우리 병원 이름 등)가 적힌 경우가 많아서,
+ * 이름만 보고는 어느 업체인지 고르기 어렵다 → 그 이름이 적힌 주문(품목·메모·누가), 연결된 명세서(어느 업체 명세서였나),
+ * 그 품목들을 가격표에 가진 업체를 함께 보여 준다. 읽기만 한다.
+ */
+export async function fetchVendorNameEvidence(name: string): Promise<VendorNameEvidence> {
+  const { supabase } = await requireAdmin();
+  const SHOW = 8;
+  const SAMPLE = 40;
+
+  const { data: rows, error, count } = await supabase
+    .from("orders")
+    .select(
+      "id, item_name, quantity, unit, status, created_at, dispatched_at, notes, order_notes, inspection_notes, inspection_memo, requester:profiles!requester_id(full_name), updater:profiles!updated_by(full_name)",
+      { count: "exact" },
+    )
+    .eq("vendor_name", name)
+    .order("created_at", { ascending: false })
+    .limit(SAMPLE);
+  if (error) throw new Error(`주문을 불러오지 못했어요: ${error.message}`);
+
+  type Row = {
+    id: string; item_name: string; quantity: number; unit: string; status: string; created_at: string; dispatched_at: string | null;
+    notes: string | null; order_notes: string | null; inspection_notes: string | null; inspection_memo: string | null;
+    requester: { full_name: string | null } | { full_name: string | null }[] | null;
+    updater: { full_name: string | null } | { full_name: string | null }[] | null;
+  };
+  const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+  const list = (rows ?? []) as unknown as Row[];
+
+  const orders = list.slice(0, SHOW).map((o) => ({
+    id: o.id,
+    itemName: o.item_name,
+    quantity: o.quantity,
+    unit: o.unit,
+    status: o.status,
+    createdAt: o.created_at,
+    dispatchedAt: o.dispatched_at,
+    requester: one(o.requester)?.full_name ?? null,
+    updater: one(o.updater)?.full_name ?? null,
+    notes: [o.notes, o.order_notes, o.inspection_notes, o.inspection_memo].map((t) => (t ?? "").trim()).filter((t, i, a) => t && a.indexOf(t) === i),
+  }));
+
+  // 연결된 명세서 (명세서 확정 때 이 주문과 맞춰진 줄)
+  const ids = list.map((o) => o.id);
+  const { data: lineRows } = ids.length
+    ? await supabase
+        .from("invoice_items")
+        .select("name, quantity, matched_order_id, invoices(id, vendor_id, vendor_name, invoice_date, total_amount, image_urls, vendors(name))")
+        .in("matched_order_id", ids)
+    : { data: [] };
+  type LineRow = {
+    name: string | null; quantity: number | null;
+    invoices: { id: string; vendor_id: string | null; vendor_name: string | null; invoice_date: string | null; total_amount: number | null; image_urls: string[] | null; vendors: { name: string } | { name: string }[] | null } | null;
+  };
+  const invMap = new Map<string, VendorNameEvidence["invoices"][number]>();
+  for (const l of (lineRows ?? []) as unknown as LineRow[]) {
+    const inv = Array.isArray(l.invoices) ? l.invoices[0] : l.invoices;
+    if (!inv) continue;
+    const cur: VendorNameEvidence["invoices"][number] = invMap.get(inv.id) ?? {
+      id: inv.id,
+      date: inv.invoice_date,
+      readName: inv.vendor_name,
+      vendorId: inv.vendor_id,
+      vendorName: one(inv.vendors)?.name ?? null,
+      totalAmount: inv.total_amount,
+      lines: [] as string[],
+      filePath: inv.image_urls?.[0] ?? null,
+    };
+    if (l.name && cur.lines.length < 6) cur.lines.push(`${l.name}${l.quantity ? ` × ${l.quantity}` : ""}`);
+    invMap.set(inv.id, cur);
+  }
+  const invoices = [...invMap.values()].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "")).slice(0, 5);
+
+  // 품목 → 표준 품목(item_name_aliases) → 그 품목을 가격표에 가진 업체
+  const keys = [...new Set(list.map((o) => normalizeItemName(o.item_name)).filter(Boolean))];
+  const carriers: VendorNameEvidence["carriers"] = [];
+  let linkedItems = 0;
+  if (keys.length) {
+    const { data: links } = await supabase.from("item_name_aliases").select("item_name, unified_product_id").in("item_name", keys);
+    const upIds = [...new Set((links ?? []).map((l) => l.unified_product_id as string))];
+    linkedItems = upIds.length;
+    if (upIds.length) {
+      const vp: { vendor_id: string; unified_product_id: string }[] = [];
+      for (const part of chunk(upIds, 100)) {
+        const { data } = await supabase.from("vendor_products").select("vendor_id, unified_product_id").in("unified_product_id", part);
+        vp.push(...((data ?? []) as { vendor_id: string; unified_product_id: string }[]));
+      }
+      const per = new Map<string, Set<string>>();
+      for (const r of vp) per.set(r.vendor_id, (per.get(r.vendor_id) ?? new Set()).add(r.unified_product_id));
+      const vendorIds = [...per.keys()];
+      if (vendorIds.length) {
+        const { data: vs } = await supabase.from("vendors").select("id, name").in("id", vendorIds.slice(0, 100));
+        for (const v of (vs ?? []) as { id: string; name: string }[]) carriers.push({ id: v.id, name: v.name, items: per.get(v.id)?.size ?? 0 });
+        carriers.sort((a, b) => b.items - a.items || a.name.localeCompare(b.name, "ko"));
+      }
+    }
+  }
+
+  return { orders, total: count ?? list.length, invoices, carriers: carriers.slice(0, 6), linkedItems };
 }
 
 async function rewrite(supabase: Admin["supabase"], from: string, to: string): Promise<VendorActionResult<number>> {

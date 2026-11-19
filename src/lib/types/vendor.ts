@@ -34,6 +34,43 @@ export interface UnlinkedName {
   ownHospital: boolean;
 }
 
+/** "정리할 이름" 근거: 이 이름이 적힌 주문·명세서, 그 품목을 파는 업체 */
+export interface VendorNameEvidence {
+  orders: {
+    id: string;
+    itemName: string;
+    quantity: number;
+    unit: string;
+    status: string;
+    createdAt: string;
+    dispatchedAt: string | null;
+    requester: string | null;
+    /** 마지막으로 손댄 사람(발주·검수한 관리자) */
+    updater: string | null;
+    /** 주문의 메모들 — 업체 이름이 아닌 글자가 업체 칸에 들어간 이유가 여기 있는 경우가 많다 */
+    notes: string[];
+  }[];
+  /** 이 이름이 적힌 주문 수 (orders 는 최근 것만) */
+  total: number;
+  /** 이 주문들과 연결된 명세서 */
+  invoices: {
+    id: string;
+    date: string | null;
+    /** 명세서에서 읽은 업체 글자 */
+    readName: string | null;
+    vendorId: string | null;
+    vendorName: string | null;
+    totalAmount: number | null;
+    /** 이 이름의 주문과 맞춰진 줄 */
+    lines: string[];
+    filePath: string | null;
+  }[];
+  /** 이 주문들의 품목을 가격표에 가진 업체 (많이 가진 순) */
+  carriers: { id: string; name: string; items: number }[];
+  /** carriers 를 셀 때 쓴 품목 수 (가격표와 연결된 것만) */
+  linkedItems: number;
+}
+
 export interface VendorDirectory {
   /** false 면 supabase/migrate-vendor-unify.sql 을 아직 실행하지 않은 것 */
   ready: boolean;

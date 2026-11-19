@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/supabase/server";
 import type { Vendor, VendorProductRow } from "@/lib/types/price-compare";
 import { logActivity } from "@/lib/utils/activity-log";
+import { buildVendorIndex, vendorKey, type VendorIndex } from "@/lib/utils/vendor-name";
 
 type ActionState = {
   error?: string;
@@ -13,11 +14,31 @@ type ActionState = {
 
 // --- Vendors ---
 
+type AdminClient = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
+
+/**
+ * 등록된 업체 찾기 — (주)·띄어쓰기만 다른 이름, "다른 이름"으로 적힌 것도 같은 업체로 본다.
+ * 새 업체를 넣기 전에 반드시 거친다. 안 그러면 "(주)지상아이엔씨"와 "지상아이엔씨"처럼 같은 업체가 둘이 된다.
+ */
+async function loadVendorIndex(supabase: AdminClient): Promise<VendorIndex> {
+  const [v, a] = await Promise.all([
+    supabase.from("vendors").select("id, name"),
+    supabase.from("vendor_aliases").select("vendor_id, alias"), // 표가 없으면 error → 빈 목록
+  ]);
+  return buildVendorIndex(
+    (v.data ?? []) as { id: string; name: string }[],
+    ((a.data ?? []) as { vendor_id: string; alias: string }[]).map((x) => ({ vendorId: x.vendor_id, alias: x.alias })),
+  );
+}
+
 export async function createVendor(name: string): Promise<ActionState> {
   const { supabase, userId, userName } = await requireAdmin();
 
   const trimmed = name.trim();
   if (!trimmed) return { error: "업체명을 입력해주세요." };
+
+  const same = (await loadVendorIndex(supabase)).resolve(trimmed);
+  if (same) return { error: `이미 있는 업체예요: ${same.name}` };
 
   const { error } = await supabase.from("vendors").insert({ name: trimmed });
 
@@ -45,8 +66,11 @@ export async function createScanVendor(
   if (!trimmed) return { error: "업체명을 입력해주세요." };
   const clamped = Math.max(0, Math.min(100, discountRate || 0));
 
-  const { data: existing } = await supabase.from("vendors").select("*").eq("name", trimmed).maybeSingle();
-  if (existing) return { vendor: existing as Vendor };
+  const same = (await loadVendorIndex(supabase)).resolve(trimmed);
+  if (same) {
+    const { data: existing } = await supabase.from("vendors").select("*").eq("id", same.id).maybeSingle();
+    if (existing) return { vendor: existing as Vendor };
+  }
 
   const { data, error } = await supabase
     .from("vendors")
@@ -264,13 +288,15 @@ export async function uploadPriceExcel(
   if (products.length === 0) return { error: "업로드할 제품이 없습니다." };
 
   // 1. vendors: 기존 조회 + 새 업체 생성
-  const { data: existingVendors } = await supabase.from("vendors").select("id, name");
+  //    (주)·띄어쓰기만 다른 이름은 새로 만들지 않고 기존 업체에 붙인다
+  const vendorIndex = await loadVendorIndex(supabase);
   const vendorMap = new Map<string, string>();
-  for (const v of existingVendors ?? []) {
-    vendorMap.set(v.name, v.id);
-  }
+  const createdByKey = new Map<string, string>(); // 이번 엑셀 안에서 표기만 다른 새 업체가 둘 나오는 경우
 
   for (const name of vendorNames) {
+    const same = vendorIndex.resolve(name);
+    if (same) vendorMap.set(name, same.id);
+    else if (createdByKey.has(vendorKey(name))) vendorMap.set(name, createdByKey.get(vendorKey(name))!);
     if (!vendorMap.has(name)) {
       const { data: newVendor, error } = await supabase
         .from("vendors")
@@ -279,6 +305,7 @@ export async function uploadPriceExcel(
         .single();
       if (error) return { error: `업체 생성 실패 (${name}): ${error.message}` };
       vendorMap.set(name, newVendor.id);
+      createdByKey.set(vendorKey(name), newVendor.id);
     }
   }
 
