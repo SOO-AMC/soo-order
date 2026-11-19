@@ -8,7 +8,9 @@ import { PageHeader } from "@/components/page-header";
 import { FloatingActionBar, Tag } from "@/components/list-parts";
 import { SavedViews } from "@/components/workspace/saved-views";
 import { FilterBar, SearchField, FilterChip, ClearFilters, Segmented } from "@/components/workspace/filter-bar";
-import { DetailPanel, WorkspaceSplit, DetailFields, Timeline } from "@/components/workspace/detail-panel";
+import { DetailPanel, WorkspaceSplit, DetailFields, Timeline, Kbd, type ShortcutHint } from "@/components/workspace/detail-panel";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { useShortcuts } from "@/hooks/use-shortcuts";
 import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -517,6 +519,28 @@ export function OrderList({
     }
   };
 
+  // ── 키보드 (PC) ── 패널이 열려 있을 때의 J/K·Esc 는 DetailPanel, 숫자·L·Space 는 OrderDetail 이 맡는다
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  useShortcuts(
+    {
+      // 패널이 닫혀 있으면 J 는 첫 품목, K 는 마지막 품목부터 연다
+      KeyJ: !detailOrder && flatOrders.length > 0 && (() => openDetail(flatOrders[0].id)),
+      KeyK: !detailOrder && flatOrders.length > 0 && (() => openDetail(flatOrders[flatOrders.length - 1].id)),
+      KeyX: isAdmin && !!detailOrder && (() => toggleSelect(detailOrder.id)),
+      // 아래 바의 두 버튼: V = 업체별로 발주, O = 선택 주문. Ctrl+Enter 는 업체 고른 품목이 있으면 V, 없으면 O.
+      // 어느 것이든 창만 연다 — 발주는 창에서 "발주"(Ctrl+Enter)를 한 번 더 눌러야 한다
+      KeyV: isAdmin && vendorSelectedIds.length > 0 && (() => openBulkDialog("vendor")),
+      KeyO: isAdmin && selectedIds.size > 0 && (() => openBulkDialog("checkbox")),
+      "mod+Enter": isAdmin && (vendorSelectedIds.length > 0 || selectedIds.size > 0) && (() => openBulkDialog(vendorSelectedIds.length > 0 ? "vendor" : "checkbox")),
+    },
+    isDesktop
+  );
+  // 키보드로 옮겨 간 줄이 화면 밖이면 보이게
+  useEffect(() => {
+    if (!detailId || !isDesktop) return;
+    document.querySelector(`tr[data-row-id="${detailId}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [detailId, isDesktop]);
+
   const header = (
     <PageHeader title="주문" description={`발주 대기 ${sortedOrders.length}건`} action={headerAction} />
   );
@@ -750,6 +774,7 @@ export function OrderList({
                         return (
                           <tr
                             key={order.id}
+                            data-row-id={order.id}
                             onClick={() => openDetail(order.id)}
                             className={cn(
                               "group cursor-pointer",
@@ -806,6 +831,11 @@ export function OrderList({
                   </tbody>
                 </table>
               </div>
+              {isAdmin && (
+                <p className="hidden px-1 text-xs text-muted-foreground lg:block">
+                  키보드: <Kbd>J</Kbd> 첫 품목 열기 → <Kbd>1</Kbd>~<Kbd>9</Kbd> 업체 고르기 → <Kbd>Space</Kbd> 발주하고 다음으로 · <Kbd>?</Kbd> 단축키 전체
+                </p>
+              )}
 
               {/* 모바일/태블릿: 묶음 카드 */}
               <div className="space-y-2.5 lg:hidden">
@@ -834,6 +864,8 @@ export function OrderList({
                 onDispatch={(v) => dispatchOne(detailOrder, v)}
                 dispatching={dispatching}
                 error={dispatchError}
+                vendorOptions={vendorOptions}
+                onVendorRegistered={addVendorOption}
               />
             )}
           </WorkspaceSplit>
@@ -855,6 +887,7 @@ export function OrderList({
             {vendorSelectedIds.length > 0 && (
               <Button size="sm" className="h-9" onClick={() => openBulkDialog("vendor")}>
                 업체별로 발주
+                {isAdmin && <Kbd className="hidden bg-white/20 text-white shadow-none lg:inline-flex">V</Kbd>}
               </Button>
             )}
             {selectedIds.size > 0 && (
@@ -865,6 +898,7 @@ export function OrderList({
               >
                 <ShoppingCart className="size-4" />
                 선택 주문
+                {isAdmin && <Kbd className="hidden bg-white/20 text-white shadow-none lg:inline-flex">O</Kbd>}
               </Button>
             )}
             <Button
@@ -884,7 +918,16 @@ export function OrderList({
         )}
 
         <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent
+            className="max-w-md"
+            onKeyDown={(e) => {
+              // 창 안에서 Ctrl(⌘)+Enter = "발주" 버튼 (입력칸에 있어도 된다). 꾹 눌러 반복되는 입력은 무시
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.repeat && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                if (!isOrdering) void handleBulkOrder();
+              }
+            }}
+          >
             <DialogHeader>
               <DialogTitle>발주하기</DialogTitle>
               <DialogDescription>
@@ -1015,6 +1058,7 @@ export function OrderList({
               </DialogClose>
               <Button onClick={handleBulkOrder} disabled={isOrdering}>
                 {isOrdering ? "발주하는 중…" : "발주"}
+                {!isOrdering && <Kbd className="hidden bg-white/20 text-white shadow-none lg:inline-flex">Ctrl Enter</Kbd>}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1025,6 +1069,20 @@ export function OrderList({
 }
 
 /** 상세 패널(PC 오른쪽 / 모바일 시트): 핵심 값 → 업체별 단가 → 사진 → 처리 이력 → 발주 */
+const ORDER_SHORTCUTS: ShortcutHint[] = [
+  { keys: "J K", label: "다음 · 이전 품목" },
+  { keys: "1 ~ 9", label: "업체 고르기 (단가표 순서, 다시 누르면 해제)" },
+  { keys: "L", label: "지난번 발주한 업체 고르기" },
+  { keys: "/", label: "업체 이름으로 찾기 (단가표에 없는 업체, 새 업체 등록)" },
+  { keys: "0", label: "고른 업체 지우기" },
+  { keys: "Space", label: "고른 업체로 바로 발주하고 다음 품목으로" },
+  { keys: "X", label: "이 품목 체크 / 해제" },
+  { keys: "V", label: "업체별로 발주 창 열기 (업체 고른 품목)" },
+  { keys: "O", label: "선택 주문 창 열기 (체크한 품목)" },
+  { keys: "Ctrl Enter", label: "발주 창에서: 발주" },
+  { keys: "Esc", label: "패널 닫기" },
+];
+
 function OrderDetail({
   order,
   isAdmin,
@@ -1037,6 +1095,8 @@ function OrderDetail({
   onDispatch,
   dispatching,
   error,
+  vendorOptions,
+  onVendorRegistered,
 }: {
   order: OrderWithRequester;
   isAdmin: boolean;
@@ -1049,12 +1109,43 @@ function OrderDetail({
   onDispatch: (vendor: string) => void;
   dispatching: boolean;
   error: string;
+  /** 업체 직접 고르기 목록 (발주 창과 같은 목록) */
+  vendorOptions: VendorOption[];
+  onVendorRegistered: (v: VendorOption) => void;
 }) {
   // 일반 직원은 가격을 받지 않는다
   const [data] = usePriceData(isAdmin);
   const match = useMemo(() => matchItemPrices(order.item_name, data), [order.item_name, data]);
   // 업체를 직접 고른 뒤에만 발주할 수 있다(최저가로 자동 발주하지 않음)
   const dispatchVendor = selectedVendor;
+
+  // 키보드 (PC, 관리자): 1~9 업체 고르기(단가표 순서), L 지난번 업체, 0 업체 지우기, Space 고른 업체로 발주 → 다음 품목
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const [keyHint, setKeyHint] = useState<{ id: string; text: string } | null>(null);
+  const hint = keyHint?.id === order.id ? keyHint.text : "";
+  const vendorsByKey = match?.prices.slice(0, 9).map((p) => p.vendorName) ?? [];
+  const pricedVendors = new Set(match?.prices.map((p) => p.vendorName) ?? []);
+  const pickerId = `vendor-pick-${order.id}`;
+  const pick = (v: string | undefined) => {
+    if (!v) return;
+    setKeyHint(null);
+    onSelectVendor(selectedVendor === v ? "" : v);
+  };
+  useShortcuts(
+    {
+      ...Object.fromEntries(vendorsByKey.map((v, i) => [`Digit${i + 1}`, () => pick(v)])),
+      Digit0: () => onSelectVendor(""),
+      KeyL: !!lastVendor && (() => pick(lastVendor)),
+      // / : 업체 이름 검색 열기
+      Slash: () => document.getElementById(pickerId)?.click(),
+      Space: () => {
+        if (dispatching) return;
+        if (!dispatchVendor) setKeyHint({ id: order.id, text: "업체를 먼저 골라 주세요 — 숫자 키(1~9) 또는 L(지난번 업체)" });
+        else onDispatch(dispatchVendor);
+      },
+    },
+    isDesktop && isAdmin
+  );
 
   const created = new Date(order.created_at).toLocaleString("ko-KR", {
     timeZone: "Asia/Seoul",
@@ -1071,6 +1162,7 @@ function OrderDetail({
       onClose={onClose}
       onPrev={onPrev}
       onNext={onNext}
+      shortcuts={isAdmin ? ORDER_SHORTCUTS : undefined}
       title={
         <span className="flex items-center gap-2">
           {order.item_name}
@@ -1080,7 +1172,7 @@ function OrderDetail({
       badge={<OrderStatusBadge status={order.status} />}
       footer={
         <div className="flex w-full flex-col gap-2">
-          {error && <p className="text-[13px] font-medium text-status-late">{error}</p>}
+          {(error || hint) && <p className="text-[13px] font-medium text-status-late">{error || hint}</p>}
           <div className="flex gap-2">
             <Button asChild variant="outline" className="h-10 flex-1 rounded-lg lg:h-9">
               <Link href={`/orders/${order.id}`}>
@@ -1095,6 +1187,7 @@ function OrderDetail({
                 onClick={() => onDispatch(dispatchVendor)}
               >
                 {dispatching ? "발주하는 중…" : dispatchVendor ? `${withRo(dispatchVendor)} 발주` : "업체를 골라 주세요"}
+                {dispatchVendor && !dispatching && <Kbd className="hidden bg-white/20 text-white shadow-none lg:inline-flex">Space</Kbd>}
               </Button>
             )}
           </div>
@@ -1143,6 +1236,7 @@ function OrderDetail({
                         isSel && "shadow-[inset_3px_0_0_var(--primary)]"
                       )}
                     >
+                      {i < 9 && <Kbd className="hidden lg:inline-flex">{i + 1}</Kbd>}
                       <span className={cn("min-w-0 flex-1 truncate", isBest && "font-bold")}>
                         {p.vendorName}
                         {isBest && " · 최저가"}
@@ -1158,9 +1252,31 @@ function OrderDetail({
               </div>
             ) : (
               <p className="rounded-lg bg-muted px-3 py-2.5 text-[13px] text-muted-foreground">
-                가격비교에 맞는 품목이 없어요. 목록의 업체 칸에서 매칭을 고칠 수 있어요.
+                가격비교에 맞는 품목이 없어요. 아래에서 업체를 직접 골라 주세요.
               </p>
             )}
+            {/* 단가표에 없는 업체: 이름으로 찾아 고르고, 없으면 새 업체로 등록 (발주 창과 같은 고르기) */}
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={pickerId} className="flex items-center gap-1.5 text-[13px] font-semibold text-subtle-foreground">
+                다른 업체 고르기
+                <span className="font-normal text-muted-foreground">· 이름 검색, 없으면 새로 등록</span>
+                <Kbd className="ml-auto hidden lg:inline-flex">/</Kbd>
+              </label>
+              <VendorPicker
+                id={pickerId}
+                releaseFocus
+                ariaLabel={`${order.item_name} 업체 직접 고르기`}
+                value={pricedVendors.has(selectedVendor) ? "" : selectedVendor}
+                onChange={(name) => {
+                  setKeyHint(null);
+                  onSelectVendor(name);
+                }}
+                options={vendorOptions}
+                onRegistered={onVendorRegistered}
+                placeholder="업체 이름으로 찾기"
+                className="h-10 lg:h-9"
+              />
+            </div>
           </section>
         )}
 

@@ -1,10 +1,23 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Keyboard, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { isTypingTarget, overlayOpen } from "@/hooks/use-shortcuts";
 import { BottomSheet } from "@/components/workspace/bottom-sheet";
+
+/** 단축키 안내 한 줄. keys 는 띄어쓰기로 나눈 키 이름들 (예: "J K") */
+export type ShortcutHint = { keys: string; label: string };
+
+/** 키 모양 표시 */
+export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <kbd className={cn("inline-flex min-w-5 items-center justify-center rounded bg-secondary px-1.5 py-px font-mono text-[11px] font-semibold leading-4 text-subtle-foreground shadow-[inset_0_-1px_0_var(--border)]", className)}>
+      {children}
+    </kbd>
+  );
+}
 
 /**
  * 상세 패널 (디자인 시스템 DetailPanel).
@@ -21,6 +34,7 @@ export function DetailPanel({
   footer,
   onPrev,
   onNext,
+  shortcuts,
 }: {
   open: boolean;
   onClose: () => void;
@@ -33,22 +47,36 @@ export function DetailPanel({
   /** J/K로 이전·다음 행 (PC) */
   onPrev?: () => void;
   onNext?: () => void;
+  /** 이 화면의 단축키 안내 (PC 머리의 "단축키" 버튼 · ? 키) */
+  shortcuts?: ShortcutHint[];
 }) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const asideRef = useRef<HTMLElement>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
-  // PC: Esc 닫기, J/K 이동. 입력 중에는 무시.
+  // PC: Esc 닫기, J/K 이동, ? 단축키 안내. 입력 중에는 무시하되, 패널 안 입력칸에서 Esc 는 입력을 빠져나온다(다시 단축키가 먹게).
+  // 키는 e.code 기준 — 한글 입력 상태에서도 J/K 가 먹는다.
   useEffect(() => {
     if (!open || !isDesktop) return;
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
-      if (e.key === "Escape") onClose();
-      else if ((e.key === "j" || e.key === "J") && onNext) onNext();
-      else if ((e.key === "k" || e.key === "K") && onPrev) onPrev();
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (isTypingTarget(e.target)) {
+        if (e.code === "Escape" && asideRef.current?.contains(e.target as Node)) (e.target as HTMLElement).blur();
+        return;
+      }
+      if (overlayOpen()) return;
+      if (e.code === "Escape") {
+        if (helpOpen) setHelpOpen(false);
+        else onClose();
+      } else if (e.code === "KeyJ" && !e.shiftKey && onNext) onNext();
+      else if (e.code === "KeyK" && !e.shiftKey && onPrev) onPrev();
+      else if (e.code === "Slash" && e.shiftKey && shortcuts?.length) setHelpOpen((v) => !v);
+      else return;
+      e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, isDesktop, onClose, onNext, onPrev]);
+  }, [open, isDesktop, onClose, onNext, onPrev, helpOpen, shortcuts?.length]);
 
   if (!isDesktop) {
     return (
@@ -61,12 +89,25 @@ export function DetailPanel({
   if (!open) return null;
   return (
     <aside
+      ref={asideRef}
       aria-label="상세"
       className="sticky top-[calc(var(--page-top)+0.5rem)] flex max-h-[calc(100dvh-var(--page-top)-2rem)] w-[380px] shrink-0 flex-col overflow-hidden rounded-xl bg-card shadow-[0_0_0_1px_var(--border)]"
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
         {badge}
-        {(onPrev || onNext) && <span className="text-xs text-muted-foreground">J / K 로 이동</span>}
+        {shortcuts?.length ? (
+          <button
+            type="button"
+            onClick={() => setHelpOpen((v) => !v)}
+            aria-expanded={helpOpen}
+            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <Keyboard className="size-3.5" aria-hidden="true" />
+            단축키 <Kbd>?</Kbd>
+          </button>
+        ) : (
+          (onPrev || onNext) && <span className="text-xs text-muted-foreground">J / K 로 이동</span>
+        )}
         <button
           type="button"
           onClick={onClose}
@@ -76,6 +117,20 @@ export function DetailPanel({
           <X className="size-4" />
         </button>
       </div>
+      {helpOpen && shortcuts?.length ? (
+        <dl className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 border-b border-border bg-muted/60 px-4 py-3 text-[13px]">
+          {shortcuts.map((s) => (
+            <div key={s.keys} className="contents">
+              <dt className="flex justify-end gap-1">
+                {s.keys.split(" ").map((k) => (
+                  <Kbd key={k}>{k}</Kbd>
+                ))}
+              </dt>
+              <dd className="m-0 text-subtle-foreground">{s.label}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <h2 className="mb-4 text-[17px] font-bold leading-snug">{title}</h2>
         {children}

@@ -12,7 +12,9 @@ import { PageHeader } from "@/components/page-header";
 import { FloatingActionBar, Tag } from "@/components/list-parts";
 import { SavedViews } from "@/components/workspace/saved-views";
 import { FilterBar, SearchField, FilterChip, ClearFilters, Segmented } from "@/components/workspace/filter-bar";
-import { DetailPanel, WorkspaceSplit, DetailFields, Timeline } from "@/components/workspace/detail-panel";
+import { DetailPanel, WorkspaceSplit, DetailFields, Timeline, Kbd, type ShortcutHint } from "@/components/workspace/detail-panel";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { useShortcuts } from "@/hooks/use-shortcuts";
 import { BottomSheet } from "@/components/workspace/bottom-sheet";
 import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -457,6 +459,26 @@ export function InspectionList({
     [inspectionNotes]
   );
 
+  // ── 키보드 (PC) ── 패널이 열려 있을 때의 J/K·Esc 는 DetailPanel, Space·M·N 은 InspectionDetail 이 맡는다
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  useShortcuts(
+    {
+      // 패널이 닫혀 있으면 J 는 첫 품목, K 는 마지막 품목부터 연다
+      KeyJ: !detailOrder && flatOrders.length > 0 && (() => setDetailId(flatOrders[0].id)),
+      KeyK: !detailOrder && flatOrders.length > 0 && (() => setDetailId(flatOrders[flatOrders.length - 1].id)),
+      KeyX: isAdmin && !!detailOrder && (() => toggleSelect(detailOrder.id)),
+      "mod+Enter": isAdmin && selectedIds.size > 0 && (() => {
+        if (!isProcessing) void inspectIds([...selectedIds], "선택");
+      }),
+    },
+    isDesktop
+  );
+  // 키보드로 옮겨 간 줄이 화면 밖이면 보이게
+  useEffect(() => {
+    if (!detailId || !isDesktop) return;
+    document.querySelector(`tr[data-row-id="${detailId}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [detailId, isDesktop]);
+
   const handleBulkOutOfStock = async () => {
     const reason = oosReason.trim();
     if (selectedIds.size === 0 || !reason) return;
@@ -739,6 +761,7 @@ export function InspectionList({
                         return (
                           <tr
                             key={order.id}
+                            data-row-id={order.id}
                             onClick={() => setDetailId(order.id)}
                             className={cn(
                               "cursor-pointer",
@@ -789,6 +812,11 @@ export function InspectionList({
               </div>
               <p className="hidden px-1 text-xs text-muted-foreground lg:block">
                 수량 칸을 누르면 그 자리에서 고칠 수 있어요. 주문보다 적게 받으면 부분입고로 남아요.
+                {isAdmin && (
+                  <>
+                    {" "}키보드: <Kbd>J</Kbd> 첫 품목 열기 → <Kbd>Space</Kbd> 검수 완료하고 다음으로 · <Kbd>?</Kbd> 단축키 전체
+                  </>
+                )}
               </p>
 
               {/* 모바일/태블릿: 묶음 카드 */}
@@ -909,6 +937,7 @@ export function InspectionList({
           <Button size="sm" className="h-9" onClick={() => inspectIds([...selectedIds], "선택")} disabled={isProcessing}>
             <ClipboardCheck className="size-4" />
             {isProcessing ? "처리하는 중…" : "검수 완료"}
+            {!isProcessing && <Kbd className="hidden bg-white/20 text-white shadow-none lg:inline-flex">Ctrl Enter</Kbd>}
           </Button>
           <Button
             size="icon-sm"
@@ -941,6 +970,16 @@ export function InspectionList({
     </>
   );
 }
+
+const INSPECTION_SHORTCUTS: ShortcutHint[] = [
+  { keys: "J K", label: "다음 · 이전 품목" },
+  { keys: "Space", label: "검수 완료(다 받음)하고 다음 품목으로" },
+  { keys: "X", label: "이 품목 선택 / 해제" },
+  { keys: "Ctrl Enter", label: "선택한 품목 한꺼번에 검수 완료" },
+  { keys: "M", label: "메모 쓰기" },
+  { keys: "N", label: "검수 비고 쓰기" },
+  { keys: "Esc", label: "입력 빠져나오기 · 패널 닫기" },
+];
 
 /** 상세 패널(PC 오른쪽 / 모바일 시트) */
 function InspectionDetail({
@@ -977,12 +1016,27 @@ function InspectionDetail({
       ? new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })
       : undefined;
 
+  // 키보드 (PC, 관리자): Space 검수 완료 → 다음 품목, M 메모, N 검수 비고
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const focusField = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.focus();
+  useShortcuts(
+    {
+      Space: () => {
+        if (!processing) onInspect();
+      },
+      KeyM: () => focusField(`memo-${order.id}`),
+      KeyN: () => focusField(`notes-${order.id}`),
+    },
+    isDesktop && canAct
+  );
+
   return (
     <DetailPanel
       open
       onClose={onClose}
       onPrev={onPrev}
       onNext={onNext}
+      shortcuts={canAct ? INSPECTION_SHORTCUTS : undefined}
       title={
         <span className="flex items-center gap-2">
           {order.item_name}
@@ -1002,6 +1056,7 @@ function InspectionDetail({
             <Button className="h-10 flex-[1.6] rounded-lg lg:h-9" disabled={processing} onClick={onInspect}>
               <ClipboardCheck className="size-4" />
               {processing ? "처리하는 중…" : "검수 완료"}
+              {!processing && <Kbd className="hidden bg-white/20 text-white shadow-none lg:inline-flex">Space</Kbd>}
             </Button>
           )}
         </div>
