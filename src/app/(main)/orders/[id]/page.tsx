@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { OrderComments } from "@/components/orders/order-comments";
 import { notFound } from "next/navigation";
 import { createClient, getSessionProfile } from "@/lib/supabase/server";
 import { Tag } from "@/components/list-parts";
@@ -40,7 +41,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           {(canDispatch || canEdit) && (
             <DetailActions hint={canDispatch ? "업체를 정해 발주하면 검수 대기로 넘어가요." : undefined}>
               {canDispatch && <OrderAdminAction orderId={order.id} itemName={order.item_name} quantity={order.quantity} unit={order.unit} />}
-              {canEdit && <OrderDetailActions orderId={order.id} itemName={order.item_name} />}
+              {canEdit && <OrderDetailActions orderId={order.id} itemName={order.item_name} deleteNeedsReason={order.requester_id !== userId} />}
             </DetailActions>
           )}
           <DetailCard title="처리 이력">
@@ -93,6 +94,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           ]}
         />
       </DetailCard>
+
+      <OrderComments
+        orderId={order.id}
+        requesterId={order.requester_id}
+        viewerId={userId ?? ""}
+        isAdmin={isAdmin}
+        className="rounded-xl bg-card p-5 ring-1 ring-border"
+      />
 
       {order.photo_urls?.length > 0 && (
         <DetailCard title={`사진 ${order.photo_urls.length}`}>

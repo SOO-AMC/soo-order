@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useMemo, useRef, type ReactNode } fro
 import Link from "next/link";
 import { Camera, ChevronRight, CircleX, ExternalLink, Trash2, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { deleteOrdersWithReason } from "@/lib/actions/order-delete-action";
+import { DeleteReasonInput } from "@/components/orders/delete-order-button";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,7 +29,6 @@ import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { PhotoGallery } from "@/components/orders/photo-gallery";
 import { QuantityText, formatShort, groupByDay, type OrderGroup } from "@/components/orders/list-format";
 import { toKSTDateString } from "@/lib/utils/format";
-import { logClientAction } from "@/app/(main)/log-action";
 import type { OrderWithRequester } from "@/lib/types/order";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { applyRealtimeChange, pruneSet } from "@/lib/utils/realtime-list";
@@ -98,6 +99,7 @@ export function OutOfStockList({
   const [actionError, setActionError] = useState("");
   /** 삭제 확인창에 올릴 대상 (선택 묶음 또는 상세 1건) */
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const [view, setView] = useState<ViewKey>("all");
   const [query, setQuery] = useState("");
   const [vendorFilter, setVendorFilter] = useState<string | null>(null);
@@ -248,20 +250,20 @@ export function OutOfStockList({
     setIsProcessing(true);
     setActionError("");
 
-    const { error } = await supabase.from("orders").delete().in("id", deleteIds);
+    // 다른 사람의 주문이면 사유를 받아 주문자에게 알린다 (order-delete-action.ts)
+    const res = await deleteOrdersWithReason(deleteIds, deleteReason).catch(() => ({ ok: false as const, error: "삭제하지 못했어요. 잠시 뒤 다시 눌러 주세요." }));
 
-    if (error) {
+    if (!res.ok) {
       setIsProcessing(false);
-      setDeleteIds(null);
-      setActionError("삭제하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
+      setActionError(res.error);
       return;
     }
 
-    logClientAction("order", "delete_out_of_stock", `${deleteIds.length}건 품절 삭제`);
     setSelectedIds((prev) => new Set([...prev].filter((id) => !deleteIds.includes(id))));
     if (detailId && deleteIds.includes(detailId)) setDetailId(null);
     setIsProcessing(false);
     setDeleteIds(null);
+    setDeleteReason("");
     await fetchOrders();
   };
 
@@ -280,6 +282,11 @@ export function OutOfStockList({
 
   const showBar = isAdmin && selectedIds.size > 0;
   const deleteTarget = deleteIds?.length === 1 ? orders.find((o) => o.id === deleteIds[0]) : undefined;
+  /** 지우려는 것 중 다른 사람의 주문이 있으면 사유를 받는다 */
+  const deleteNeedsReason = !!deleteIds?.some((id) => {
+    const o = orders.find((x) => x.id === id);
+    return !!o && o.requester_id !== currentUserId;
+  });
 
   return (
     <>
@@ -498,22 +505,25 @@ export function OutOfStockList({
         </FloatingActionBar>
       )}
 
-      <Dialog open={!!deleteIds} onOpenChange={(o) => { if (!o) setDeleteIds(null); }}>
+      <Dialog open={!!deleteIds} onOpenChange={(o) => { if (!o && !isProcessing) { setDeleteIds(null); setDeleteReason(""); setActionError(""); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>품절 품목을 지울까요?</DialogTitle>
             <DialogDescription>
               {deleteTarget ? `"${deleteTarget.item_name}"` : `선택한 ${deleteIds?.length ?? 0}건`}을 목록에서 지워요. 지우면 되돌릴 수 없어요.
+              {deleteNeedsReason && " 주문한 사람에게 사유와 주문 내용을 알려요."}
             </DialogDescription>
           </DialogHeader>
+          {deleteNeedsReason && <DeleteReasonInput value={deleteReason} onChange={setDeleteReason} id="oos-delete-reason" />}
+          {actionError && deleteIds && <p role="alert" className="rounded-lg bg-status-late-bg px-3 py-2.5 text-sm font-medium text-status-late">{actionError}</p>}
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">
                 취소
               </Button>
             </DialogClose>
-            <Button variant="destructive" onClick={handleDelete} disabled={isProcessing}>
-              {isProcessing ? "지우는 중…" : "지우기"}
+            <Button variant="destructive" onClick={handleDelete} disabled={isProcessing || (deleteNeedsReason && deleteReason.trim().length < 2)}>
+              {isProcessing ? "지우는 중…" : deleteNeedsReason && deleteReason.trim().length < 2 ? "사유를 적어 주세요" : "지우기"}
             </Button>
           </DialogFooter>
         </DialogContent>

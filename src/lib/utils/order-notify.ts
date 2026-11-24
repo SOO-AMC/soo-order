@@ -125,3 +125,77 @@ export function editNotificationBody(changes: string[], reason: string): string 
 export function needsChangeReason(prev: { item_name: string; quantity: number; unit: string }, next: { item_name: string; quantity: number; unit: string }): boolean {
   return prev.item_name.trim() !== next.item_name.trim() || prev.quantity !== next.quantity || (prev.unit ?? "").trim() !== (next.unit ?? "").trim();
 }
+
+/** 코멘트 미리보기 — 알림 본문에 넣을 앞부분 */
+export function commentPreview(body: string, max = 80): string {
+  const one = body.replace(/\s+/g, " ").trim();
+  return one.length > max ? `${one.slice(0, max)}…` : one;
+}
+
+/**
+ * 주문 코멘트 알림.
+ * - 관리자가 썼으면 → 주문 등록한 사람에게
+ * - 주문자가 답글을 썼으면 → 그 주문에 코멘트를 남긴 관리자들에게
+ * 쓴 사람 본인에게는 보내지 않는다. 알림은 그 주문 화면(코멘트가 있는 곳)으로 이어진다.
+ */
+export function commentNotifications(input: {
+  orderId: string;
+  itemName: string;
+  requesterId: string | null;
+  authorId: string;
+  authorName: string;
+  authorIsAdmin: boolean;
+  /** 이 주문에 코멘트를 남긴 관리자들 (답글 알림 받을 사람) */
+  adminAuthorIds: string[];
+  body: string;
+}): NotificationRow[] {
+  const preview = commentPreview(input.body);
+  const link = `/orders/${input.orderId}`;
+  if (input.authorIsAdmin) {
+    if (!input.requesterId || input.requesterId === input.authorId) return [];
+    return [{
+      user_id: input.requesterId,
+      order_id: input.orderId,
+      type: "order_comment",
+      title: `'${input.itemName}' 주문에 코멘트가 달렸어요`,
+      body: `${input.authorName}: ${preview}`,
+      link,
+    }];
+  }
+  const to = [...new Set(input.adminAuthorIds)].filter((id) => id && id !== input.authorId);
+  return to.map((user_id) => ({
+    user_id,
+    order_id: input.orderId,
+    type: "order_comment_reply",
+    title: `'${input.itemName}' 코멘트에 답글이 달렸어요`,
+    body: `${input.authorName}: ${preview}`,
+    link,
+  }));
+}
+
+/**
+ * 주문이 삭제됐어요 — 사유와 어떤 주문이었는지를 함께 보낸다.
+ * 주문은 지워지므로 order_id 를 넣지 않는다(넣으면 알림도 함께 지워진다). 링크도 없다 — 본문이 전부다.
+ */
+export function deleteNotifications(
+  orders: (NotifyOrder & { quantity?: number | null; unit?: string | null; created_at?: string | null })[],
+  actorId: string,
+  actorName: string,
+  reason: string,
+): NotificationRow[] {
+  const qty = (o: { quantity?: number | null; unit?: string | null }) => (o.quantity && o.quantity > 0 ? ` ${o.quantity}${o.unit ? ` ${o.unit}` : ""}` : "");
+  const day = (o: { created_at?: string | null }) => {
+    if (!o.created_at) return "";
+    const d = new Date(new Date(o.created_at).getTime() + 9 * 3600_000); // KST
+    return ` (${d.getUTCMonth() + 1}/${d.getUTCDate()} 주문)`;
+  };
+  const why = reason.trim() ? `사유: ${reason.trim()}` : "사유는 적혀 있지 않아요.";
+  const who = actorName.trim() ? `삭제한 사람: ${actorName.trim()}` : "";
+  const rows: NotificationRow[] = [];
+  for (const [userId, list] of byRequester(orders, actorId)) {
+    const title = list.length === 1 ? `'${list[0].item_name}' 주문이 삭제됐어요` : `주문 ${list.length}건이 삭제됐어요`;
+    const body = [lines(list, (o) => `${o.item_name}${qty(o)}${day(o)}`), why, who, "필요하면 다시 주문해 주세요."].filter(Boolean).join("\n");
+    rows.push({ user_id: userId, order_id: null, type: "order_deleted", title, body, link: null });
+  }
+  return rows;
+}

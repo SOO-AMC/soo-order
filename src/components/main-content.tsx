@@ -2,6 +2,7 @@
 
 import { useShowBottomNav } from "@/components/bottom-nav";
 import { MobileSearchButton } from "@/components/workspace/command-palette";
+import { AttentionBanner } from "@/components/attention-banner";
 import { cn } from "@/lib/utils";
 
 export function MainContent({ children }: { children: React.ReactNode }) {
@@ -19,6 +20,8 @@ export function MainContent({ children }: { children: React.ReactNode }) {
       {/* 패널 안은 수링크처럼 흰 바탕(--background를 흰색으로) — 카드·표는 1px 선으로 나뉜다 */}
       <div className="lg:h-full lg:overflow-y-auto lg:rounded-xl lg:bg-card lg:shadow-xs lg:ring-1 lg:ring-border lg:[--background:var(--card)]">
         <MobileSearchButton />
+        {/* 확인할 코멘트·삭제된 주문 안내 띠 */}
+        <AttentionBanner />
         <div className={showNav ? "animate-page-enter" : "animate-page-slide-in"}>
           {children}
         </div>

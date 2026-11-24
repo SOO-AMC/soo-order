@@ -24,14 +24,14 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { ClipboardCheck, PackageX, Pencil, Undo2, X } from "lucide-react";
+import { ClipboardCheck, PackageX, Pencil, Undo2 } from "lucide-react";
 import { logClientAction } from "@/app/(main)/log-action";
 import {
   inspectOrder,
   markOutOfStock,
   revertOrderToPending,
-  deleteOrder,
 } from "@/lib/actions/order-mutations";
+import { DeleteOrderButton } from "@/components/orders/delete-order-button";
 import { OutOfStockReasonInput } from "./out-of-stock-reason";
 
 interface InspectionActionsProps {
@@ -40,6 +40,8 @@ interface InspectionActionsProps {
   defaultQuantity: number;
   canCancel: boolean;
   isAdmin?: boolean;
+  /** 다른 사람의 주문을 지우는 경우 — 사유를 받고 주문자에게 알린다 */
+  deleteNeedsReason?: boolean;
 }
 
 export function InspectionActions({
@@ -48,6 +50,7 @@ export function InspectionActions({
   defaultQuantity,
   canCancel,
   isAdmin,
+  deleteNeedsReason = false,
 }: InspectionActionsProps) {
   const [inspectOpen, setInspectOpen] = useState(false);
   const [confirmedQuantity, setConfirmedQuantity] =
@@ -61,7 +64,6 @@ export function InspectionActions({
   const [outOfStockReason, setOutOfStockReason] = useState("");
   const [isOutOfStocking, setIsOutOfStocking] = useState(false);
 
-  const [cancelOpen, setCancelOpen] = useState(false);
   const [revertOpen, setRevertOpen] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
 
@@ -104,21 +106,15 @@ export function InspectionActions({
     }
   };
 
-  const handleCancel = async (action: "revert" | "delete") => {
+  const handleCancel = async () => {
     setIsCanceling(true);
 
     try {
-      if (action === "delete") {
-        await deleteOrder(orderId);
-        logClientAction("order", "delete_order", `${itemName ?? "품목"} 주문 삭제`);
-      } else {
-        await revertOrderToPending(orderId);
-        logClientAction("dispatch", "cancel_dispatch", `${itemName ?? "품목"} 발주 취소 (주문신청으로 되돌리기)`);
-      }
+      await revertOrderToPending(orderId);
+      logClientAction("dispatch", "cancel_dispatch", `${itemName ?? "품목"} 발주 취소 (주문신청으로 되돌리기)`);
       router.push("/inspection");
     } catch {
       setIsCanceling(false);
-      setCancelOpen(false);
       setRevertOpen(false);
     }
   };
@@ -240,7 +236,7 @@ export function InspectionActions({
                     </Button>
                   </DialogClose>
                   <Button
-                    onClick={() => handleCancel("revert")}
+                    onClick={() => handleCancel()}
                     disabled={isCanceling}
                   >
                     {isCanceling ? "처리 중..." : "주문신청으로 되돌리기"}
@@ -259,36 +255,7 @@ export function InspectionActions({
               </Button>
             )}
             {canCancel && (
-              <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="destructive" className="flex-1">
-                    <X className="h-4 w-4" />
-                    주문 삭제
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>주문 삭제</DialogTitle>
-                    <DialogDescription>
-                      이 주문을 완전히 삭제합니다. 되돌릴 수 없습니다.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <DialogClose asChild>
-                      <Button type="button" variant="outline">
-                        취소
-                      </Button>
-                    </DialogClose>
-                    <Button
-                      variant="destructive"
-                      onClick={() => handleCancel("delete")}
-                      disabled={isCanceling}
-                    >
-                      {isCanceling ? "처리 중..." : "완전 삭제"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <DeleteOrderButton orderId={orderId} itemName={itemName} needsReason={deleteNeedsReason} redirectTo="/inspection" label="주문 삭제" icon="x" />
             )}
           </div>
         </>

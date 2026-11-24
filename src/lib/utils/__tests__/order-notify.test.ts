@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   arrivalNotifications,
+  commentNotifications,
+  commentPreview,
+  deleteNotifications,
   dispatchNotifications,
   editNotificationBody,
   needsChangeReason,
@@ -99,5 +102,54 @@ describe("관리자가 바꿨어요", () => {
     expect(needsChangeReason(base, { ...base, unit: "개" })).toBe(true);
     expect(needsChangeReason(base, { ...base, item_name: "NS 1L" })).toBe(true);
     expect(needsChangeReason(base, { ...base, item_name: " NS 500ml " })).toBe(false);
+  });
+});
+
+describe("주문 코멘트 알림", () => {
+  const base = { orderId: "o1", itemName: "메로페넴 주", requesterId: "kim", authorName: "박관리", adminAuthorIds: [] as string[], body: "이번 주는  품절이라\n다음 주에 와요" };
+
+  it("관리자가 쓰면 주문자에게 한 통, 본문은 한 줄로", () => {
+    const rows = commentNotifications({ ...base, authorId: ADMIN, authorIsAdmin: true });
+    expect(rows).toEqual([
+      { user_id: "kim", order_id: "o1", type: "order_comment", title: "'메로페넴 주' 주문에 코멘트가 달렸어요", body: "박관리: 이번 주는 품절이라 다음 주에 와요", link: "/orders/o1" },
+    ]);
+  });
+
+  it("자기 주문에 자기가 쓰면 보내지 않는다", () => {
+    expect(commentNotifications({ ...base, requesterId: ADMIN, authorId: ADMIN, authorIsAdmin: true })).toEqual([]);
+  });
+
+  it("주문자가 답글을 쓰면 코멘트를 남긴 관리자들에게 (중복·본인 빼고)", () => {
+    const rows = commentNotifications({ ...base, authorId: "kim", authorName: "김간호", authorIsAdmin: false, adminAuthorIds: ["a1", "a2", "a1", "kim"] });
+    expect(rows.map((r) => r.user_id)).toEqual(["a1", "a2"]);
+    expect(rows[0].type).toBe("order_comment_reply");
+    expect(rows[0].title).toBe("'메로페넴 주' 코멘트에 답글이 달렸어요");
+  });
+
+  it("긴 코멘트는 줄여서 보낸다", () => {
+    expect(commentPreview("가".repeat(100))).toBe(`${"가".repeat(80)}…`);
+  });
+});
+
+describe("주문 삭제 알림", () => {
+  it("사유·수량·주문일·삭제한 사람을 넣고, 지워질 주문을 가리키지 않는다", () => {
+    const rows = deleteNotifications([o("1", "kim", "NS 500ml", { quantity: 3, unit: "박스", created_at: "2026-11-20T02:00:00Z" })], ADMIN, "박관리", " 중복 주문 ");
+    expect(rows).toEqual([
+      {
+        user_id: "kim",
+        order_id: null,
+        type: "order_deleted",
+        title: "'NS 500ml' 주문이 삭제됐어요",
+        body: "NS 500ml 3 박스 (11/20 주문)\n사유: 중복 주문\n삭제한 사람: 박관리\n필요하면 다시 주문해 주세요.",
+        link: null,
+      },
+    ]);
+  });
+
+  it("주문자마다 한 통, 본인 주문은 빼고", () => {
+    const rows = deleteNotifications([o("1", "kim", "A"), o("2", "kim", "B"), o("3", ADMIN, "C")], ADMIN, "박관리", "품절");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].title).toBe("주문 2건이 삭제됐어요");
+    expect(rows[0].body).toBe("A\nB\n사유: 품절\n삭제한 사람: 박관리\n필요하면 다시 주문해 주세요.");
   });
 });

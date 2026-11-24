@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { OrderComments } from "@/components/orders/order-comments";
 import { notFound, redirect } from "next/navigation";
 import { CircleX } from "lucide-react";
 import { createClient, getSessionProfile } from "@/lib/supabase/server";
@@ -91,6 +92,14 @@ export default async function OutOfStockDetailPage({ params }: { params: Promise
           ]}
         />
       </DetailCard>
+
+      <OrderComments
+        orderId={order.id}
+        requesterId={order.requester_id}
+        viewerId={userId ?? ""}
+        isAdmin={isAdmin}
+        className="rounded-xl bg-card p-5 ring-1 ring-border"
+      />
 
       {order.photo_urls?.length > 0 && (
         <DetailCard title={`사진 ${order.photo_urls.length}`}>

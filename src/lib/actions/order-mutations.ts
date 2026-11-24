@@ -303,17 +303,7 @@ export async function revertOrderToPending(orderId: string) {
   if (error) throw new Error("주문 취소에 실패했습니다.");
 }
 
-/** 주문 삭제 */
-export async function deleteOrder(orderId: string) {
-  const { supabase } = await requireAdmin();
-
-  const { error } = await supabase
-    .from("orders")
-    .delete()
-    .eq("id", orderId);
-
-  if (error) throw new Error("주문 삭제에 실패했습니다.");
-}
+// 주문 삭제는 lib/actions/order-delete-action.ts 의 deleteOrdersWithReason 하나로만 한다 (사유·주문자 알림)
 
 /** 반품 접수 (status: return_requested → return_pending) */
 export async function dispatchReturn(orderId: string) {

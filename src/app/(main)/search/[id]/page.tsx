@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { OrderComments } from "@/components/orders/order-comments";
 import { notFound } from "next/navigation";
 import { createClient, getSessionProfile } from "@/lib/supabase/server";
 import { Tag } from "@/components/list-parts";
@@ -7,7 +8,7 @@ import { OrderTypeBadge } from "@/components/orders/order-type-badge";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { CancelInspectionButton } from "@/components/search/cancel-inspection-button";
 import { ReturnRequestButton } from "@/components/search/return-request-button";
-import { DeleteOrderButton } from "@/components/search/delete-order-button";
+import { DeleteOrderButton } from "@/components/orders/delete-order-button";
 import { PhotoGallery } from "@/components/orders/photo-gallery";
 import { DetailPage, DetailHero, DetailCard, InfoGrid, DetailActions } from "@/components/workspace/detail-page";
 import { Timeline } from "@/components/workspace/detail-panel";
@@ -56,7 +57,7 @@ export default async function SearchDetailPage({ params }: { params: Promise<{ i
                 />
               )}
               {canCancelInspection && <CancelInspectionButton orderId={order.id} itemName={order.item_name} />}
-              {isAdmin && <DeleteOrderButton orderId={order.id} itemName={order.item_name} />}
+              {isAdmin && <DeleteOrderButton orderId={order.id} itemName={order.item_name} needsReason={order.requester_id !== userId} redirectTo="/search" className="w-full flex-none" />}
             </DetailActions>
           )}
           <DetailCard title="처리 이력">
@@ -156,6 +157,14 @@ export default async function SearchDetailPage({ params }: { params: Promise<{ i
           )}
         </DetailCard>
       )}
+
+      <OrderComments
+        orderId={order.id}
+        requesterId={order.requester_id}
+        viewerId={userId ?? ""}
+        isAdmin={isAdmin}
+        className="rounded-xl bg-card p-5 ring-1 ring-border"
+      />
 
       {order.photo_urls?.length > 0 && (
         <DetailCard title={`사진 ${order.photo_urls.length}`}>

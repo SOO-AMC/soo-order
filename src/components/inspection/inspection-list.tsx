@@ -22,6 +22,9 @@ import { OutOfStockReasonInput } from "./out-of-stock-reason";
 import { formatShort, groupByDay, type OrderGroup } from "@/components/orders/list-format";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { PhotoGallery } from "@/components/orders/photo-gallery";
+import { OrderComments } from "@/components/orders/order-comments";
+import { CommentMarkIcon } from "@/components/orders/comment-mark";
+import { useCommentMarks } from "@/hooks/use-comment-marks";
 import { toKSTDateString } from "@/lib/utils/format";
 import { logClientAction } from "@/app/(main)/log-action";
 import { useAuth } from "@/hooks/use-auth";
@@ -177,7 +180,7 @@ export function InspectionList({
   const [actionError, setActionError] = useState("");
   // 검수·품절 처리는 관리자만 할 수 있다(서버도 막는다). 직원에게는 목록만 보여 주고
   // 누르면 실패만 하는 버튼·선택 상자·관리자끼리 보는 메모는 내보이지 않는다.
-  const { isAdmin } = useAuth();
+  const { isAdmin, userId: currentUserId } = useAuth();
   /** 여러 건 품절 처리 창 */
   const [oosOpen, setOosOpen] = useState(false);
   const [oosReason, setOosReason] = useState("");
@@ -350,6 +353,8 @@ export function InspectionList({
     [visibleOrders, groupMode, todayKST]
   );
   const flatOrders = useMemo(() => groups.flatMap((g) => g.orders), [groups]);
+  // 목록의 코멘트 표시 (관리자)
+  const { marks: commentMarks, refresh: refreshCommentMarks } = useCommentMarks(flatOrders, isAdmin);
   const detailOrder = detailId ? orders.find((o) => o.id === detailId) ?? null : null;
   const detailIndex = detailOrder ? flatOrders.findIndex((o) => o.id === detailOrder.id) : -1;
   const qtyOrder = qtySheetId ? orders.find((o) => o.id === qtySheetId) ?? null : null;
@@ -582,6 +587,7 @@ export function InspectionList({
     <span className="flex min-w-0 items-center gap-1.5">
       <span className="truncate text-[15px] font-semibold leading-snug">{o.item_name}</span>
       {o.is_urgent && <Tag tone="danger">긴급</Tag>}
+      <CommentMarkIcon mark={commentMarks[o.id]} />
     </span>
   );
 
@@ -855,6 +861,7 @@ export function InspectionList({
                               <span className="flex items-center gap-1.5">
                                 <span className="truncate text-base font-semibold">{order.item_name}</span>
                                 {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+                                <CommentMarkIcon mark={commentMarks[order.id]} />
                               </span>
                               {metaLine(order, true)}
                               {partialBadge(order)}
@@ -903,6 +910,8 @@ export function InspectionList({
                 onInspect={() => inspectIds([detailOrder.id], detailOrder.item_name)}
                 canAct={isAdmin}
                 processing={isProcessing}
+                viewerId={currentUserId}
+                onCommentsChanged={refreshCommentMarks}
               />
             )}
           </WorkspaceSplit>
@@ -978,6 +987,7 @@ const INSPECTION_SHORTCUTS: ShortcutHint[] = [
   { keys: "Ctrl Enter", label: "선택한 품목 한꺼번에 검수 완료" },
   { keys: "M", label: "메모 쓰기" },
   { keys: "N", label: "검수 비고 쓰기" },
+  { keys: "C", label: "코멘트 쓰기 (주문한 사람에게 보여요)" },
   { keys: "Esc", label: "입력 빠져나오기 · 패널 닫기" },
 ];
 
@@ -995,6 +1005,8 @@ function InspectionDetail({
   onInspect,
   processing,
   canAct,
+  viewerId,
+  onCommentsChanged,
 }: {
   order: OrderWithRequester;
   late: boolean;
@@ -1009,6 +1021,8 @@ function InspectionDetail({
   processing: boolean;
   /** 검수 완료·메모를 쓸 수 있는가 (관리자) */
   canAct: boolean;
+  viewerId: string;
+  onCommentsChanged?: () => void;
 }) {
   const received = order.received_quantity ?? 0;
   const at = (iso: string | null) =>
@@ -1026,6 +1040,7 @@ function InspectionDetail({
       },
       KeyM: () => focusField(`memo-${order.id}`),
       KeyN: () => focusField(`notes-${order.id}`),
+      KeyC: () => focusField(`comment-${order.id}`),
     },
     isDesktop && canAct
   );
@@ -1116,6 +1131,8 @@ function InspectionDetail({
         </section>
         </>
         )}
+
+        <OrderComments key={order.id} orderId={order.id} requesterId={order.requester_id} viewerId={viewerId} isAdmin={canAct} onChanged={onCommentsChanged} />
 
         {order.photo_urls?.length > 0 && (
           <section className="flex flex-col gap-2">

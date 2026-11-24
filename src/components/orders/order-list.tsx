@@ -9,6 +9,9 @@ import { FloatingActionBar, Tag } from "@/components/list-parts";
 import { SavedViews } from "@/components/workspace/saved-views";
 import { FilterBar, SearchField, FilterChip, ClearFilters, Segmented } from "@/components/workspace/filter-bar";
 import { DetailPanel, WorkspaceSplit, DetailFields, Timeline, Kbd, type ShortcutHint } from "@/components/workspace/detail-panel";
+import { OrderComments } from "@/components/orders/order-comments";
+import { CommentMarkIcon } from "@/components/orders/comment-mark";
+import { useCommentMarks } from "@/hooks/use-comment-marks";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useShortcuts } from "@/hooks/use-shortcuts";
 import { ListSkeleton, EmptyState } from "@/components/workspace/feedback";
@@ -347,6 +350,8 @@ export function OrderList({
 
   // 표에 보이는 순서대로 (상세 패널 J/K 이동)
   const flatOrders = useMemo(() => groups.flatMap((g) => g.orders), [groups]);
+  // 목록의 코멘트 표시 (관리자)
+  const { marks: commentMarks, refresh: refreshCommentMarks } = useCommentMarks(flatOrders, isAdmin);
   const detailOrder = detailId ? orders.find((o) => o.id === detailId) ?? null : null;
   const detailIndex = detailOrder ? flatOrders.findIndex((o) => o.id === detailOrder.id) : -1;
   const openDetail = (id: string) => {
@@ -657,6 +662,7 @@ export function OrderList({
               <span className="flex items-center gap-1.5">
                 <span className="truncate text-base font-semibold">{order.item_name}</span>
                 {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+                <CommentMarkIcon mark={commentMarks[order.id]} />
               </span>
               {metaLine(order, withDate, true)}
               {order.notes && (
@@ -798,6 +804,7 @@ export function OrderList({
                               <span className="flex items-center gap-1.5">
                                 <span className="truncate text-[15px] font-semibold leading-snug">{order.item_name}</span>
                                 {order.is_urgent && <Tag tone="danger">긴급</Tag>}
+                                <CommentMarkIcon mark={commentMarks[order.id]} />
                               </span>
                               {metaLine(order, !!g.mixedDates || !!g.urgent, false)}
                               {order.notes && (
@@ -866,6 +873,8 @@ export function OrderList({
                 error={dispatchError}
                 vendorOptions={vendorOptions}
                 onVendorRegistered={addVendorOption}
+                viewerId={currentUserId}
+                onCommentsChanged={refreshCommentMarks}
               />
             )}
           </WorkspaceSplit>
@@ -1079,8 +1088,9 @@ const ORDER_SHORTCUTS: ShortcutHint[] = [
   { keys: "X", label: "이 품목 체크 / 해제" },
   { keys: "V", label: "업체별로 발주 창 열기 (업체 고른 품목)" },
   { keys: "O", label: "선택 주문 창 열기 (체크한 품목)" },
-  { keys: "Ctrl Enter", label: "발주 창에서: 발주" },
-  { keys: "Esc", label: "패널 닫기" },
+  { keys: "Ctrl Enter", label: "발주 창에서: 발주 · 코멘트 칸에서: 보내기" },
+  { keys: "C", label: "코멘트 쓰기 (주문한 사람에게 보여요)" },
+  { keys: "Esc", label: "입력 빠져나오기 · 패널 닫기" },
 ];
 
 function OrderDetail({
@@ -1097,6 +1107,8 @@ function OrderDetail({
   error,
   vendorOptions,
   onVendorRegistered,
+  viewerId,
+  onCommentsChanged,
 }: {
   order: OrderWithRequester;
   isAdmin: boolean;
@@ -1112,6 +1124,8 @@ function OrderDetail({
   /** 업체 직접 고르기 목록 (발주 창과 같은 목록) */
   vendorOptions: VendorOption[];
   onVendorRegistered: (v: VendorOption) => void;
+  viewerId: string;
+  onCommentsChanged?: () => void;
 }) {
   // 일반 직원은 가격을 받지 않는다
   const [data] = usePriceData(isAdmin);
@@ -1138,6 +1152,8 @@ function OrderDetail({
       KeyL: !!lastVendor && (() => pick(lastVendor)),
       // / : 업체 이름 검색 열기
       Slash: () => document.getElementById(pickerId)?.click(),
+      // C : 코멘트 칸으로
+      KeyC: () => document.getElementById(`comment-${order.id}`)?.focus(),
       Space: () => {
         if (dispatching) return;
         if (!dispatchVendor) setKeyHint({ id: order.id, text: "업체를 먼저 골라 주세요 — 숫자 키(1~9) 또는 L(지난번 업체)" });
@@ -1279,6 +1295,8 @@ function OrderDetail({
             </div>
           </section>
         )}
+
+        <OrderComments key={order.id} orderId={order.id} requesterId={order.requester_id} viewerId={viewerId} isAdmin={isAdmin} onChanged={onCommentsChanged} />
 
         {order.photo_urls?.length > 0 && (
           <section className="flex flex-col gap-2">
