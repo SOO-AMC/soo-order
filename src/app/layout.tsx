@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { AppSplash, SPLASH_INIT_SCRIPT } from "@/components/app-splash";
 
 // Pretendard를 앱에 직접 포함(수링크와 동일). 이전 CDN 주소(jsdelivr gh)는 404라 폰트가 한 번도 적용되지 않았다.
 const pretendard = localFont({
@@ -50,8 +51,15 @@ export default function RootLayout({
     <html lang="ko" className={`${pretendard.variable} antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: SPLASH_INIT_SCRIPT }} />
+        {/* 시작 화면 첫 장면에 로고가 바로 보이도록 (10KB) */}
+        <link rel="preload" as="image" href="/sooorder-brand/splash-icon.webp" />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* 앱을 켤 때 시작 화면 애니메이션 (설치한 앱으로 열 때만) */}
+        <AppSplash />
+        {children}
+      </body>
     </html>
   );
 }

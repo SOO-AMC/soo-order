@@ -266,3 +266,220 @@
     box-shadow: 0 -1px 0 0 var(--border);
   }
 }
+
+/* ── 앱 시작 화면 (components/app-splash.tsx) ──────────────────────────────
+   <html class="splash-on"> 일 때만 보인다.
+   첫 장면은 안드로이드가 그리는 시작 화면과 똑같다 — 흰 바탕, 화면 가운데에서 17px 위에 폭 28px 로고,
+   78px 아래에 20px "수오더"(#333). (2026-11 사용자 폰 화면을 재서 맞춤)
+   그 자리에서 로고가 커지고 글자가 조금 커지며 이어지므로 넘어갈 때 튀지 않는다. 약 1.7초 뒤 물러난다.
+   위치·크기 값을 바꾸면 app-splash.tsx 주석의 측정값도 같이 고칠 것. */
+#app-splash {
+  display: none;
+}
+html.splash-on body {
+  overflow: hidden;
+}
+html.splash-on #app-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: block;
+  overflow: hidden;
+  /* 안드로이드 시작 화면(manifest background_color)과 같은 흰색 — 다크 모드여도 흰색에서 시작 */
+  background: #ffffff;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+html.splash-out #app-splash {
+  animation: splash-leave 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* 은은한 브랜드 빛 (청록 위·파랑 아래) */
+#app-splash .splash-glow {
+  position: absolute;
+  width: 120vmax;
+  height: 120vmax;
+  border-radius: 9999px;
+  opacity: 0;
+  animation: splash-fade 1s ease-out 0.35s forwards;
+}
+#app-splash .splash-glow-a {
+  top: -80vmax;
+  right: -64vmax;
+  background: radial-gradient(closest-side, rgb(34 195 168 / 0.3), rgb(34 195 168 / 0) 70%);
+}
+#app-splash .splash-glow-b {
+  bottom: -82vmax;
+  left: -62vmax;
+  background: radial-gradient(closest-side, rgb(17 102 167 / 0.28), rgb(17 102 167 / 0) 70%);
+  animation-delay: 0.45s;
+}
+
+/* 로고: 가운데 17px 위가 중심. 처음 34.6px(로고 그림 폭 28px) → 116px 로 그 자리에서 커진다 */
+#app-splash .splash-mark {
+  position: absolute;
+  left: 50%;
+  top: calc(50% - 17px);
+  transform: translate(-50%, -50%);
+}
+#app-splash .splash-tile {
+  position: relative;
+  width: 34.6px;
+  height: 34.6px;
+  border-radius: 24%;
+  animation: splash-grow 0.62s cubic-bezier(0.3, 1.35, 0.5, 1) 0.12s forwards;
+}
+#app-splash .splash-tile-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1px rgb(20 33 61 / 0.06),
+    0 18px 40px -14px rgb(17 102 167 / 0.45);
+  opacity: 0;
+  animation: splash-fade 0.45s ease-out 0.4s forwards;
+}
+#app-splash .splash-tile-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+#app-splash .splash-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* 대각선으로 한 번 지나가는 빛 */
+#app-splash .splash-shine {
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(115deg, transparent 42%, rgb(255 255 255 / 0.85) 50%, transparent 58%);
+  transform: translateX(-80%);
+  animation: splash-shine 0.7s ease-in-out 0.78s forwards;
+}
+/* 로고에서 퍼지는 물결 두 번 */
+#app-splash .splash-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 116px;
+  height: 116px;
+  margin: -58px 0 0 -58px;
+  border-radius: 24%;
+  border: 2px solid rgb(17 102 167 / 0.35);
+  opacity: 0;
+  animation: splash-ring 1s cubic-bezier(0.2, 0.7, 0.3, 1) 0.6s forwards;
+}
+#app-splash .splash-ring-2 {
+  border-color: rgb(34 195 168 / 0.38);
+  animation-delay: 0.8s;
+}
+
+/* 이름: 가운데 78px 아래, 20px #333 에서 시작해 그 자리에서 조금 커지고 브랜드 남색으로 */
+#app-splash .splash-name {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 78px);
+  transform: translate(-50%, -50%);
+  margin: 0;
+  white-space: nowrap;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+  color: #333333;
+  animation: splash-name 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s forwards;
+}
+#app-splash .splash-tagline {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 112px);
+  transform: translate(-50%, -50%);
+  margin: 0;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #5b6b80;
+  opacity: 0;
+  animation: splash-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.62s forwards;
+}
+
+/* 아래쪽 얇은 진행 막대 */
+#app-splash .splash-bar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 56px);
+  width: 120px;
+  height: 3px;
+  margin-left: -60px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgb(17 102 167 / 0.12);
+  opacity: 0;
+  animation: splash-fade 0.3s ease-out 0.5s forwards;
+}
+#app-splash .splash-bar span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1166a7, #22c3a8);
+  transform: translateX(-100%);
+  animation: splash-progress 1.05s cubic-bezier(0.65, 0, 0.35, 1) 0.55s forwards;
+}
+
+@keyframes splash-grow {
+  to {
+    width: 116px;
+    height: 116px;
+  }
+}
+@keyframes splash-name {
+  to {
+    transform: translate(-50%, -50%) scale(1.35);
+    color: #14213d;
+    letter-spacing: 0.06em;
+  }
+}
+@keyframes splash-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+@keyframes splash-shine {
+  to {
+    transform: translateX(80%);
+  }
+}
+@keyframes splash-rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+@keyframes splash-fade {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes splash-progress {
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes splash-leave {
+  to {
+    opacity: 0;
+  }
+}
