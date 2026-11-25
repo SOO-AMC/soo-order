@@ -165,7 +165,8 @@ export async function fetchPlanner(): Promise<PlannerData> {
     }
     if (isIssueVisible(issue, now)) {
       lockedDates.push(issue.issue_date);
-      published.push({ date: issue.issue_date, paperCount: papers.length, headlines: papers.map((p) => p.headline ?? "(제목 없음)") });
+      // 논문을 모두 지운 발행분은 직원에게도 안 보이므로 목록에서 뺀다
+      if (papers.length > 0) published.push({ date: issue.issue_date, paperCount: papers.length, headlines: papers.map((p) => p.headline ?? "(제목 없음)") });
       continue;
     }
     if (papers.length === 0) continue; // 빈 묶음은 보여 주지 않는다
