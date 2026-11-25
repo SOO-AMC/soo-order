@@ -308,3 +308,31 @@ describe("해설 숫자 검사", () => {
     expect(cleanAffiliation("1Gastrointestinal Laboratory, Texas A&M University")).toBe("Gastrointestinal Laboratory, Texas A&M University");
   });
 });
+
+describe("Unpaywall", () => {
+  it("PMC 번호를 먼저, 사전 공개본은 빼고 PDF 주소를 고른다", async () => {
+    const { pickOaLocation } = await import("../finder/unpaywall");
+    expect(pickOaLocation({ is_oa: false, oa_locations: [] })).toBeNull();
+    expect(
+      pickOaLocation({
+        is_oa: true,
+        oa_locations: [
+          { url: "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1/x", url_for_pdf: "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1/x", version: "publishedVersion" },
+          { url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC13782716/", url_for_pdf: null, version: "publishedVersion" },
+        ],
+      })
+    ).toEqual({ pmcid: "PMC13782716", pdfUrl: "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1/x" });
+    expect(pickOaLocation({ is_oa: true, oa_locations: [{ url: "https://ssrn.com/x", url_for_pdf: "https://ssrn.com/x.pdf", version: "submittedVersion" }] })).toBeNull();
+  });
+  it("PDF 글자에서 참고문헌을 버리고 결과·고찰부터 담는다", async () => {
+    const { parsePdfText } = await import("../finder/sources");
+    const words = (w: string, n: number) => Array.from({ length: n }, () => w).join(" ");
+    const pdf = ["Title of paper", "Abstract", words("abs", 40), "Introduction", words("intro", 60), "Results", words("result", 90), "Discussion", words("disc", 60), "References", "1. Some ref"].join("\n");
+    const all = parsePdfText(pdf);
+    expect(all).toContain("[Results]");
+    expect(all).not.toContain("Some ref");
+    const small = parsePdfText(pdf, 1100);
+    expect(small).toContain("[Results]");
+    expect(small).not.toContain("[Introduction]");
+  });
+});

@@ -4,6 +4,7 @@ import { addDays } from "../kst";
 import { parseCard, type PaperCardContent } from "../schema";
 import { chooseCandidate, type ChooseResult } from "./choose";
 import { FinderSearchError, fetchPmc, searchCandidates, type FetchLike } from "./pubmed";
+import { fetchPdfText, lookupUnpaywall, unpaywallEmail } from "./unpaywall";
 import { RECENT_DAYS, candidateRawText, candidateSource, excludeUsed, type Candidate, type FindCategory } from "./sources";
 
 /**
@@ -29,6 +30,8 @@ export type FindPaperDeps = {
   provider: "rule" | "anthropic";
   client?: AiMessagesClient;
   fetchImpl?: FetchLike;
+  /** Unpaywall 에 보낼 이메일. 없으면 환경변수 UNPAYWALL_EMAIL, 그것도 없으면 Unpaywall 을 쓰지 않는다 (null = 끔) */
+  unpaywallEmail?: string | null;
 };
 
 export async function findPaper(
@@ -37,6 +40,7 @@ export async function findPaper(
   deps: FindPaperDeps
 ): Promise<FindPaperResult> {
   const range = { from: addDays(ctx.today, -RECENT_DAYS), to: ctx.today };
+  const email = deps.unpaywallEmail === undefined ? unpaywallEmail() : deps.unpaywallEmail;
   let vet: Candidate[];
   let human: Candidate[];
   try {
@@ -59,9 +63,13 @@ export async function findPaper(
   const rest = pool.filter((p) => p !== choice.candidate).sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "vet" ? -1 : 1));
   const tries = deps.provider === "anthropic" ? [choice.candidate, ...rest].slice(0, MAX_TRIES) : [choice.candidate];
   for (const [i, c] of tries.entries()) {
-    // 무료 원문(PMC)이 있으면 본문 발췌까지 넣는다 (못 받으면 초록만)
-    const pmc = c.pmcid ? await fetchPmc(c.pmcid, { fetchImpl: deps.fetchImpl }) : null;
-    const fullText = pmc?.body ?? null;
+    // 무료 원문이 있으면 본문 발췌까지 넣는다 (못 받으면 초록만):
+    // PubMed 의 PMC 번호 → 없으면 Unpaywall 이 아는 PMC 번호 → 그것도 없으면 Unpaywall 이 알려 준 PDF
+    const oa = !c.pmcid && c.doi && email ? await lookupUnpaywall(c.doi, email, { fetchImpl: deps.fetchImpl }) : null;
+    const pmcid = c.pmcid ?? oa?.pmcid ?? null;
+    const pmc = pmcid ? await fetchPmc(pmcid, { fetchImpl: deps.fetchImpl }) : null;
+    const pdfText = !pmc?.body && oa?.pdfUrl && !deps.fetchImpl ? await fetchPdfText(oa.pdfUrl, { email }) : null;
+    const fullText = pmc?.body ?? pdfText;
     const raw = candidateRawText(c, fullText);
     const design = await designCard(raw, { category, doi: c.doi, sourceUrl: c.url }, { provider: deps.provider, client: deps.client, kind: "abstract" });
     if (deps.provider === "anthropic" && design.mode !== "ai") continue;

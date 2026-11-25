@@ -271,8 +271,12 @@ export function parsePmcBody(xml: string, max = FULL_TEXT_MAX): string | null {
       return { i, title, text: textBody };
     })
     .filter((c) => c.text.length > 0);
-  if (chunks.length === 0) return null;
+  return pickSections(chunks, max);
+}
 
+/** 구역들 중 결과·고찰부터 max 글자까지 골라 원래 순서로 잇는다. 500자가 안 되면 null */
+function pickSections(chunks: { i: number; title: string; text: string }[], max: number): string | null {
+  if (chunks.length === 0) return null;
   const rank = (title: string) => SECTION_RANK.find(([re]) => re.test(title))?.[1] ?? 3;
   const picked = new Set<number>();
   let used = 0;
@@ -287,6 +291,39 @@ export function parsePmcBody(xml: string, max = FULL_TEXT_MAX): string | null {
     .map((c) => (c.title ? `[${c.title}]\n${c.text}` : c.text))
     .join("\n\n");
   return out.length >= 500 ? out : null;
+}
+
+/** PDF 에서 뽑은 글자의 구역 제목 (줄 하나에 이 낱말만 있는 경우) */
+const PDF_HEADING = /^\s*(?:\d+(?:\.\d+)*\.?\s*)?(abstract|summary|introduction|background|materials? and methods|methods|animals|study design|results|case (?:report|description|presentation)s?|discussion|conclusions?|clinical (?:relevance|significance))\s*:?\s*$/i;
+const PDF_END = /^\s*(references|literature cited|bibliography|acknowledge?ments?|conflicts? of interest)\s*$/i;
+
+/**
+ * 무료 원문 PDF 에서 뽑은 글자 → 본문 발췌. 참고문헌부터는 버리고, 구역 제목으로 나눠 결과·고찰부터 담는다.
+ * 구역 제목을 못 찾으면 앞에서부터 max 글자.
+ */
+export function parsePdfText(raw: string, max = FULL_TEXT_MAX): string | null {
+  const lines = raw.replace(/\r/g, "").split("\n");
+  // 참고문헌 제목은 앞쪽 목차·머리글에도 나올 수 있어 글의 30% 뒤에서 처음 나온 것부터 버린다
+  const end = lines.findIndex((l, i) => i > lines.length * 0.3 && PDF_END.test(l));
+  const body = (end > 0 ? lines.slice(0, end) : lines).map((l) => l.replace(/\s+/g, " ").trim());
+  const chunks: { i: number; title: string; text: string }[] = [];
+  let cur = { i: 0, title: "", lines: [] as string[] };
+  const flush = () => {
+    const text = cur.lines.join(" ").replace(/-\s(?=[a-z])/g, "").replace(/\s+/g, " ").trim();
+    if (text) chunks.push({ i: chunks.length, title: cur.title, text });
+  };
+  for (const l of body) {
+    if (PDF_HEADING.test(l)) {
+      flush();
+      cur = { i: 0, title: l.replace(/^[\d.\s]+/, "").replace(/:$/, "").trim(), lines: [] };
+    } else if (l) cur.lines.push(l);
+  }
+  flush();
+  if (chunks.length <= 1) {
+    const all = chunks[0]?.text ?? "";
+    return all.length >= 500 ? all.slice(0, max) : null;
+  }
+  return pickSections(chunks, max);
 }
 
 /** PMC 원문(JATS XML)의 교신저자 (corresp="yes" 또는 교신 표시가 붙은 저자). 없으면 null */
