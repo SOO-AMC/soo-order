@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, CalendarClock, CalendarOff, CheckCircle2, ChevronRight, CircleAlert, GripVertical, Inbox, Loader2, Newspaper, Plus, Send, Settings, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarClock, CalendarOff, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, GripVertical, Inbox, Loader2, Newspaper, Plus, Send, Settings, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/page-header";
 import { BackButton } from "@/components/back-button";
 import { EmptyState, ListSkeleton } from "@/components/workspace/feedback";
+import { AutoFinder } from "@/components/briefing/admin/auto-finder";
 import { ReviewFlow } from "@/components/briefing/admin/review-flow";
 import { deletePaper, generatePaperCard } from "@/lib/actions/briefing-admin-actions";
 import { fetchPlanner, movePaper, reviewCleanPapers, uploadPapers, type PlannerData, type PlannerDay, type PlannerPaperRow } from "@/lib/actions/briefing-planner-actions";
@@ -25,9 +26,10 @@ const MAX_PER_DAY = PER_DAY_RANGE.max;
 const shortDate = (d: string) => formatIssueDate(d).slice(5);
 
 /**
- * 논문 브리핑 관리 첫 화면 — 날짜를 정해 올리고, 검수하고, 날짜별로 본다.
+ * 논문 브리핑 관리 첫 화면 — 논문을 찾거나 올리고, 날짜별로 본다.
  *
- * ① 올리기: 발행 날짜(기본은 다음 빈 날짜)를 정하고 논문 칸(탭)마다 요약을 하나씩 붙여넣는다.
+ * ⓪ 논문 찾기(기본): 날짜를 고르고 누르면 내과·외과·영상·응급 분야마다 최근 논문을 1건씩 찾아 카드로 만든다. 검수 없이 08:30 예약 (auto-finder.tsx).
+ * ① 직접 붙여넣기(접어 둠): 발행 날짜(기본은 다음 빈 날짜)를 정하고 논문 칸(탭)마다 요약을 하나씩 붙여넣는다.
  *    한 번에 올린 논문들이 그날의 브리핑이다 — 칸을 늘리면 그날 나가는 건수가 늘어난다(하루 6건까지).
  * ② 검수: 넘기면서 검수. 그날 논문이 전부 검수되면 앱이 08:30 발행을 예약한다.
  * ③ 발행 예정: 날짜별 묶음. 앱은 논문을 다른 날짜로 옮기지 않는다(지워도 당겨 채우지 않는다) — 옮기는 것은 여기서 직접.
@@ -48,6 +50,10 @@ export function BriefingPlanner() {
   const [review, setReview] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [confirmPublish, setConfirmPublish] = useState<PlannerDay | null>(null);
+  /** 논문 찾기가 도는 중 (그동안 다른 버튼을 막는다) */
+  const [finderBusy, setFinderBusy] = useState(false);
+  /** 직접 붙여넣기 칸을 펼쳤나 */
+  const [manualOpen, setManualOpen] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -184,7 +190,7 @@ export function BriefingPlanner() {
   }
 
   const { days, today } = data;
-  const working = !!busy;
+  const working = !!busy || finderBusy;
   const low = data.stock < STOCK_LOW_DAYS;
   const nextScheduled = days.find((d) => d.status === "scheduled" && d.date >= today);
   const countOn = new Map(days.map((d) => [d.date, d.papers.length]));
@@ -227,7 +233,7 @@ export function BriefingPlanner() {
         {low ? <CircleAlert className="size-[18px] shrink-0" /> : <CheckCircle2 className="size-[18px] shrink-0" />}
         <b className="font-bold">{data.stock === 0 ? "예약된 브리핑이 없어요" : `앞으로 ${data.stock}일치가 예약됐어요`}</b>
         <span className="text-[13px] font-medium opacity-90">
-          {nextScheduled ? `다음 발행 ${formatIssueDate(nextScheduled.date)} 08:30 · ${nextScheduled.papers.length}건` : "논문을 올리고 검수하면 08:30 발행이 예약돼요"}
+          {nextScheduled ? `다음 발행 ${formatIssueDate(nextScheduled.date)} 08:30 · ${nextScheduled.papers.length}건` : "논문을 찾으면 08:30 발행이 예약돼요"}
         </span>
       </div>
 
@@ -247,11 +253,18 @@ export function BriefingPlanner() {
         </p>
       )}
 
-      {/* ① 올리기: 날짜 + 논문 칸(탭) */}
+      {/* ⓪ 논문 찾기 */}
+      <AutoFinder today={today} defaultDate={data.defaultDate} lockedDates={data.lockedDates} disabled={!!busy} onBusyChange={setFinderBusy} onChanged={reload} />
+
+      {/* ① 직접 붙여넣기: 날짜 + 논문 칸(탭) — 접어 둔다 */}
       <section className="rounded-xl bg-card p-4 ring-1 ring-border lg:p-5">
-        <h2 className="flex items-center gap-2 text-base font-bold">
-          <Upload className="size-[18px] text-subtle-foreground" /> 논문 올리기
-        </h2>
+        <button type="button" aria-expanded={manualOpen} onClick={() => setManualOpen((o) => !o)} className="flex w-full flex-wrap items-center gap-x-2 text-left text-base font-bold">
+          <Upload className="size-[18px] text-subtle-foreground" /> 요약문 직접 붙여넣기
+          <span className="text-[13px] font-medium text-muted-foreground">꼭 소개하고 싶은 논문이 있을 때</span>
+          <ChevronDown className={cn("ml-auto size-4 text-muted-foreground transition-transform", manualOpen && "rotate-180")} />
+        </button>
+        {manualOpen && (
+        <>
         <p className="mt-1 text-[13px] text-muted-foreground">논문 칸마다 요약을 하나씩 붙여넣으세요. 여기 올린 논문들이 그날의 브리핑이 돼요. 칸을 늘리면 그날 나가는 건수가 늘어나요.</p>
 
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -339,6 +352,8 @@ export function BriefingPlanner() {
             {paperCount === 0 ? "붙여넣은 칸만 올라가요. 빈 칸은 무시해요." : `${shortDate(uploadDate)} 브리핑 · 논문 ${paperCount}건${slots.some((t) => !t.trim()) ? " (빈 칸 제외)" : ""}`}
           </span>
         </div>
+        </>
+        )}
       </section>
 
       {/* ② 검수 전 */}

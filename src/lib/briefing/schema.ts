@@ -123,6 +123,10 @@ export const cardSourceSchema = z
     title: optText(300),
     doi: optText(200),
     url: safeUrl,
+    /** 저자 ("첫 저자 외") — 자동으로 찾은 논문만 */
+    authors: optText(120),
+    /** 무엇을 보고 요약했나 (예: "초록 기준 요약") — 자동으로 찾은 논문만 */
+    basis: optText(40),
   })
   .strict();
 export type CardSource = z.infer<typeof cardSourceSchema>;

@@ -119,7 +119,7 @@ describe("원문에 없는 것을 만들지 않는다", () => {
 
   it("출처가 없으면 비워 두고 표시만 한다", () => {
     const card = designCardByRules(NO_NUMBERS);
-    expect(card.source).toEqual({ journal: null, year: null, studyType: null, title: null, doi: null, url: null });
+    expect(card.source).toEqual({ journal: null, year: null, studyType: null, title: null, doi: null, url: null, authors: null, basis: null });
     expect(card.flags).toContain("missing-source-metadata");
   });
 

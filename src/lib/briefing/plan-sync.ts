@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { kstDate } from "./kst";
 import { planChanges, settlePlan, type CurrentIssue, type Plan, type PlanMove, type PlanPaper } from "./planner";
-import { DEFAULT_PLAN_SETTINGS, LEGACY_LIMITS, PER_DAY_RANGE, PLAN_LIMITS, QUEUE_DATE, type PlanSettings, type PublishLimits } from "./types";
+import { DEFAULT_PLAN_SETTINGS, LEGACY_LIMITS, PER_DAY_RANGE, PLAN_LIMITS, QUEUE_DATE, type IssueStatus, type PlanSettings, type PublishLimits } from "./types";
 
 /**
  * 논문 브리핑 날짜 묶음의 예약 상태를 DB 에 맞춘다 ("use server" 밖 — 액션들이 같이 쓴다).
@@ -110,4 +110,17 @@ export async function syncPlan(
     return { ready: true, changed: false, error: "failed", config };
   }
   return { ready: true, changed: true, plan, config };
+}
+
+/** 그 날짜의 묶음 (없으면 만든다). 호출자가 requireAdmin() 으로 권한을 확인한 뒤에 부른다 */
+export async function ensureIssue(supabase: SupabaseClient, issueDate: string, userId: string): Promise<{ id: string; status: IssueStatus; scheduled_at: string | null } | null> {
+  type Row = { id: string; status: IssueStatus; scheduled_at: string | null };
+  const cols = "id, status, scheduled_at";
+  const found = await supabase.from("briefing_issues").select(cols).eq("issue_date", issueDate).maybeSingle();
+  if (found.data) return found.data as Row;
+  const created = await supabase.from("briefing_issues").insert({ issue_date: issueDate, created_by: userId }).select(cols).maybeSingle();
+  if (created.data) return created.data as Row;
+  // 동시에 다른 창에서 만들었을 수 있다(날짜 유니크) → 다시 읽기
+  const again = await supabase.from("briefing_issues").select(cols).eq("issue_date", issueDate).maybeSingle();
+  return (again.data as Row | null) ?? null;
 }

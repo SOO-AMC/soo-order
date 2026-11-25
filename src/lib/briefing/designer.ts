@@ -1,4 +1,4 @@
-import { AiDesignError, designCardWithAi, type AiFailureCode, type AiMessagesClient } from "./ai-designer";
+import { AiDesignError, designCardWithAi, type AiFailureCode, type AiInputKind, type AiMessagesClient } from "./ai-designer";
 import { checkFidelity, type FidelityWarning } from "./fidelity";
 import { designCardByRules, type DesignOptions } from "./rule-designer";
 import type { PaperCardContent } from "./schema";
@@ -49,6 +49,8 @@ export type DesignDeps = {
   /** 테스트용: 가짜 AI 클라이언트 */
   client?: AiMessagesClient;
   model?: string;
+  /** summary(기본) = 붙여넣은 완성 요약문을 배치만, abstract = 자동으로 찾은 논문의 초록을 요약·번역 */
+  kind?: AiInputKind;
 };
 
 export async function designCard(raw: string, opts: DesignOptions = {}, deps: DesignDeps = {}): Promise<DesignResult> {
@@ -59,7 +61,7 @@ export async function designCard(raw: string, opts: DesignOptions = {}, deps: De
   let aiFailure: AiFailureCode | null = null;
   if (provider === "anthropic") {
     try {
-      const { card, model } = await designCardWithAi(raw, opts, { client: deps.client, model: deps.model });
+      const { card, model } = await designCardWithAi(raw, opts, { client: deps.client, model: deps.model, kind: deps.kind });
       return {
         card,
         mode: "ai",

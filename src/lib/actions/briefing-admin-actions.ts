@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/utils/activity-log";
 import { designCard } from "@/lib/briefing/designer";
+import { parseAutoMemo } from "@/lib/briefing/finder/sources";
 import { checkFidelity, type FidelityWarning } from "@/lib/briefing/fidelity";
 import { loadPlanConfig, syncPlan } from "@/lib/briefing/plan-sync";
 import { checkPublishable, isIssueVisible } from "@/lib/briefing/publish-rules";
@@ -205,25 +206,35 @@ export async function generatePaperCard(paperId: string): Promise<ActionResult<G
   const info = await issueInfo(supabase, paper.issue_id);
   if (info?.status === "published") return PUBLISHED_LOCK;
 
+  // 자동으로 찾은 논문: 초록을 요약하는 방식으로 다시 만들고, 출처는 처음 찾을 때의 데이터베이스 값을 그대로 둔다.
+  // 검수 없이 나가는 논문이라 AI 로 만들었으면 바로 검수 완료로 둔다 (AI 없이 만들었으면 초안)
+  const auto = parseAutoMemo(paper.admin_memo);
   try {
-    const result = await designCard(paper.raw_summary_text, {
-      category: isCategory(paper.category) ? paper.category : null,
-      sourceUrl: paper.source_url,
-      doi: paper.doi,
-    });
+    const result = await designCard(
+      paper.raw_summary_text,
+      {
+        category: isCategory(paper.category) ? paper.category : null,
+        sourceUrl: paper.source_url,
+        doi: paper.doi,
+      },
+      auto ? { kind: "abstract" } : {}
+    );
+    const keptSource = auto ? (paper.card_content ?? paper.previous_card_content)?.source : null;
+    const card = keptSource ? { ...result.card, category: auto?.category ?? result.card.category, source: { ...keptSource, studyType: result.card.source.studyType ?? keptSource.studyType } } : result.card;
+    const autoReady = !!auto && result.mode === "ai";
     const { data, error } = await supabase
       .from("briefing_papers")
       .update({
-        card_content: result.card,
+        card_content: card,
         previous_card_content: paper.card_content ?? paper.previous_card_content, // 이전 카드 보관(되돌리기)
-        headline: result.card.headline,
-        layout_variant: result.card.layoutVariant,
-        category: paper.category ?? result.card.category,
+        headline: card.headline,
+        layout_variant: card.layoutVariant,
+        category: paper.category ?? card.category,
         generation_status: result.mode,
         ai_provider_info: result.providerInfo,
-        review_status: "draft",
-        reviewed_by: null,
-        reviewed_at: null,
+        review_status: autoReady ? "reviewed" : "draft",
+        reviewed_by: autoReady ? userId : null,
+        reviewed_at: autoReady ? new Date().toISOString() : null,
       })
       .eq("id", paperId)
       .select(PAPER_COLS)
@@ -231,7 +242,7 @@ export async function generatePaperCard(paperId: string): Promise<ActionResult<G
     if (error || !data) throw new Error("save-failed");
 
     await settle(supabase, paper.issue_id, isQuiet(info, paper));
-    logActivity({ userId, userName, category: "briefing", action: "generate_card", description: `논문 카드 만들기: ${result.card.headline}` });
+    logActivity({ userId, userName, category: "briefing", action: "generate_card", description: `논문 카드 만들기: ${card.headline}` });
     touch();
     return { ok: true, data: { paper: data as BriefingPaper, notice: result.notice, warnings: result.warnings } };
   } catch {

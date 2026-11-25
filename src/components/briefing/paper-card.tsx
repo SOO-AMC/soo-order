@@ -25,7 +25,7 @@ export function categoryText(card: PaperCardContent) {
 /** 출처 한 줄. 정보가 없으면 지어내지 않고 "출처 정보 미입력" */
 export function sourceLine(card: PaperCardContent): string {
   const s = card.source;
-  const parts = [s.journal, s.journal && s.year && s.journal.includes(s.year) ? null : s.year, s.studyType].filter(Boolean);
+  const parts = [s.authors, s.journal, s.journal && s.year && s.journal.includes(s.year) ? null : s.year, s.studyType, s.basis].filter(Boolean);
   if (parts.length > 0) return parts.join(" · ");
   if (s.doi) return `doi: ${s.doi}`;
   if (s.url) return "원문 링크 있음";

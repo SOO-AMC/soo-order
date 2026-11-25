@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/supabase/server";
 import { logActivity } from "@/lib/utils/activity-log";
 import { checkFidelity } from "@/lib/briefing/fidelity";
 import { addDays, defaultIssueDate, formatIssueDate, isPastPublishTime, kstDate } from "@/lib/briefing/kst";
-import { loadPlanConfig, syncPlan } from "@/lib/briefing/plan-sync";
+import { ensureIssue, loadPlanConfig, syncPlan } from "@/lib/briefing/plan-sync";
 import { extractDois, findDuplicate, nextFreeDate, splitSummaries, type DupHit, type DupItem, type PlanDay } from "@/lib/briefing/planner";
 import { isIssueVisible } from "@/lib/briefing/publish-rules";
 import type { PaperCardContent } from "@/lib/briefing/schema";
@@ -32,25 +32,12 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_PER_DAY = PER_DAY_RANGE.max;
 const NOT_READY = "아직 준비되지 않았어요. supabase/migrate-briefing-planner.sql 을 먼저 실행해 주세요.";
 
-type Sb = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
 const hashOf = (text: string) => createHash("sha256").update(text).digest("hex");
 const isRealDate = (d: unknown): d is string => typeof d === "string" && DATE_RE.test(d) && !Number.isNaN(new Date(`${d}T00:00:00Z`).getTime());
 
 function touch() {
   revalidatePath("/briefing/admin");
   revalidatePath("/briefing");
-}
-
-/** 그 날짜의 묶음 (없으면 만든다) */
-async function ensureIssue(supabase: Sb, issueDate: string, userId: string): Promise<{ id: string; status: IssueStatus; scheduled_at: string | null } | null> {
-  const cols = "id, status, scheduled_at";
-  const found = await supabase.from("briefing_issues").select(cols).eq("issue_date", issueDate).maybeSingle();
-  if (found.data) return found.data as { id: string; status: IssueStatus; scheduled_at: string | null };
-  const created = await supabase.from("briefing_issues").insert({ issue_date: issueDate, created_by: userId }).select(cols).maybeSingle();
-  if (created.data) return created.data as { id: string; status: IssueStatus; scheduled_at: string | null };
-  // 동시에 다른 창에서 만들었을 수 있다(날짜 유니크) → 다시 읽기
-  const again = await supabase.from("briefing_issues").select(cols).eq("issue_date", issueDate).maybeSingle();
-  return (again.data as { id: string; status: IssueStatus; scheduled_at: string | null } | null) ?? null;
 }
 
 export type PlannerPaperRow = { id: string; headline: string | null; reviewed: boolean; hasCard: boolean };
