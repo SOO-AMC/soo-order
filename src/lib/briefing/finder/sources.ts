@@ -1,4 +1,4 @@
-import type { CardSource, CategoryKey } from "../schema";
+import type { CardSource, CategoryKey, DetailAuthor } from "../schema";
 
 /**
  * 논문 자동 찾기 — 검색 조건과 결과 다듬기 (순수 함수, 테스트 대상).
@@ -91,8 +91,22 @@ export type Candidate = {
   pubTypes: string[];
   /** PubMed Central 번호 (예: "PMC123") — 있으면 무료 원문을 받아 본문으로 요약한다 */
   pmcid: string | null;
+  /** 해설 페이지에 적을 저자 — PubMed 가 교신저자로 표시한 사람(이메일이 붙은 소속), 없으면 제1저자 */
+  contact: DetailAuthor | null;
   url: string;
 };
+
+/** 소속 글에서 이메일을 지운다 (공개 페이지에 개인 이메일을 싣지 않는다) */
+export function cleanAffiliation(aff: string): string | null {
+  const t = aff
+    .replace(/^\s*\d+\s*/, "") // 각주 번호 ("1Gastrointestinal …")
+    .replace(/Electronic address:?\s*\S+@\S+/gi, "")
+    .replace(/\S+@\S+\.\S+/g, "")
+    .replace(/\s+([.,;])/g, "$1")
+    .replace(/[\s.,;]+$/, "")
+    .trim();
+  return t ? t.slice(0, 300) : null;
+}
 
 /** 논문이 아닌 것(정정·댓글·사설 등)은 후보에서 뺀다 — 검색식에서도 빼지만 한 번 더 */
 const SKIP_TYPES = /erratum|correction|comment|letter|editorial|retract|news|expression of concern/i;
@@ -167,10 +181,20 @@ export function parsePubmedXml(xml: string, kind: "vet" | "human", order: string
     const pmc = decode(ids.find((i) => attr(i.attrs, "IdType") === "pmc")?.body ?? "");
     const pmcid = /^PMC\d+$/.test(pmc) ? pmc : null;
 
-    const authors = all(inner(art, "AuthorList") ?? "", "Author").map(({ body }) => {
+    const authorRows = all(inner(art, "AuthorList") ?? "", "Author").map(({ body }) => {
       const last = text(body, "LastName");
-      return last ? `${last} ${text(body, "Initials")}`.trim() : text(body, "CollectiveName");
+      const short = last ? `${last} ${text(body, "Initials")}`.trim() : text(body, "CollectiveName");
+      const full = last ? [text(body, "ForeName"), last].filter(Boolean).join(" ") : short;
+      const affs = all(body, "Affiliation").map((a) => decode(a.body));
+      return { short, full, affs };
     });
+    const authors = authorRows.map((a) => a.short);
+    // PubMed 는 교신저자의 소속에 "Electronic address: 이메일"을 붙인다 — 그 사람을 교신저자로, 없으면 제1저자
+    const corr = authorRows.find((a) => a.affs.some((x) => /Electronic address|@/.test(x)));
+    const who = corr ?? authorRows[0];
+    const contact: DetailAuthor | null = who?.full
+      ? { role: corr ? "corresponding" : "first", name: who.full.slice(0, 120), affiliation: who.affs.map(cleanAffiliation).find(Boolean) ?? null }
+      : null;
 
     out.push({
       kind,
@@ -183,6 +207,7 @@ export function parsePubmedXml(xml: string, kind: "vet" | "human", order: string
       year,
       date,
       authors: shortAuthors(authors),
+      contact,
       pubTypes,
       pmcid,
       url: doi ? `https://doi.org/${doi}` : `https://pubmed.ncbi.nlm.nih.gov/${pmid ?? ""}/`,
@@ -262,6 +287,22 @@ export function parsePmcBody(xml: string, max = FULL_TEXT_MAX): string | null {
     .map((c) => (c.title ? `[${c.title}]\n${c.text}` : c.text))
     .join("\n\n");
   return out.length >= 500 ? out : null;
+}
+
+/** PMC 원문(JATS XML)의 교신저자 (corresp="yes" 또는 교신 표시가 붙은 저자). 없으면 null */
+export function parsePmcCorresp(xml: string): DetailAuthor | null {
+  const front = inner(xml, "front") ?? xml;
+  const contribs = all(front, "contrib").filter((c) => /contrib-type="author"/.test(c.attrs) || !/contrib-type=/.test(c.attrs));
+  const corr = contribs.find((c) => /corresp="yes"/.test(c.attrs) || /<xref[^>]*ref-type="corresp"/.test(c.body));
+  if (!corr) return null;
+  const nameXml = inner(corr.body, "name") ?? "";
+  const name = [text(nameXml, "given-names"), text(nameXml, "surname")].filter(Boolean).join(" ") || text(corr.body, "collab");
+  if (!name) return null;
+  const rid = corr.body.match(/<xref[^>]*ref-type="aff"[^>]*rid="([^"]+)"/)?.[1];
+  const affs = all(front, "aff");
+  const aff = (rid ? affs.find((a) => attr(a.attrs, "id") === rid) : undefined) ?? affs[0];
+  const affText = aff ? decode(aff.body.replace(/<label>[\s\S]*?<\/label>/g, "")) : "";
+  return { role: "corresponding", name: name.slice(0, 120), affiliation: cleanAffiliation(affText) };
 }
 
 /**

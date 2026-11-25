@@ -9,6 +9,8 @@ import { loadPlanConfig } from "@/lib/briefing/plan-sync";
 
 export const metadata: Metadata = { title: "논문 브리핑 관리" };
 export const dynamic = "force-dynamic";
+/** 논문 찾기·AI 카드 만들기(서버 동작)가 이 화면에서 불린다 — 분야 하나에 1~2분 걸릴 수 있다 */
+export const maxDuration = 300;
 
 export default async function BriefingAdminPage() {
   const { isAdmin } = await getSessionProfile();

@@ -3,7 +3,7 @@ import { designCard, type DesignResult } from "../designer";
 import { addDays } from "../kst";
 import { parseCard, type PaperCardContent } from "../schema";
 import { chooseCandidate, type ChooseResult } from "./choose";
-import { FinderSearchError, fetchFullText, searchCandidates, type FetchLike } from "./pubmed";
+import { FinderSearchError, fetchPmc, searchCandidates, type FetchLike } from "./pubmed";
 import { RECENT_DAYS, candidateRawText, candidateSource, excludeUsed, type Candidate, type FindCategory } from "./sources";
 
 /**
@@ -60,12 +60,15 @@ export async function findPaper(
   const tries = deps.provider === "anthropic" ? [choice.candidate, ...rest].slice(0, MAX_TRIES) : [choice.candidate];
   for (const [i, c] of tries.entries()) {
     // 무료 원문(PMC)이 있으면 본문 발췌까지 넣는다 (못 받으면 초록만)
-    const fullText = c.pmcid ? await fetchFullText(c.pmcid, { fetchImpl: deps.fetchImpl }) : null;
+    const pmc = c.pmcid ? await fetchPmc(c.pmcid, { fetchImpl: deps.fetchImpl }) : null;
+    const fullText = pmc?.body ?? null;
     const raw = candidateRawText(c, fullText);
     const design = await designCard(raw, { category, doi: c.doi, sourceUrl: c.url }, { provider: deps.provider, client: deps.client, kind: "abstract" });
     if (deps.provider === "anthropic" && design.mode !== "ai") continue;
+    // 해설의 저자는 데이터베이스 값: 무료 원문의 교신저자 → PubMed 의 교신저자/제1저자
+    const detail = design.card.detail ? { ...design.card.detail, author: pmc?.corresp ?? c.contact } : null;
     // 출처는 데이터베이스 값으로, 분야는 찾은 분야로 고정한다
-    const parsed = parseCard({ ...design.card, category, source: candidateSource(c, design.card.source.studyType, !!fullText) });
+    const parsed = parseCard({ ...design.card, category, detail, source: candidateSource(c, design.card.source.studyType, !!fullText) });
     if (!parsed.ok) continue;
     return {
       ok: true,

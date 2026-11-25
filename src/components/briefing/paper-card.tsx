@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
-import { BookOpen, Check, ExternalLink, Repeat, Scale, Stethoscope, Target, TriangleAlert } from "lucide-react";
+import { BookOpen, Check, ChevronRight, ExternalLink, Repeat, Scale, Stethoscope, Target, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CATEGORY_LABEL, type CardBlock, type PaperCardContent } from "@/lib/briefing/schema";
 import { clip } from "@/lib/briefing/rule-designer";
@@ -36,6 +36,60 @@ export function sourceHref(card: PaperCardContent): string | null {
   if (card.source.url) return card.source.url;
   if (card.source.doi) return `https://doi.org/${card.source.doi}`;
   return null;
+}
+
+/** "꼭 확인" — 진료를 바로 바꿀 만한 논문 (AI 가 표시) */
+function PriorityChip({ card, className }: { card: PaperCardContent; className?: string }) {
+  if (!card.flags.includes("priority")) return null;
+  return <span className={cn("inline-flex items-center rounded-full px-[0.9em] py-[0.35em] font-bold text-[var(--bf-gold-300)] ring-1 ring-[var(--bf-gold-400)]/70", className)}>꼭 확인</span>;
+}
+
+/** 한 문단형 본문 (모바일·PC) — 요약 문단 · 임상적 의미 · 주의. 같은 글자 크기·줄 간격 */
+function BriefBody({ card, wide }: { card: PaperCardContent; wide: boolean }) {
+  const summary = card.blocks.find((b) => b.kind === "keyPoint");
+  const clinical = card.blocks.find((b) => b.kind === "clinical");
+  const caution = card.blocks.find((b) => b.kind === "caution");
+  const size = wide ? "text-[17px] leading-[1.85]" : "text-[16px] leading-[1.8]";
+  return (
+    <div className="grid gap-5">
+      {summary && <p className={cn(size, "text-[var(--bf-ink)]")}>{summary.text}</p>}
+      {clinical && (
+        <div className="rounded-2xl bg-[var(--bf-teal-100)] px-4 py-3.5">
+          <BlockLabel icon={<Stethoscope />}>임상적 의미</BlockLabel>
+          <p className={cn(size, "text-[var(--bf-ink)]")}>{clinical.text}</p>
+        </div>
+      )}
+      {caution && (
+        <p className={cn(size, "flex gap-2 text-[var(--bf-slate-700)]")}>
+          <TriangleAlert className="mt-[0.35em] size-4 shrink-0 text-[#8a6426]" aria-hidden="true" />
+          <span>
+            <b className="mr-1.5 font-bold text-[#8a6426]">주의</b>
+            {caution.text}
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** 라운딩 면의 한 문단형 본문 — 요약 문단(길면 자름) + 임상적 의미 한두 줄 */
+function RoundingBrief({ card }: { card: PaperCardContent }) {
+  const summary = card.blocks.find((b) => b.kind === "keyPoint");
+  const clinical = card.blocks.find((b) => b.kind === "clinical");
+  return (
+    <div className="mt-[2cqw] flex min-h-0 flex-1 flex-col gap-[1.6cqw] overflow-hidden">
+      {summary && <p className="line-clamp-4 shrink-0 text-[1.9cqw] leading-[1.6] text-white/90">{summary.text}</p>}
+      {clinical && (
+        <div className="flex shrink-0 items-start gap-[1.4cqw] rounded-[1.2cqw] bg-white/[0.06] px-[2cqw] py-[1.3cqw] ring-1 ring-white/15">
+          <span className="mt-[0.1cqw] flex shrink-0 items-center gap-[0.6cqw] text-[1.6cqw] font-bold text-[var(--bf-gold-300)] [&_svg]:size-[1.9cqw]">
+            <Stethoscope aria-hidden="true" />
+            임상
+          </span>
+          <p className="line-clamp-2 text-[1.75cqw] font-semibold leading-[1.5]">{clinical.text}</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CategoryChip({ card, className }: { card: PaperCardContent; className?: string }) {
@@ -162,6 +216,8 @@ export function PaperCard({
   dateLabel,
   progress,
   rounding,
+  detailHref,
+  roundingQr,
   className,
 }: {
   card: PaperCardContent;
@@ -172,14 +228,20 @@ export function PaperCard({
   progress?: string;
   /** 라운딩 화면의 공통 머리·바닥 (날짜·진행률·AUTO LOOP). 논문 카드 밖의 덮개이지 별도 장이 아니다 */
   rounding?: RoundingChrome;
+  /** 해설이 있는 카드에 "해설 보기" 버튼을 단다 (해설 페이지 주소 또는 같은 화면의 #해설) */
+  detailHref?: string;
+  /** 라운딩 화면 구석의 QR (해설 페이지로) — 라운딩 화면이 만들어 넘긴다 */
+  roundingQr?: ReactNode;
   className?: string;
 }) {
-  if (variant === "rounding") return <RoundingFace card={card} chrome={rounding} className={className} />;
+  if (variant === "rounding") return <RoundingFace card={card} chrome={rounding} qr={roundingQr} className={className} />;
 
   const href = sourceHref(card);
   const wide = variant === "desktop";
+  // 한 문단형(자동으로 찾은 논문): 제목 · 요약 한 문단 · 임상적 의미 · 주의 — 글자 크기를 하나로 맞춘다
+  const brief = card.layoutVariant === "brief";
   // PC: 구역이 3개 이상이면 2열로 펼친다 (한 장 안의 격자). 카드 폭이 좁으면 1열로 떨어진다(@container)
-  const twoCol = wide && card.blocks.length >= 3;
+  const twoCol = wide && !brief && card.blocks.length >= 3;
 
   return (
     <article className={cn("bf bf-text @container overflow-hidden rounded-[22px] bg-[var(--bf-ivory-50)] text-[var(--bf-ink)] shadow-[0_18px_40px_-24px_rgb(8_35_68/0.45)] ring-1 ring-[var(--bf-line)]", className)}>
@@ -189,7 +251,10 @@ export function PaperCard({
           <span className="whitespace-nowrap">SOO AMC · DAILY JOURNAL</span>
           <span className="shrink-0 whitespace-nowrap tabular-nums text-white/70">{(wide ? [dateLabel, progress] : [progress ?? dateLabel]).filter(Boolean).join("  ·  ")}</span>
         </div>
-        <CategoryChip card={card} className="mt-4 text-[12px]" />
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <CategoryChip card={card} className="text-[12px]" />
+          <PriorityChip card={card} className="text-[12px]" />
+        </div>
         <h2 className={cn("mt-3 font-extrabold tracking-tight", wide ? "text-[30px] leading-[1.3]" : "text-[23px] leading-[1.35]")}>{card.headline}</h2>
       </header>
 
@@ -201,7 +266,9 @@ export function PaperCard({
           </div>
         )}
 
-        {card.blocks.length > 0 && (
+        {brief ? (
+          <BriefBody card={card} wide={wide} />
+        ) : card.blocks.length > 0 && (
           <div className={cn(twoCol ? "@[620px]:columns-2 @[620px]:gap-x-7 [&>*]:mb-5 [&>*]:break-inside-avoid [&>*:last-child]:mb-0" : "grid gap-5")}>
             {card.blocks.map((b, i) => (
               <LightBlock key={i} block={b} />
@@ -209,10 +276,22 @@ export function PaperCard({
           </div>
         )}
 
+        {detailHref && card.detail && (
+          <a
+            href={detailHref}
+            className="mt-6 flex items-center justify-center gap-1 rounded-xl bg-[var(--bf-navy-900)] py-3 text-[15px] font-bold text-white transition-opacity hover:opacity-90"
+          >
+            해설 보기 <ChevronRight className="size-4" aria-hidden="true" />
+          </a>
+        )}
+
         {/* 출처 */}
         <footer className="mt-6 flex items-center gap-2 border-t border-[var(--bf-line)] pt-4 text-[13px] text-[var(--bf-slate-500)]">
           <BookOpen className="size-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate">{sourceLine(card)}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{sourceLine(card)}</span>
+            {brief && card.source.title && <span className="mt-0.5 block truncate text-[12px] italic opacity-80">{card.source.title}</span>}
+          </span>
           {href && (
             <a
               href={href}
@@ -258,7 +337,7 @@ export type RoundingChrome = {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-function RoundingFace({ card, chrome, className }: { card: PaperCardContent; chrome?: RoundingChrome; className?: string }) {
+function RoundingFace({ card, chrome, qr, className }: { card: PaperCardContent; chrome?: RoundingChrome; qr?: ReactNode; className?: string }) {
   const points = roundingPoints(card);
   return (
     <div className={cn("bf bf-text bf-navy-surface relative aspect-video w-full overflow-hidden text-white [container-type:inline-size]", className)}>
@@ -301,12 +380,17 @@ function RoundingFace({ card, chrome, className }: { card: PaperCardContent; chr
       )}
 
       {/* key: 논문이 바뀌면 본문만 다시 나타난다 (공통 머리·바닥은 그대로) */}
-      <div key={card.headline} className={cn("absolute inset-0 flex flex-col px-[6cqw] pb-[7.2cqw] pt-[8.2cqw]", chrome && "bf-fade")}>
-        <CategoryChip card={card} className="self-start text-[1.35cqw]" />
+      <div key={card.headline} className={cn("absolute inset-0 flex flex-col px-[6cqw] pb-[7.2cqw] pt-[8.2cqw]", chrome && "bf-fade", qr && "pr-[16cqw]")}>
+        <div className="flex shrink-0 items-center gap-[0.8cqw]">
+          <CategoryChip card={card} className="text-[1.35cqw]" />
+          <PriorityChip card={card} className="text-[1.35cqw]" />
+        </div>
 
         <h2 className="mt-[1.6cqw] line-clamp-2 shrink-0 text-[4.1cqw] font-extrabold leading-[1.22] tracking-tight">{card.headline}</h2>
 
-        {card.lead && (
+        {card.layoutVariant === "brief" && <RoundingBrief card={card} />}
+
+        {card.layoutVariant !== "brief" && card.lead && (
           <div className="mt-[2.2cqw] flex shrink-0 items-start gap-[1.4cqw] rounded-[1.2cqw] bg-white/[0.06] px-[2cqw] py-[1.5cqw] ring-1 ring-white/15">
             <span className="mt-[0.15cqw] flex shrink-0 items-center gap-[0.6cqw] text-[1.6cqw] font-bold text-[var(--bf-gold-300)] [&_svg]:size-[1.9cqw]">
               <Target aria-hidden="true" />
@@ -316,7 +400,7 @@ function RoundingFace({ card, chrome, className }: { card: PaperCardContent; chr
           </div>
         )}
 
-        {points.length > 0 && (
+        {card.layoutVariant !== "brief" && points.length > 0 && (
           <ul className="mt-[1.8cqw] grid min-h-0 flex-1 content-start gap-[0.9cqw] overflow-hidden">
             {points.map((p, i) => (
               <li key={i} className="flex items-start gap-[1cqw] text-[1.62cqw] leading-[1.45] text-white/85">
@@ -337,6 +421,12 @@ function RoundingFace({ card, chrome, className }: { card: PaperCardContent; chr
           <BookOpen aria-hidden="true" />
           <span className="min-w-0 truncate">{sourceLine(card)}</span>
         </p>
+        {qr && (
+          <div className="absolute bottom-[7.6cqw] right-[4.6cqw] flex flex-col items-center gap-[0.5cqw]">
+            <div className="rounded-[0.8cqw] bg-white p-[0.6cqw] [&_svg]:block [&_svg]:size-[8.5cqw]">{qr}</div>
+            <span className="text-[1.05cqw] font-semibold text-white/70">해설 보기</span>
+          </div>
+        )}
       </div>
     </div>
   );

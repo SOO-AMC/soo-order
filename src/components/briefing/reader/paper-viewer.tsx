@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { PaperCard, sourceHref } from "@/components/briefing/paper-card";
+import { PaperDetail } from "@/components/briefing/paper-detail";
 import { BookmarkButton } from "@/components/briefing/reader/reader-parts";
 import { markPaperRead, type ReaderIssue } from "@/lib/actions/briefing-reader-actions";
 import { formatIssueDate } from "@/lib/briefing/kst";
@@ -84,8 +85,8 @@ export function PaperViewer({ issue, initialIndex }: { issue: ReaderIssue; initi
   };
 
   const handleShare = async () => {
-    // 로그인해야 열리는 앱 안 주소만 복사한다 (토큰 없음)
-    const ok = await copyText(`${window.location.origin}/briefing/paper/${paper.id}`);
+    // 수오더 계정 없이도 열리는 공개 주소(/b/paper/…)를 복사한다 — 발행된 논문만 열리고, 토큰은 없다
+    const ok = await copyText(`${window.location.origin}/b/paper/${paper.id}`);
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -143,8 +144,8 @@ export function PaperViewer({ issue, initialIndex }: { issue: ReaderIssue; initi
 
         {/* 카드 1장 */}
         <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="touch-pan-y">
-          <PaperCard key={`m-${paper.id}`} card={paper.card} variant="mobile" dateLabel={dateLabel} progress={progressLabel(index, total)} className="bf-fade lg:hidden" />
-          <PaperCard key={`d-${paper.id}`} card={paper.card} variant="desktop" dateLabel={dateLabel} progress={progressLabel(index, total)} className="bf-fade hidden lg:block" />
+          <PaperCard key={`m-${paper.id}`} card={paper.card} variant="mobile" dateLabel={dateLabel} progress={progressLabel(index, total)} detailHref="#detail" className="bf-fade lg:hidden" />
+          <PaperCard key={`d-${paper.id}`} card={paper.card} variant="desktop" dateLabel={dateLabel} progress={progressLabel(index, total)} detailHref="#detail" className="bf-fade hidden lg:block" />
         </div>
 
         {/* 이 논문으로 할 수 있는 것 */}
@@ -158,7 +159,7 @@ export function PaperViewer({ issue, initialIndex }: { issue: ReaderIssue; initi
           )}
           <Button variant="outline" className="h-11 flex-1 rounded-xl sm:flex-none" onClick={handleShare}>
             {copied ? <Check className="size-4" /> : <Link2 className="size-4" />}
-            {copied ? "주소를 복사했어요" : "링크 복사"}
+            {copied ? "주소를 복사했어요" : "링크 복사 (계정 없이 열림)"}
           </Button>
           <Button variant="outline" className="h-11 flex-1 rounded-xl sm:flex-none" onClick={() => setRawOpen((v) => !v)} aria-expanded={rawOpen}>
             <FileText className="size-4" /> {rawOpen ? "요약문 접기" : "요약문 전체 보기"}
@@ -171,6 +172,9 @@ export function PaperViewer({ issue, initialIndex }: { issue: ReaderIssue; initi
             <p className="mt-2 whitespace-pre-wrap text-[15px] leading-[1.75] [overflow-wrap:anywhere]">{paper.raw_summary_text}</p>
           </section>
         )}
+
+        {/* 해설 (자동으로 찾은 논문) — 카드의 "해설 보기"가 여기로 온다 */}
+        {paper.card.detail && <PaperDetail key={`detail-${paper.id}`} card={paper.card} id="detail" className="mt-4" />}
 
         {/* 이전 / 다음 논문 */}
         {total > 1 && (

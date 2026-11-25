@@ -91,6 +91,13 @@ export function checkFidelity(raw: string, card: PaperCardContent, adminMeta: st
   ];
   for (const [label, value] of sourceFields) {
     if (!value) continue;
+    // 한국어로 쓴 연구 유형(근거 수준, 예: "다기관 후향 증례군(개 6마리)")은 번역이라 글자 대조는 하지 않고, 숫자만 원문과 맞춰 본다
+    if (label === "연구 유형" && /[가-힣]/.test(value)) {
+      for (const n of numberTokens(value)) {
+        if (!src.numbers.has(n)) push({ type: "number", token: n, where: "출처(근거 수준)", message: `숫자 "${n}"이(가) 원문에 없어요` });
+      }
+      continue;
+    }
     if (!src.lower.includes(value.toLowerCase())) {
       push({ type: "source", token: value, where: `출처(${label})`, message: `출처의 ${label} "${value}"이(가) 원문에 없어요` });
     }

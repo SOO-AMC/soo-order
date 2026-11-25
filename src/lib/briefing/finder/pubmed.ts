@@ -1,4 +1,5 @@
-import { buildQuery, parsePmcBody, parsePubmedXml, type Candidate, type FindCategory } from "./sources";
+import type { DetailAuthor } from "../schema";
+import { buildQuery, parsePmcBody, parsePmcCorresp, parsePubmedXml, type Candidate, type FindCategory } from "./sources";
 
 /**
  * PubMed 검색 (서버 전용). NCBI E-utilities — 무료·키 없음(초당 3번까지).
@@ -20,18 +21,18 @@ export class FinderSearchError extends Error {
 const ymd = (d: string) => d.replace(/-/g, "/");
 
 async function get(doFetch: FetchLike, url: string): Promise<string> {
-  // 초당 횟수 제한(429)·일시 오류는 한 번 쉬었다 다시
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // 초당 횟수 제한(429)·일시 오류는 쉬었다 다시 (1.5초, 3초)
+  for (let attempt = 0; attempt < 3; attempt++) {
     let res: Awaited<ReturnType<FetchLike>>;
     try {
       res = await doFetch(url, { signal: AbortSignal.timeout(20_000) });
     } catch {
-      if (attempt === 0) continue;
+      if (attempt < 2) continue;
       throw new FinderSearchError("network");
     }
     if (res.ok) return res.text();
-    if (attempt === 0 && (res.status === 429 || res.status >= 500)) {
-      await new Promise((r) => setTimeout(r, 1200));
+    if (attempt < 2 && (res.status === 429 || res.status >= 500)) {
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
       continue;
     }
     throw new FinderSearchError(String(res.status));
@@ -73,15 +74,19 @@ export async function searchCandidates(
   return parsePubmedXml(xml, kind, ids);
 }
 
-/** 무료 원문(PubMed Central) 본문 발췌. 못 받거나 출판사가 본문을 막았으면 null — 그때는 초록만으로 요약한다 */
-export async function fetchFullText(pmcid: string, opts: { fetchImpl?: FetchLike } = {}): Promise<string | null> {
+/**
+ * 무료 원문(PubMed Central): 본문 발췌 + 교신저자. 못 받으면 둘 다 null — 그때는 초록만으로 요약한다.
+ * (출판사가 본문 XML 을 막은 논문은 본문만 null 이고 교신저자는 나올 수 있다)
+ */
+export async function fetchPmc(pmcid: string, opts: { fetchImpl?: FetchLike } = {}): Promise<{ body: string | null; corresp: DetailAuthor | null }> {
+  const none = { body: null, corresp: null };
   const id = pmcid.replace(/^PMC/i, "");
-  if (!/^\d+$/.test(id)) return null;
+  if (!/^\d+$/.test(id)) return none;
   const doFetch: FetchLike = opts.fetchImpl ?? ((url, init) => fetch(url, { ...init, cache: "no-store" }));
   try {
     const xml = await get(doFetch, `${EUTILS}efetch.fcgi?${new URLSearchParams({ db: "pmc", id, retmode: "xml", tool: TOOL })}`);
-    return parsePmcBody(xml);
+    return { body: parsePmcBody(xml), corresp: parsePmcCorresp(xml) };
   } catch {
-    return null;
+    return none;
   }
 }

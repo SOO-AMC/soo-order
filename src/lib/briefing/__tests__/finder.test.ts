@@ -22,7 +22,7 @@ const article = (o: { pmid: string; title?: string; abstract?: string; doi?: str
       <Abstract>
         <AbstractText Label="OBJECTIVE">${o.abstract ?? ABSTRACT}</AbstractText>
       </Abstract>
-      <AuthorList><Author><LastName>Park</LastName><Initials>JE</Initials></Author><Author><LastName>Kim</LastName><Initials>S</Initials></Author></AuthorList>
+      <AuthorList><Author><LastName>Park</LastName><ForeName>Ji Eun</ForeName><Initials>JE</Initials><AffiliationInfo><Affiliation>Seoul Animal Hospital, Seoul, Korea.</Affiliation></AffiliationInfo></Author><Author><LastName>Kim</LastName><ForeName>Su</ForeName><Initials>S</Initials><AffiliationInfo><Affiliation>Dept of Surgery, Vet School, Davis, CA. Electronic address: kim@vet.edu.</Affiliation></AffiliationInfo></Author></AuthorList>
       <PublicationTypeList>${(o.types ?? ["Journal Article"]).map((t) => `<PublicationType UI="D1">${t}</PublicationType>`).join("")}</PublicationTypeList>
     </Article>
   </MedlineCitation>
@@ -51,6 +51,7 @@ const cand = (o: Partial<Candidate> = {}): Candidate => ({
   authors: "Park JE 외",
   pubTypes: ["Journal Article"],
   pmcid: null,
+  contact: null,
   url: "https://doi.org/10.1/a",
   ...o,
 });
@@ -234,5 +235,76 @@ describe("참고문헌·무료 원문", () => {
     const raw = candidateRawText(cand(), "Results text 123");
     expect(raw).toContain("FULL TEXT (excerpt)");
     expect(raw).toContain("Results text 123");
+  });
+});
+
+describe("한 문단형 카드", () => {
+  it("초록 모드 응답을 제목·요약·임상적 의미·주의·근거 수준·꼭 확인으로 바꾼다", async () => {
+    const { abstractToCard, PRIORITY_FLAG } = await import("../ai-designer");
+    const card = parseCard(
+      abstractToCard(
+        { headline: "개 6마리에서 중증 호중구감소증이 보고됐습니다", summary: "요약 문단입니다.", clinical: "임상적 의미입니다.", caution: null, evidence: "다기관 후향 증례군(개 6마리)", priority: true, attribution: [] },
+        { category: "internal" }
+      )
+    );
+    if (!card.ok) throw new Error(card.error);
+    expect(card.card.layoutVariant).toBe("brief");
+    expect(card.card.blocks.map((b) => b.kind)).toEqual(["keyPoint", "clinical"]);
+    expect(card.card.source.studyType).toBe("다기관 후향 증례군(개 6마리)");
+    expect(card.card.flags).toEqual([PRIORITY_FLAG]);
+  });
+  it("한국어 근거 수준은 글자 대조 없이 숫자만 본다", async () => {
+    const { checkFidelity } = await import("../fidelity");
+    const card = parseCard({ schemaVersion: 1, category: null, headline: "제목", lead: null, layoutVariant: "brief", blocks: [], source: { studyType: "후향 증례군(개 7마리)" } });
+    if (!card.ok) throw new Error(card.error);
+    const w = checkFidelity("six dogs were included", card.card);
+    expect(w.map((x) => `${x.type}:${x.token}`)).toEqual(["number:7"]);
+  });
+});
+
+describe("해설의 저자", () => {
+  it("PubMed 에서 이메일이 붙은 저자를 교신저자로, 이메일은 지운다", () => {
+    const [c] = parsePubmedXml(xmlOf(article({ pmid: "3" })), "vet");
+    expect(c.contact).toEqual({ role: "corresponding", name: "Su Kim", affiliation: "Dept of Surgery, Vet School, Davis, CA" });
+  });
+  it("PMC 원문의 교신저자와 소속", async () => {
+    const { parsePmcCorresp } = await import("../finder/sources");
+    const xml = `<article><front><article-meta><contrib-group>
+      <contrib contrib-type="author"><name><surname>Lee</surname><given-names>A</given-names></name><xref ref-type="aff" rid="a1"/></contrib>
+      <contrib contrib-type="author" corresp="yes"><name><surname>Choi</surname><given-names>Min</given-names></name><xref ref-type="aff" rid="a2"/></contrib>
+      </contrib-group><aff id="a1"><label>1</label>Univ A</aff><aff id="a2"><label>2</label>Univ B, Seoul. min@b.ac.kr</aff></article-meta></front><body/></article>`;
+    expect(parsePmcCorresp(xml)).toEqual({ role: "corresponding", name: "Min Choi", affiliation: "Univ B, Seoul" });
+    expect(parsePmcCorresp("<article><front></front></article>")).toBeNull();
+  });
+});
+
+describe("공개 카드", () => {
+  it("원문 인용(attribution)과 내부 표시는 빼고 꼭 확인만 남긴다", async () => {
+    const { toPublicCard } = await import("../public-reader");
+    const card = parseCard({
+      schemaVersion: 1, category: "internal", headline: "제목", lead: null, layoutVariant: "brief", blocks: [], source: {},
+      attribution: [{ displayText: "카드 문구", sourceExcerpt: "abstract sentence" }],
+      flags: ["ai-designed", "priority", "source-fields-removed"],
+    });
+    if (!card.ok) throw new Error(card.error);
+    const pub = toPublicCard(card.card);
+    expect(pub.attribution).toEqual([]);
+    expect(pub.flags).toEqual(["priority"]);
+  });
+});
+
+describe("해설 숫자 검사", () => {
+  it("원문에 없는 숫자가 든 해설 문단만 뺀다", async () => {
+    const { dropUnverifiedDetail } = await import("../ai-designer");
+    const { cleanAffiliation } = await import("../finder/sources");
+    const card = parseCard({
+      schemaVersion: 1, category: null, headline: "제목", lead: null, layoutVariant: "brief", blocks: [], source: {},
+      detail: { paragraphs: ["개 6마리를 봤습니다.", "생존율은 42%였습니다."], clinical: "3일 안에 확인합니다.", author: null },
+    });
+    if (!card.ok) throw new Error(card.error);
+    const out = dropUnverifiedDetail("Six dogs were included.", card.card);
+    expect(out.detail?.paragraphs).toEqual(["개 6마리를 봤습니다."]);
+    expect(out.detail?.clinical).toBeNull();
+    expect(cleanAffiliation("1Gastrointestinal Laboratory, Texas A&M University")).toBe("Gastrointestinal Laboratory, Texas A&M University");
   });
 });

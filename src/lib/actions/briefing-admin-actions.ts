@@ -219,8 +219,13 @@ export async function generatePaperCard(paperId: string): Promise<ActionResult<G
       },
       auto ? { kind: "abstract" } : {}
     );
-    const keptSource = auto ? (paper.card_content ?? paper.previous_card_content)?.source : null;
-    const card = keptSource ? { ...result.card, category: auto?.category ?? result.card.category, source: { ...keptSource, studyType: result.card.source.studyType ?? keptSource.studyType } } : result.card;
+    const prevCard = auto ? (paper.card_content ?? paper.previous_card_content) : null;
+    const keptSource = prevCard?.source ?? null;
+    // 해설의 저자(교신저자·제1저자)도 처음 찾을 때의 데이터베이스 값을 그대로 둔다
+    const detail = result.card.detail ? { ...result.card.detail, author: prevCard?.detail?.author ?? null } : null;
+    const card = keptSource
+      ? { ...result.card, category: auto?.category ?? result.card.category, detail, source: { ...keptSource, studyType: result.card.source.studyType ?? keptSource.studyType } }
+      : result.card;
     const autoReady = !!auto && result.mode === "ai";
     const { data, error } = await supabase
       .from("briefing_papers")

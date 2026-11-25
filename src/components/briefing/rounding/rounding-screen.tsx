@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronLeft, ChevronRight, Clock, History, LogOut, Maximize, Minimize, Pause, Play, Repeat, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PaperCard } from "@/components/briefing/paper-card";
+import { QrCode } from "@/components/briefing/qr-code";
 import { fetchRecentPastBriefings, fetchTodayBriefing, type ReaderIssue } from "@/lib/actions/briefing-reader-actions";
 import { PUBLISH_HOUR, PUBLISH_MINUTE, formatIssueDate, isPastPublishTime, kstDate } from "@/lib/briefing/kst";
 import { DEFAULT_INTERVAL, LOOP_START, MAX_INTERVAL, MIN_INTERVAL, advance, loopDurationLabel, normalizeInterval, progressOf, step, type LoopState } from "@/lib/briefing/rounding-loop";
@@ -269,6 +270,7 @@ export function RoundingScreen({
               card={paper.card}
               variant="rounding"
               rounding={{ dateLabel, index, total, elapsed: progressOf(loop, intervalSec * 1000), paused, title: isPastPlay ? "지난 논문 브리핑" : undefined }}
+              roundingQr={paper.card.detail ? <QrCode path={`/b/paper/${paper.id}`} label="이 논문 해설 페이지 QR 코드" /> : undefined}
             />
           {/* 화면 낭독기용: 논문이 바뀔 때만 알린다 */}
           <p className="sr-only" aria-live="polite">

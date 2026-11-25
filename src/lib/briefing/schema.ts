@@ -9,7 +9,7 @@ import { z } from "zod";
  *  - AI(또는 규칙 생성기)는 이 JSON만 만든다. HTML/CSS/JS 문자열은 받지 않는다(꺾쇠 태그는 제거).
  */
 
-export const LAYOUT_VARIANTS = ["editorial", "metric", "comparison", "case", "clinical", "process", "minimal"] as const;
+export const LAYOUT_VARIANTS = ["editorial", "metric", "comparison", "case", "clinical", "process", "minimal", "brief"] as const;
 export type LayoutVariant = (typeof LAYOUT_VARIANTS)[number];
 
 export const LAYOUT_LABEL: Record<LayoutVariant, string> = {
@@ -20,6 +20,7 @@ export const LAYOUT_LABEL: Record<LayoutVariant, string> = {
   clinical: "임상 포인트",
   process: "순서·단계",
   minimal: "간결",
+  brief: "한 문단",
 };
 
 /** 진료 분야 (자동 추정 또는 관리자가 고름). 없으면 null = "분야 미지정" */
@@ -85,7 +86,8 @@ const safeUrl = z
   .nullish()
   .transform((v) => (v ? v : null));
 
-const keyPointBlock = z.object({ kind: z.literal("keyPoint"), label: text(24), text: text(320) }).strict();
+/** keyPoint 글은 한 문단형(brief) 카드의 요약 문단이 될 수 있어 600자까지 */
+const keyPointBlock = z.object({ kind: z.literal("keyPoint"), label: text(24), text: text(600) }).strict();
 const bulletsBlock = z
   .object({ kind: z.literal("bullets"), label: text(24), items: z.array(text(200)).min(1).max(5) })
   .strict();
@@ -131,6 +133,25 @@ export const cardSourceSchema = z
   .strict();
 export type CardSource = z.infer<typeof cardSourceSchema>;
 
+/** 해설 페이지의 저자 — 교신저자(무료 원문·PubMed 표시로 확인된 경우) 또는 제1저자 */
+export const detailAuthorSchema = z
+  .object({ role: z.enum(["corresponding", "first"]), name: text(120), affiliation: optText(300) })
+  .strict();
+export type DetailAuthor = z.infer<typeof detailAuthorSchema>;
+
+/**
+ * 해설 (자동으로 찾은 논문만). 카드 아래 "해설 보기"로 여는 긴 글 — 장이 아니라 같은 논문의 읽을거리다.
+ * paragraphs = 해설 문단들, clinical = 자세한 임상적 의미, author = 교신저자/제1저자(데이터베이스 값).
+ */
+export const cardDetailSchema = z
+  .object({
+    paragraphs: z.array(text(800)).max(6),
+    clinical: optText(1200),
+    author: detailAuthorSchema.nullish().transform((v) => v ?? null),
+  })
+  .strict();
+export type CardDetail = z.infer<typeof cardDetailSchema>;
+
 export const paperCardSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -147,6 +168,7 @@ export const paperCardSchema = z
       .max(16)
       .default([]),
     flags: z.array(text(60)).max(12).default([]),
+    detail: cardDetailSchema.nullish().transform((v) => v ?? null),
   })
   .strict();
 
@@ -180,5 +202,7 @@ export function cardTexts(card: PaperCardContent): { where: string; text: string
       if (b.description) out.push({ where: `${n}(비교)`, text: b.description });
     } else out.push({ where: `${n}(${b.kind === "clinical" ? "임상 포인트" : "주의·한계"})`, text: b.text });
   });
+  card.detail?.paragraphs.forEach((t, i) => out.push({ where: `해설 ${i + 1}문단`, text: t }));
+  if (card.detail?.clinical) out.push({ where: "해설(임상적 의미)", text: card.detail.clinical });
   return out;
 }

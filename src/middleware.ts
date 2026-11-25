@@ -49,6 +49,11 @@ export async function middleware(request: NextRequest) {
   // 네이버웍스로 로그인 왕복(시작·돌아오기)은 로그인 전에도, 로그인한 뒤(계정 연결)에도 그대로 지나간다
   if (request.nextUrl.pathname.startsWith("/auth/naverworks/")) return supabaseResponse;
 
+  // 논문 브리핑 공개 열람(/b, /b/…): 로그인 없이도, 로그인한 채로도 그대로 연다.
+  // 서버가 발행된 논문만 골라 보여 준다(lib/briefing/public-reader.ts). "/blood" 같은 다른 주소와 겹치지 않게 정확히 비교한다.
+  const path = request.nextUrl.pathname;
+  if (path === "/b" || path.startsWith("/b/")) return supabaseResponse;
+
   const publicPaths = ["/login"];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
