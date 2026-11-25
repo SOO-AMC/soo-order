@@ -29,10 +29,21 @@ export function numberTokens(text: string): string[] {
   return (text.match(NUMBER_RE) ?? []).map(normNum);
 }
 
+/** 영어 초록은 작은 수를 낱말로 쓴다("five dogs") — 한국어 카드의 "5마리"를 근거 있는 숫자로 친다 */
+const NUMBER_WORDS: Record<string, string> = {
+  zero: "0", one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10",
+  eleven: "11", twelve: "12", thirteen: "13", fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17", eighteen: "18", nineteen: "19", twenty: "20",
+  thirty: "30", forty: "40", fifty: "50", sixty: "60", seventy: "70", eighty: "80", ninety: "90", hundred: "100",
+  single: "1", twice: "2", both: "2", dozen: "12",
+};
+export function numberWordTokens(text: string): string[] {
+  return (text.toLowerCase().match(/[a-z]+/g) ?? []).flatMap((w) => (NUMBER_WORDS[w] ? [NUMBER_WORDS[w]] : []));
+}
+
 function buildSourceIndex(raw: string, extra: string[]) {
   const all = [raw, ...extra].join("\n");
   return {
-    numbers: new Set(numberTokens(all)),
+    numbers: new Set([...numberTokens(all), ...numberWordTokens(all)]),
     lower: all.toLowerCase(),
   };
 }

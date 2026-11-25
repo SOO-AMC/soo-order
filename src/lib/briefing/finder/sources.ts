@@ -21,37 +21,50 @@ const SMALL_ANIMAL = "(dogs[mh] OR cats[mh] OR dog[tiab] OR dogs[tiab] OR canine
 /** 논문이 아닌 것 (정정·댓글·사설 등) */
 const NOT_ARTICLE = '(comment[pt] OR letter[pt] OR editorial[pt] OR erratum[pt] OR "published erratum"[pt] OR "retraction of publication"[pt] OR news[pt])';
 
-/** 저널 묶음 (ISSN). terms 가 있으면 그 낱말이 제목·초록에 있는 논문만 */
-type JournalSet = { issns: string[]; terms?: string[] };
+/**
+ * 저널 묶음. issns(ISSN) 또는 titles(PubMed 저널 약어)로 고른다. terms 가 있으면 그 낱말이 제목·초록에 있는 논문만.
+ * 저널을 더할 때는 PubMed 에서 최근 60일 개·고양이 논문이 실제로 잡히는지 먼저 확인할 것 (J Am Anim Hosp Assoc 는 0건이라 뺐다).
+ */
+type JournalSet = { issns?: string[]; titles?: string[]; terms?: string[] };
 type CategorySearch = { vet: JournalSet[]; human: JournalSet[] };
 
 /** 수의 종합지 — 분야 낱말이 들어간 논문만 */
-const VET_GENERAL = ["0003-1488" /* JAVMA */, "0022-4510" /* J Small Anim Pract */, "1098-612X" /* J Feline Med Surg */];
+const VET_GENERAL: JournalSet = {
+  issns: ["0003-1488" /* JAVMA */, "0022-4510" /* J Small Anim Pract */, "1098-612X" /* J Feline Med Surg */],
+  titles: ["Vet J", "Vet Rec", "Front Vet Sci", "BMC Vet Res", "Can Vet J", "Top Companion Anim Med"],
+};
+const TERMS = {
+  internal: ["internal medicine", "endocrin*", "nephro*", "renal", "gastro*", "hepat*", "cardio*", "oncolog*"],
+  surgery: ["surgery", "surgical", "postoperative", "laparoscop*"],
+  imaging: ["radiograph*", "ultrasonograph*", "computed tomography", "magnetic resonance", "echocardiograph*"],
+  emergency: ["emergency", "critical care", "trauma", "shock", "sepsis", "resuscitation"],
+};
 
 export const SEARCH_CONFIG: Record<FindCategory, CategorySearch> = {
   internal: {
-    vet: [{ issns: ["0891-6640" /* J Vet Intern Med */] }, { issns: VET_GENERAL, terms: ["internal medicine", "endocrin*", "nephro*", "renal", "gastro*", "hepat*", "cardio*", "oncolog*"] }],
+    vet: [{ issns: ["0891-6640" /* J Vet Intern Med */], titles: ["J Vet Cardiol", "Vet Comp Oncol"] }, { ...VET_GENERAL, terms: TERMS.internal }],
     human: [{ issns: ["0028-4793" /* NEJM */, "0140-6736" /* Lancet */, "0098-7484" /* JAMA */, "0003-4819" /* Ann Intern Med */] }],
   },
   surgery: {
-    vet: [{ issns: ["0161-3499" /* Vet Surg */, "0932-0814" /* Vet Comp Orthop Traumatol */] }, { issns: VET_GENERAL, terms: ["surgery", "surgical", "postoperative", "laparoscop*"] }],
+    vet: [{ issns: ["0161-3499" /* Vet Surg */, "0932-0814" /* Vet Comp Orthop Traumatol */], titles: ["J Vet Dent"] }, { ...VET_GENERAL, terms: TERMS.surgery }],
     human: [{ issns: ["2168-6254" /* JAMA Surg */, "0003-4932" /* Ann Surg */, "0007-1323" /* Br J Surg */] }],
   },
   imaging: {
-    vet: [{ issns: ["1058-8183" /* Vet Radiol Ultrasound */] }, { issns: VET_GENERAL, terms: ["radiograph*", "ultrasonograph*", "computed tomography", "magnetic resonance", "echocardiograph*"] }],
+    vet: [{ issns: ["1058-8183" /* Vet Radiol Ultrasound */] }, { titles: ["J Vet Cardiol"], terms: TERMS.imaging }, { ...VET_GENERAL, terms: TERMS.imaging }],
     human: [{ issns: ["0033-8419" /* Radiology */, "0938-7994" /* Eur Radiol */] }],
   },
   emergency: {
-    vet: [{ issns: ["1479-3261" /* J Vet Emerg Crit Care */] }, { issns: VET_GENERAL, terms: ["emergency", "critical care", "trauma", "shock", "sepsis", "resuscitation"] }],
+    vet: [{ issns: ["1479-3261" /* J Vet Emerg Crit Care */] }, { titles: ["Vet Anaesth Analg"], terms: TERMS.emergency }, { ...VET_GENERAL, terms: TERMS.emergency }],
     human: [{ issns: ["0196-0644" /* Ann Emerg Med */, "0090-3493" /* Crit Care Med */, "0342-4642" /* Intensive Care Med */] }],
   },
 };
 
 const journalClause = (set: JournalSet) => {
-  const issn = `(${set.issns.map((i) => `"${i}"[is]`).join(" OR ")})`;
-  if (!set.terms) return issn;
+  const names = [...(set.issns ?? []).map((i) => `"${i}"[is]`), ...(set.titles ?? []).map((t) => `"${t}"[ta]`)];
+  const journals = `(${names.join(" OR ")})`;
+  if (!set.terms) return journals;
   const words = set.terms.map((w) => (w.includes(" ") ? `"${w}"[tiab]` : `${w}[tiab]`)).join(" OR ");
-  return `(${issn} AND (${words}))`;
+  return `(${journals} AND (${words}))`;
 };
 
 /** PubMed 검색식 (날짜는 검색 요청의 mindate/maxdate 로 따로 건다) */
@@ -76,7 +89,8 @@ export type Candidate = {
   date: string | null;
   authors: string | null;
   pubTypes: string[];
-  openAccess: boolean;
+  /** PubMed Central 번호 (예: "PMC123") — 있으면 무료 원문을 받아 본문으로 요약한다 */
+  pmcid: string | null;
   url: string;
 };
 
@@ -146,9 +160,12 @@ export function parsePubmedXml(xml: string, kind: "vet" | "human", order: string
     const [y, m, d] = hist ? [text(hist.body, "Year"), text(hist.body, "Month"), text(hist.body, "Day")] : ["", "", ""];
     const date = y && m && d ? `${y}-${month2(m)}-${d.padStart(2, "0")}` : null;
 
-    const ids = all(inner(art, "PubmedData") ?? art, "ArticleId");
-    const doi = decode(ids.find((i) => attr(i.attrs, "IdType") === "doi")?.body ?? "") || null;
-    const pmc = ids.some((i) => attr(i.attrs, "IdType") === "pmc");
+    // 이 논문 자신의 번호들 — PubmedData 의 첫 ArticleIdList. (뒤의 ReferenceList 에는 참고문헌의 DOI·PMC 번호가 있어서 거기까지 보면 안 된다)
+    const ids = all(inner(inner(art, "PubmedData") ?? "", "ArticleIdList") ?? "", "ArticleId");
+    const elocDoi = all(art, "ELocationID").find((e) => attr(e.attrs, "EIdType") === "doi")?.body;
+    const doi = decode(ids.find((i) => attr(i.attrs, "IdType") === "doi")?.body ?? elocDoi ?? "") || null;
+    const pmc = decode(ids.find((i) => attr(i.attrs, "IdType") === "pmc")?.body ?? "");
+    const pmcid = /^PMC\d+$/.test(pmc) ? pmc : null;
 
     const authors = all(inner(art, "AuthorList") ?? "", "Author").map(({ body }) => {
       const last = text(body, "LastName");
@@ -167,7 +184,7 @@ export function parsePubmedXml(xml: string, kind: "vet" | "human", order: string
       date,
       authors: shortAuthors(authors),
       pubTypes,
-      openAccess: pmc,
+      pmcid,
       url: doi ? `https://doi.org/${doi}` : `https://pubmed.ncbi.nlm.nih.gov/${pmid ?? ""}/`,
     });
   }
@@ -195,22 +212,78 @@ export function excludeUsed(cands: Candidate[], used: { dois: Iterable<string>; 
   });
 }
 
-/** AI(또는 규칙 정리)에 넘길 원문 = 서지 정보 + 초록. 카드의 숫자는 이 글에 있는 것만 허용된다 */
-export function candidateRawText(c: Candidate): string {
+/** 본문 발췌의 최대 길이 (AI 입력이 너무 길어지지 않게) */
+export const FULL_TEXT_MAX = 14_000;
+/** 본문 구역 우선순위: 결과·고찰·결론 → 방법 → 나머지 */
+const SECTION_RANK: [RegExp, number][] = [
+  [/result|finding|case (report|description|presentation)|outcome/i, 0],
+  [/discussion|conclusion|clinical (relevance|significance|importance)|limitation/i, 1],
+  [/method|material|animal|patient|design|statistic/i, 2],
+];
+
+/**
+ * PMC 원문(JATS XML) → 본문 발췌. 표·그림·참고문헌은 빼고, 결과·고찰부터 FULL_TEXT_MAX 글자까지.
+ * 본문을 주지 않는 논문(출판사가 막음)이면 null.
+ */
+export function parsePmcBody(xml: string, max = FULL_TEXT_MAX): string | null {
+  const body = inner(xml, "body");
+  if (!body) return null;
+  const cleaned = body
+    .replace(/<(table-wrap|fig|table|disp-formula|supplementary-material|ref-list)[\s>][\s\S]*?<\/\1>/g, " ")
+    .replace(/<xref[^>]*>[\s\S]*?<\/xref>/g, "")
+    .replace(/<title>([\s\S]*?)<\/title>/g, (_, t: string) => `\n@@SEC@@${decode(t)}@@\n`)
+    .replace(/<\/p>/g, "\n");
+  const chunks = cleaned
+    .split(/\n@@SEC@@/)
+    .map((part, i) => {
+      const m = i === 0 ? null : part.match(/^([^@]*)@@\n?([\s\S]*)$/);
+      const title = m ? m[1].trim() : "";
+      const textBody = (m ? m[2] : part)
+        .split("\n")
+        .map((line) => decode(line))
+        .filter(Boolean)
+        .join("\n");
+      return { i, title, text: textBody };
+    })
+    .filter((c) => c.text.length > 0);
+  if (chunks.length === 0) return null;
+
+  const rank = (title: string) => SECTION_RANK.find(([re]) => re.test(title))?.[1] ?? 3;
+  const picked = new Set<number>();
+  let used = 0;
+  for (const c of [...chunks].sort((a, b) => rank(a.title) - rank(b.title) || a.i - b.i)) {
+    const size = c.text.length + c.title.length + 4;
+    if (used + size > max) continue;
+    picked.add(c.i);
+    used += size;
+  }
+  const out = chunks
+    .filter((c) => picked.has(c.i))
+    .map((c) => (c.title ? `[${c.title}]\n${c.text}` : c.text))
+    .join("\n\n");
+  return out.length >= 500 ? out : null;
+}
+
+/**
+ * AI(또는 규칙 정리)에 넘길 원문 = 서지 정보 + 초록 (+ 무료 원문이면 본문 발췌). 카드의 숫자는 이 글에 있는 것만 허용된다.
+ */
+export function candidateRawText(c: Candidate, fullText?: string | null): string {
   return [
     c.title,
-    [c.journalFull ?? c.journal, c.date ?? c.year, c.authors].filter(Boolean).join(" · "),
+    [c.journalFull && c.journalFull !== c.journal ? `${c.journalFull} (${c.journal})` : c.journal, c.date ?? c.year, c.authors].filter(Boolean).join(" · "),
     c.doi ? `DOI: ${c.doi}` : null,
     c.kind === "human" ? "(사람 의학 논문)" : null,
     "",
+    "ABSTRACT",
     c.abstract,
+    ...(fullText ? ["", "FULL TEXT (excerpt)", fullText] : []),
   ]
     .filter((v) => v !== null)
     .join("\n");
 }
 
-/** 카드의 출처 — 데이터베이스 값만 쓴다 (AI 가 쓴 출처는 버린다). 연구 유형만 AI 가 초록에서 읽은 값을 쓸 수 있다 */
-export function candidateSource(c: Candidate, studyType: string | null): CardSource {
+/** 카드의 출처 — 데이터베이스 값만 쓴다 (AI 가 쓴 출처는 버린다). 연구 유형만 AI 가 원문에서 읽은 값을 쓸 수 있다 */
+export function candidateSource(c: Candidate, studyType: string | null, usedFullText = false): CardSource {
   return {
     journal: c.journal.slice(0, 120),
     year: c.year,
@@ -219,7 +292,7 @@ export function candidateSource(c: Candidate, studyType: string | null): CardSou
     doi: c.doi,
     url: c.url,
     authors: c.authors ? c.authors.slice(0, 120) : null,
-    basis: c.openAccess ? "초록 기준 요약 · 무료 원문" : "초록 기준 요약",
+    basis: usedFullText ? "무료 원문 기준 요약" : "초록 기준 요약",
   };
 }
 

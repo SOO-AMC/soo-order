@@ -33,6 +33,7 @@ const article = (o: { pmid: string; title?: string; abstract?: string; doi?: str
       ${o.doi === null ? "" : `<ArticleId IdType="doi">${o.doi ?? `10.2460/javma.${o.pmid}`}</ArticleId>`}
       ${o.pmc ? `<ArticleId IdType="pmc">PMC123</ArticleId>` : ""}
     </ArticleIdList>
+    <ReferenceList><Reference><ArticleIdList><ArticleId IdType="doi">10.9/ref</ArticleId><ArticleId IdType="pmc">PMC999</ArticleId></ArticleIdList></Reference></ReferenceList>
   </PubmedData>
 </PubmedArticle>`;
 const xmlOf = (...arts: string[]) => `<?xml version="1.0"?><PubmedArticleSet>${arts.join("")}</PubmedArticleSet>`;
@@ -49,7 +50,7 @@ const cand = (o: Partial<Candidate> = {}): Candidate => ({
   date: "2026-11-03",
   authors: "Park JE 외",
   pubTypes: ["Journal Article"],
-  openAccess: false,
+  pmcid: null,
   url: "https://doi.org/10.1/a",
   ...o,
 });
@@ -84,7 +85,7 @@ describe("PubMed 결과 해석", () => {
     expect(c.doi).toBe("10.2460/javma.111");
     expect(c.url).toBe("https://doi.org/10.2460/javma.111");
     expect(c.authors).toBe("Park JE 외");
-    expect(c.openAccess).toBe(true);
+    expect(c.pmcid).toBe("PMC123");
   });
   it("초록이 짧거나 논문이 아닌 것은 뺀다", () => {
     const list = parsePubmedXml(xmlOf(article({ pmid: "1", abstract: "Too short." }), article({ pmid: "2", types: ["Journal Article", "Comment"] }), article({ pmid: "3" })), "vet");
@@ -116,8 +117,8 @@ describe("이미 쓴 논문 빼기", () => {
 
 describe("카드 출처", () => {
   it("데이터베이스 값만 쓰고 카드 규격에 맞다", () => {
-    const src = candidateSource(cand({ openAccess: true }), "retrospective study");
-    expect(src).toMatchObject({ journal: "J Vet Intern Med", year: "2026", doi: "10.1/a", authors: "Park JE 외", basis: "초록 기준 요약 · 무료 원문", studyType: "retrospective study" });
+    const src = candidateSource(cand({ pmcid: "PMC1" }), "retrospective study", true);
+    expect(src).toMatchObject({ journal: "J Vet Intern Med", year: "2026", doi: "10.1/a", authors: "Park JE 외", basis: "무료 원문 기준 요약", studyType: "retrospective study" });
     const card = parseCard({ schemaVersion: 1, category: "internal", headline: "제목", lead: null, layoutVariant: "minimal", blocks: [], source: src });
     expect(card.ok).toBe(true);
   });
@@ -191,5 +192,47 @@ describe("찾기 전체 (가짜 PubMed, AI 없이)", () => {
     expect(empty).toEqual({ ok: false, reason: "no-candidates" });
     const down = await findPaper("internal", { today: "2026-11-25", used: { dois: [], titles: [] } }, { provider: "rule", fetchImpl: fakeFetch({}) });
     expect(down).toEqual({ ok: false, reason: "search-failed" });
+  });
+});
+
+describe("영어 숫자 낱말", () => {
+  it("초록의 five 는 카드의 5마리 근거가 된다", async () => {
+    const { checkFidelity, numberWordTokens } = await import("../fidelity");
+    expect(numberWordTokens("Five dogs and twelve cats; one hundred")).toEqual(["5", "12", "1", "100"]);
+    const card = parseCard({ schemaVersion: 1, category: "internal", headline: "개 5마리 증례", lead: null, layoutVariant: "minimal", blocks: [], source: {} });
+    if (!card.ok) throw new Error(card.error);
+    expect(checkFidelity("Five dogs were treated.", card.card).filter((w) => w.type === "number")).toEqual([]);
+    expect(checkFidelity("Dogs were treated.", card.card).filter((w) => w.type === "number")).toHaveLength(1);
+  });
+});
+
+describe("참고문헌·무료 원문", () => {
+  it("참고문헌의 DOI·PMC 번호를 이 논문 것으로 보지 않는다", () => {
+    const [c] = parsePubmedXml(xmlOf(article({ pmid: "7", doi: null })), "vet");
+    expect(c.doi).toBeNull();
+    expect(c.pmcid).toBeNull();
+  });
+  it("PMC 본문에서 표·그림·참고문헌을 빼고 결과·고찰을 먼저 담는다", async () => {
+    const { parsePmcBody } = await import("../finder/sources");
+    const long = (w: string, n = 60) => Array.from({ length: n }, () => w).join(" ");
+    const xml = `<article><front><title>front</title></front><body>
+      <sec><title>Introduction</title><p>${long("intro")}</p></sec>
+      <sec><title>Results</title><p>Survival was 94.9% <xref ref-type="bibr">12</xref>.</p><p>${long("result", 100)}</p>
+        <table-wrap><table><tr><td>TABLE CELL</td></tr></table></table-wrap><fig><caption>FIGURE</caption></fig></sec>
+      <sec><title>Discussion</title><p>${long("discussion")}</p></sec>
+    </body><back><ref-list><ref>REF</ref></ref-list></back></article>`;
+    const all = parsePmcBody(xml);
+    expect(all).toContain("[Results]");
+    expect(all).toContain("Survival was 94.9%");
+    expect(all).not.toMatch(/TABLE CELL|FIGURE|REF|12./);
+    const small = parsePmcBody(xml, 1000);
+    expect(small).toContain("[Results]");
+    expect(small).not.toContain("[Introduction]");
+    expect(parsePmcBody("<article><front/></article>")).toBeNull();
+  });
+  it("본문이 있으면 원문에 함께 넣는다", () => {
+    const raw = candidateRawText(cand(), "Results text 123");
+    expect(raw).toContain("FULL TEXT (excerpt)");
+    expect(raw).toContain("Results text 123");
   });
 });

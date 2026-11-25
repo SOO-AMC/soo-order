@@ -7,8 +7,9 @@
 사용자 결정: 관리자가 요약문을 넣지 않는다. 분야별 1건씩 앱이 찾고, **검수 과정은 없다.**
 
 1. 관리 첫 화면 "논문 찾기"에서 발행 날짜(기본은 다음 빈 날짜)를 고르고 "4개 분야 논문 찾기"를 누른다. 화면이 분야마다 서버를 한 번씩 차례로 부른다(`findBriefingPaper`, 분야당 30초 안팎).
-2. **찾기**(`finder/pubmed.ts`): PubMed(NCBI E-utilities, 무료·키 없음)에서 최근 60일(`RECENT_DAYS`)에 올라온, 초록 있는 논문. 검색식은 `finder/sources.ts` 의 `SEARCH_CONFIG`(분야별 저널 ISSN + 종합지는 분야 낱말). 수의학은 개·고양이 논문만, 댓글·사설·정정은 뺀다. 이미 브리핑에 쓴 논문(DOI·제목)도 뺀다.
+2. **찾기**(`finder/pubmed.ts`): PubMed(NCBI E-utilities, 무료·키 없음)에서 최근 60일(`RECENT_DAYS`)에 올라온, 초록 있는 논문. 검색식은 `finder/sources.ts` 의 `SEARCH_CONFIG`(분야별 전문지 + 종합지는 분야 낱말. 수의: JVIM·J Vet Cardiol·Vet Comp Oncol / Vet Surg·VCOT·J Vet Dent / Vet Radiol Ultrasound / JVECC·Vet Anaesth Analg + 종합지 JAVMA·JSAP·JFMS·Vet J·Vet Rec·Front Vet Sci·BMC Vet Res·Can Vet J·Top Companion Anim Med). 저널을 더할 때는 PubMed 에서 최근 60일 개·고양이 논문이 실제로 잡히는지 먼저 볼 것. 수의학은 개·고양이 논문만, 댓글·사설·정정은 뺀다. 이미 브리핑에 쓴 논문(DOI·제목)도 뺀다.
 3. **고르기**(`finder/choose.ts`): 수의학 후보 최대 12건 + 사람 의학 후보 최대 5건을 AI 에게 주고 "개·고양이 진료에 가장 쓸모 있는 1건"을 번호로 고르게 한다. 수의학 우선, 맞는 수의학 논문이 없을 때만 사람 의학. AI 가 목록 밖 번호를 말하거나 실패하면 가장 최근 수의학 논문.
+3-1. **무료 원문**: 고른 논문이 PubMed Central 에 있으면(`pmcid`) 본문(JATS XML)을 받아 결과·고찰 위주로 14,000자까지 발췌해 초록과 함께 넘긴다(`parsePmcBody`). 출처 줄에 "무료 원문 기준 요약", 아니면 "초록 기준 요약". 참고문헌의 PMC 번호를 이 논문 것으로 착각하지 않도록 PubmedData 의 첫 ArticleIdList 만 본다. 최근 논문은 PMC 에 늦게 올라와서 초록 기준이 대부분이다.
 4. **카드**(`ai-designer.ts` 의 `AI_ABSTRACT_SYSTEM_PROMPT`): 서지 정보 + 영어 초록 → 한국어 카드. 틀은 정해져 있지 않고 논문에 맞게 구성한다. 기존 안전장치 그대로 — 초록에 없는 숫자가 있으면 그 카드는 버린다. 사람 의학 논문이면 "사람 대상 연구"를 주의 구역에 적는다.
 5. **출처**: AI 가 쓴 출처는 버리고 PubMed 값으로 덮어쓴다(`candidateSource`: 첫 저자 외 · 저널 · 연도 · 연구 유형 · "초록 기준 요약", 원문 링크는 DOI). 카드 규격에 `source.authors`·`source.basis` 칸이 있다.
 6. **저장**: AI 카드면 바로 "검수 완료"로 넣는다 → 그날 08:30 예약(`syncPlan`). AI 가 꺼져 있거나 실패해 규칙 정리로 만든 카드는 초안으로 남겨 발행되지 않는다(화면에 표시).

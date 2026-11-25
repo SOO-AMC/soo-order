@@ -202,7 +202,7 @@ export function PaperCard({
         )}
 
         {card.blocks.length > 0 && (
-          <div className={cn("grid gap-5", twoCol && "@[620px]:grid-cols-2 @[620px]:gap-x-7")}>
+          <div className={cn(twoCol ? "@[620px]:columns-2 @[620px]:gap-x-7 [&>*]:mb-5 [&>*]:break-inside-avoid [&>*:last-child]:mb-0" : "grid gap-5")}>
             {card.blocks.map((b, i) => (
               <LightBlock key={i} block={b} />
             ))}
@@ -304,26 +304,26 @@ function RoundingFace({ card, chrome, className }: { card: PaperCardContent; chr
       <div key={card.headline} className={cn("absolute inset-0 flex flex-col px-[6cqw] pb-[7.2cqw] pt-[8.2cqw]", chrome && "bf-fade")}>
         <CategoryChip card={card} className="self-start text-[1.35cqw]" />
 
-        <h2 className="mt-[1.6cqw] text-[4.1cqw] font-extrabold leading-[1.22] tracking-tight">{card.headline}</h2>
+        <h2 className="mt-[1.6cqw] line-clamp-2 shrink-0 text-[4.1cqw] font-extrabold leading-[1.22] tracking-tight">{card.headline}</h2>
 
         {card.lead && (
-          <div className="mt-[2.2cqw] flex items-start gap-[1.4cqw] rounded-[1.2cqw] bg-white/[0.06] px-[2cqw] py-[1.5cqw] ring-1 ring-white/15">
+          <div className="mt-[2.2cqw] flex shrink-0 items-start gap-[1.4cqw] rounded-[1.2cqw] bg-white/[0.06] px-[2cqw] py-[1.5cqw] ring-1 ring-white/15">
             <span className="mt-[0.15cqw] flex shrink-0 items-center gap-[0.6cqw] text-[1.6cqw] font-bold text-[var(--bf-gold-300)] [&_svg]:size-[1.9cqw]">
               <Target aria-hidden="true" />
               핵심
             </span>
-            <p className="text-[2.05cqw] font-semibold leading-[1.45]">{card.lead}</p>
+            <p className="line-clamp-3 text-[2.05cqw] font-semibold leading-[1.45]">{card.lead}</p>
           </div>
         )}
 
         {points.length > 0 && (
-          <ul className="mt-[1.8cqw] grid gap-[0.9cqw]">
+          <ul className="mt-[1.8cqw] grid min-h-0 flex-1 content-start gap-[0.9cqw] overflow-hidden">
             {points.map((p, i) => (
               <li key={i} className="flex items-start gap-[1cqw] text-[1.62cqw] leading-[1.45] text-white/85">
                 <span className="mt-[0.28cqw] shrink-0 text-[var(--bf-gold-400)] [&_svg]:size-[1.7cqw]" aria-hidden="true">
                   {POINT_ICON[p.kind]}
                 </span>
-                <span>
+                <span className="line-clamp-2">
                   {p.kind === "caution" && <b className="mr-[0.5cqw] font-bold text-[var(--bf-gold-300)]">주의</b>}
                   {p.kind === "clinical" && <b className="mr-[0.5cqw] font-bold text-[var(--bf-gold-300)]">임상</b>}
                   {p.text}
@@ -333,9 +333,9 @@ function RoundingFace({ card, chrome, className }: { card: PaperCardContent; chr
           </ul>
         )}
 
-        <p className="mt-auto flex items-center gap-[0.7cqw] pt-[1.2cqw] text-[1.25cqw] text-white/60 [&_svg]:size-[1.45cqw]">
+        <p className="mt-auto flex shrink-0 items-center gap-[0.7cqw] pt-[1.2cqw] text-[1.25cqw] text-white/60 [&_svg]:size-[1.45cqw] [&_svg]:shrink-0">
           <BookOpen aria-hidden="true" />
-          {sourceLine(card)}
+          <span className="min-w-0 truncate">{sourceLine(card)}</span>
         </p>
       </div>
     </div>
