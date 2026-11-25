@@ -11,7 +11,7 @@ import { createScanVendor } from "@/app/(main)/price-compare/actions";
 import { setItemAlias } from "@/lib/actions/item-alias-actions";
 import { fetchVendorItemMemory, fetchVendorOptions } from "@/lib/actions/vendor-actions";
 import { isPriceJump, lineIssues, totalCheck, type MatchSource } from "@/lib/invoices/checks";
-import { buildVendorIndex, looksLikeOwnHospital, type VendorAliasLite } from "@/lib/utils/vendor-name";
+import { buildVendorIndex, looksLikeOwnHospital, suggestVendors, type VendorAliasLite } from "@/lib/utils/vendor-name";
 import { genId } from "@/lib/utils/uid";
 import { normalizeItemName } from "@/lib/utils/normalize-item-name";
 import { bestMatch, nameSimilarity } from "@/lib/utils/item-match";
@@ -202,6 +202,8 @@ export function InvoiceScanPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   /** 업체의 "다른 이름" (명세서 글자 → 업체 자동 고르기에 씀) */
   const vendorAliasesRef = useRef<VendorAliasLite[]>([]);
+  /** 같은 값 — 화면(업체 후보)에서 읽는 쪽 */
+  const [vendorAliases, setVendorAliases] = useState<VendorAliasLite[]>([]);
   const [vendorProducts, setVendorProducts] = useState<VendorProduct[]>([]);
   const [aliases, setAliases] = useState<ItemNameAlias[]>([]);
   const [orders, setOrders] = useState<OrderLite[]>([]);
@@ -425,6 +427,7 @@ export function InvoiceScanPage() {
     setOrders(orderList);
     setMemory(new Map(memoryRows.map((m) => [`${m.vendorId}|${m.nameKey}`, m.vendorProductId] as const)));
     vendorAliasesRef.current = vendorOptions.flatMap((v) => v.aliases.map((alias) => ({ vendorId: v.id, alias })));
+    setVendorAliases(vendorAliasesRef.current);
     return { vendors: priceData.vendors, orderList };
   };
 
@@ -441,16 +444,14 @@ export function InvoiceScanPage() {
     return { path, kind, previewUrl };
   };
 
-  /** 명세서에 찍힌 업체 글자 → 업체 */
-  const matchVendorId = (name: string, vendorsList: Vendor[]) => {
-    // 1) 등록된 이름 · 다른 이름 · (주)/띄어쓰기만 다른 이름 → 확실한 일치
-    const sure = buildVendorIndex(vendorsList, vendorAliasesRef.current).resolve(name);
-    if (sure) return sure.id;
-    // 2) 우리 병원 이름을 업체로 읽은 경우 → 추측하지 않고 관리자가 고르게 둔다
-    if (looksLikeOwnHospital(name)) return null;
-    // 3) 비슷한 이름으로 추측
-    return bestMatch(name, vendorsList, (v) => v.name, 0.4)?.item.id ?? null;
-  };
+  /**
+   * 명세서에 찍힌 업체 글자 → 업체. 확실히 같은 업체일 때만 고른다.
+   * 등록된 이름 · 다른 이름 · (주)/띄어쓰기만 다른 이름이 아니면 비워 두고, 화면에 "혹시 이 업체?" 후보를 보여 준다.
+   * (비슷한 이름으로 추측해 채우면 처음 거래하는 업체의 명세서가 다른 업체 원장에 들어간다.
+   *  한 번 골라 확정하면 그 글자가 업체의 다른 이름으로 저장돼 다음부터는 바로 맞춰진다.)
+   */
+  const matchVendorId = (name: string, vendorsList: Vendor[]) =>
+    buildVendorIndex(vendorsList, vendorAliasesRef.current).resolve(name)?.id ?? null;
 
   // 단일 명세서 (1건)
   const handleSingle = async (file: File) => {
@@ -1138,6 +1139,15 @@ export function InvoiceScanPage() {
                         clearLabel={`미매칭 (${u.invoice.vendorName})`}
                         className="h-9 text-sm"
                       />
+                      {!u.vendorId && groupRegUnitId !== u.id && (
+                        <VendorSuggestions
+                          name={u.invoice.vendorName}
+                          vendors={vendors}
+                          aliases={vendorAliases}
+                          onPick={(id) => reassignUnit(u.id, id)}
+                          showName={false}
+                        />
+                      )}
                       {groupRegUnitId === u.id ? (
                         <div className="space-y-2 rounded-lg bg-muted p-2.5">
                           <div className="flex items-center gap-1.5">
@@ -1324,10 +1334,18 @@ export function InvoiceScanPage() {
                     {!vendorId && (
                       <span className="flex items-center gap-1 text-[13px] font-medium text-status-ask">
                         <AlertTriangle className="h-3.5 w-3.5" />
-                        미등록 업체 — 등록하면 할인율이 적용돼요
+                        업체를 못 찾았어요 — 목록에서 고르거나 새로 등록해 주세요
                       </span>
                     )}
                   </div>
+                )}
+                {!vendorId && !regOpen && (
+                  <VendorSuggestions
+                    name={vendorName}
+                    vendors={vendors}
+                    aliases={vendorAliases}
+                    onPick={changeVendor}
+                  />
                 )}
 
                 {regOpen && (
@@ -1682,6 +1700,53 @@ export function InvoiceScanPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 업체를 확실히 못 맞췄을 때 — 명세서에 적힌 글자와 "혹시 이 업체?" 후보.
+ * 후보는 이름이 서로를 포함할 때만 나온다(`suggestVendors`). 누르기 전에는 아무 업체도 고르지 않는다.
+ */
+function VendorSuggestions({
+  name,
+  vendors,
+  aliases,
+  onPick,
+  showName = true,
+}: {
+  name: string;
+  vendors: Vendor[];
+  aliases: VendorAliasLite[];
+  onPick: (vendorId: string) => void;
+  showName?: boolean;
+}) {
+  const ownHospital = looksLikeOwnHospital(name);
+  const candidates = ownHospital ? [] : suggestVendors(name, vendors, aliases);
+  if (!name && candidates.length === 0) return null;
+  return (
+    <div className="space-y-1.5 text-[13px]">
+      {showName && name && (
+        <p className="text-muted-foreground">
+          명세서에 적힌 업체: <span className="font-medium text-foreground">{name}</span>
+          {ownHospital && " — 우리 병원 이름이에요. 공급한 업체를 골라 주세요"}
+        </p>
+      )}
+      {candidates.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-muted-foreground">혹시 이 업체?</span>
+          {candidates.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => onPick(v.id)}
+              className="rounded-full bg-muted px-2.5 py-1 font-medium text-foreground hover:bg-secondary"
+            >
+              {v.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
