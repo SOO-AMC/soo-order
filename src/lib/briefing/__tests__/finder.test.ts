@@ -336,3 +336,24 @@ describe("Unpaywall", () => {
     expect(small).not.toContain("[Introduction]");
   });
 });
+
+describe("라운딩용 짧은 글", () => {
+  it("문장이 끝나는 곳까지만 남긴다", async () => {
+    const { fitSentences } = await import("../schema");
+    expect(fitSentences("짧은 글입니다.", 100)).toBe("짧은 글입니다.");
+    expect(fitSentences("첫 문장입니다. 두 번째 문장도 있습니다. 세 번째는 아주 깁니다.", 30)).toBe("첫 문장입니다. 두 번째 문장도 있습니다.");
+    expect(fitSentences("아주 긴 첫 문장 하나뿐입니다", 5)).toBe("아주 긴 첫 문장 하나뿐입니다");
+    expect(fitSentences("17마리 중 15마리(88.2%)에서 찾았습니다. 그 뒤 문장은 길게 이어집니다 정말로요.", 40)).toBe("17마리 중 15마리(88.2%)에서 찾았습니다.");
+  });
+  it("초록 모드 응답의 핵심 한 문장과 라운딩 줄을 카드에 넣고, 긴 요약은 문장 단위로 줄인다", async () => {
+    const { abstractToCard } = await import("../ai-designer");
+    const long = Array.from({ length: 12 }, (_, i) => `문장 ${i} 이 내용은 충분히 길게 이어지는 요약 문장입니다.`).join(" ");
+    const card = parseCard(abstractToCard({ headline: "제목", summary: long, lead: "핵심 한 문장", points: ["결과 하나", "임상: 가져올 점"], clinical: "임상", caution: null, evidence: null, priority: false, commentary: [], clinicalDetail: "" }));
+    if (!card.ok) throw new Error(card.error);
+    expect(card.card.lead).toBe("핵심 한 문장");
+    expect(card.card.blocks.find((b) => b.kind === "bullets")).toMatchObject({ label: "라운딩", items: ["결과 하나", "임상: 가져올 점"] });
+    const summary = card.card.blocks.find((b) => b.kind === "keyPoint");
+    expect(summary && "text" in summary ? summary.text.length : 0).toBeLessThanOrEqual(320);
+    expect(summary && "text" in summary ? summary.text.endsWith(".") : false).toBe(true);
+  });
+});

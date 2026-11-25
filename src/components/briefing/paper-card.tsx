@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import { BookOpen, Check, ChevronRight, ExternalLink, Repeat, Scale, Stethoscope, Target, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CATEGORY_LABEL, type CardBlock, type PaperCardContent } from "@/lib/briefing/schema";
+import { CATEGORY_LABEL, fitSentences, type CardBlock, type PaperCardContent } from "@/lib/briefing/schema";
 import { clip } from "@/lib/briefing/rule-designer";
 import "./briefing.css";
 
@@ -72,20 +72,59 @@ function BriefBody({ card, wide }: { card: PaperCardContent; wide: boolean }) {
   );
 }
 
-/** 라운딩 면의 한 문단형 본문 — 요약 문단(길면 자름) + 임상적 의미 한두 줄 */
+/**
+ * 라운딩 면의 한 문단형 본문. TV 는 멀리서 훑어보는 화면이라 긴 문단을 자르지 않고 따로 쓴 짧은 글을 보여 준다:
+ * AI 가 만든 핵심 한 문장(lead) + 짧은 줄(라운딩 bullets). 그게 없는 예전 카드는 요약·임상적 의미를 "문장이 끝나는 곳"까지만.
+ */
 function RoundingBrief({ card }: { card: PaperCardContent }) {
+  const tv = card.blocks.find((b): b is Extract<CardBlock, { kind: "bullets" }> => b.kind === "bullets" && b.label === "라운딩");
+  if (card.lead || tv) {
+    return (
+      <div className="mt-[2.2cqw] flex min-h-0 flex-1 flex-col gap-[1.8cqw] overflow-hidden">
+        {card.lead && (
+          <div className="flex shrink-0 items-start gap-[1.4cqw] rounded-[1.2cqw] bg-white/[0.06] px-[2cqw] py-[1.5cqw] ring-1 ring-white/15">
+            <span className="mt-[0.15cqw] flex shrink-0 items-center gap-[0.6cqw] text-[1.6cqw] font-bold text-[var(--bf-gold-300)] [&_svg]:size-[1.9cqw]">
+              <Target aria-hidden="true" />
+              핵심
+            </span>
+            <p className="line-clamp-3 text-[2.05cqw] font-semibold leading-[1.45]">{card.lead}</p>
+          </div>
+        )}
+        {tv && (
+          <ul className="grid shrink-0 gap-[1cqw]">
+            {tv.items.map((t, i) => {
+              const clinicalLine = /^임상\s*[:：]\s*/.test(t);
+              return (
+                <li key={i} className="flex items-start gap-[1cqw] text-[1.75cqw] leading-[1.45] text-white/90">
+                  <span className="mt-[0.28cqw] shrink-0 text-[var(--bf-gold-400)] [&_svg]:size-[1.8cqw]" aria-hidden="true">
+                    {clinicalLine ? <Stethoscope /> : <Check />}
+                  </span>
+                  <span className="line-clamp-2">
+                    {clinicalLine && <b className="mr-[0.5cqw] font-bold text-[var(--bf-gold-300)]">임상</b>}
+                    {t.replace(/^임상\s*[:：]\s*/, "")}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    );
+  }
   const summary = card.blocks.find((b) => b.kind === "keyPoint");
   const clinical = card.blocks.find((b) => b.kind === "clinical");
+  const summaryText = summary && "text" in summary ? fitSentences(summary.text, 170) : null;
+  const clinicalText = clinical && "text" in clinical ? fitSentences(clinical.text, 95) : null;
   return (
     <div className="mt-[2cqw] flex min-h-0 flex-1 flex-col gap-[1.6cqw] overflow-hidden">
-      {summary && <p className="line-clamp-4 shrink-0 text-[1.9cqw] leading-[1.6] text-white/90">{summary.text}</p>}
-      {clinical && (
+      {summaryText && <p className="shrink-0 text-[1.9cqw] leading-[1.6] text-white/90">{summaryText}</p>}
+      {clinicalText && (
         <div className="flex shrink-0 items-start gap-[1.4cqw] rounded-[1.2cqw] bg-white/[0.06] px-[2cqw] py-[1.3cqw] ring-1 ring-white/15">
           <span className="mt-[0.1cqw] flex shrink-0 items-center gap-[0.6cqw] text-[1.6cqw] font-bold text-[var(--bf-gold-300)] [&_svg]:size-[1.9cqw]">
             <Stethoscope aria-hidden="true" />
             임상
           </span>
-          <p className="line-clamp-2 text-[1.75cqw] font-semibold leading-[1.5]">{clinical.text}</p>
+          <p className="text-[1.75cqw] font-semibold leading-[1.5]">{clinicalText}</p>
         </div>
       )}
     </div>

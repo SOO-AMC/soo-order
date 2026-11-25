@@ -59,6 +59,21 @@ export const CATEGORY_LABEL: Record<CategoryKey, { ko: string; en: string }> = {
   etc: { ko: "기타", en: "GENERAL" },
 };
 
+/**
+ * 글을 max 글자 안에서 "문장이 끝나는 곳"까지만 남긴다 (첫 문장이 max 보다 길면 그 문장만). 새 글을 쓰지 않는다.
+ */
+export function fitSentences(text: string | null, max: number): string | null {
+  if (!text || text.length <= max) return text;
+  // 문장 끝 = 마침표·물음표·느낌표 뒤에 띄어쓰기나 글 끝이 올 때 ("88.2%" 의 소수점은 문장 끝이 아니다)
+  const sentences = text.match(/[\s\S]+?(?:[.!?。](?=\s|$)|$)\s*/g) ?? [text];
+  let out = "";
+  for (const s of sentences) {
+    if (out && (out + s).trim().length > max) break;
+    out += s;
+  }
+  return out.trim() || text;
+}
+
 /** 꺾쇠 태그 제거 + 공백 정리. 카드 글자는 전부 순수 텍스트다. */
 export function cleanText(value: string): string {
   return value

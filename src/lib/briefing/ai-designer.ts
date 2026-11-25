@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { checkFidelity } from "./fidelity";
 import type { DesignOptions } from "./rule-designer";
-import { CATEGORY_KEYS, LAYOUT_VARIANTS, cleanText, parseCard, type PaperCardContent } from "./schema";
+import { CATEGORY_KEYS, LAYOUT_VARIANTS, cleanText, fitSentences, parseCard, type PaperCardContent } from "./schema";
 
 /**
  * 실제 AI 카드 디자이너 (서버 전용).
@@ -91,10 +91,12 @@ export const AI_ABSTRACT_SYSTEM_PROMPT = `당신은 개·고양이를 보는 국
 
 출력 항목
 - headline: 이 논문의 핵심 결과를 한 문장으로. "~습니다"로 끝나는 평서문, 40자 안팎. 논문 제목을 번역하지 말고 무엇이 나왔는지 씁니다. (예: "fenbendazole 투여 뒤 중증 호중구감소증 6마리가 보고됐습니다")
-- summary: 한 문단 요약. 3~4문장, 180~280자 (카드에 그대로 들어갑니다 — 이보다 길게 쓰지 않습니다). 누구를(종·마릿수·기간·기관) 어떻게 봤고, 무엇이 나왔는지(핵심 수치 포함), 저자가 무엇이라고 결론 냈는지를 이어지는 글로 씁니다. 항목 나열이나 줄바꿈 없이 한 문단입니다.
+- summary: 한 문단 요약. 3~4문장, 180~280자. 카드에 그대로 들어가고, 300자를 넘기면 뒤 문장이 잘립니다. 누구를(종·마릿수·기간·기관) 어떻게 봤고, 무엇이 나왔는지(핵심 수치 포함), 저자가 무엇이라고 결론 냈는지를 이어지는 글로 씁니다. 항목 나열이나 줄바꿈 없이 한 문단입니다.
 - clinical: 임상적 의미. 2~3문장, 200자 이내. 국내 개·고양이 진료 기준으로 이 결과를 어떻게 받아들이면 되는지 씁니다. 국내 진료와 거리가 있는 내용(국내에 거의 없는 질환·기생충·약, 대형 동물 위주, 사람 대상 연구)이면 그렇다고 먼저 밝히고 그래도 가져올 점을 씁니다. 결과가 약하면(표본이 작음, 후향적, 효과 크기가 작음) 그만큼 조심스럽게 씁니다.
 - commentary: 해설 페이지에 실을 긴 해설. 3~5문단(문자열 하나가 한 문단), 문단마다 150~350자. 연구 배경과 대상·방법 → 결과(핵심 수치) → 저자의 해석·고찰 → 한계 순서로, 카드 요약보다 자세히 씁니다. 카드 요약을 그대로 되풀이하지 않습니다.
 - clinicalDetail: 해설 페이지의 "임상적 의미". 3~6문장, 300~600자. 국내 개·고양이 진료에서 이 결과를 어떻게 받아들이고 실제로 무엇을 확인·조심하면 되는지 씁니다(입력이 뒷받침하는 범위 안에서). 국내 진료와 거리가 있으면 먼저 밝히고 그래도 가져올 점을 씁니다.
+- lead: 세미나실 TV(라운딩 화면)에 크게 띄울 핵심 결과 한 문장. 70자 이내, 핵심 수치를 넣습니다. 제목과 같은 말을 되풀이하지 않습니다.
+- points: 라운딩 화면에 띄울 짧은 줄 2~3개. 줄마다 40자 이내. 핵심 수치나 결과 1~2줄 + 진료에 가져올 점 1줄("임상: …"로 시작). 문장이 중간에 끊기지 않게 짧게 씁니다.
 - caution: 저자가 밝힌 한계나 꼭 알아야 할 주의점 한 문장(100자 이내). 사람 의학 논문이면 "사람 대상 연구"임을 여기 적습니다. 따로 적을 것이 없으면 null.
 - evidence: 근거 수준을 한국어로 짧게. 연구 설계와 대상 수. (예: "다기관 후향 증례군(개 6마리)", "무작위 대조 시험(고양이 40마리)", "체계적 문헌고찰", "실험 연구(사체 12구)") 30자 이내.
 - priority: 진료를 바로 바꿀 만한 결과일 때만 true — 흔히 쓰는 약의 안전성 경고, 새 진료 지침, 흔한 질환에서 치료 결과가 뚜렷하게 갈린 연구. 대부분의 논문은 false 입니다.
@@ -182,6 +184,8 @@ const HTTP_URL = /^https?:\/\/[^\s<>"']+$/i;
 export const ABSTRACT_JSON_SCHEMA = obj({
   headline: str,
   summary: str,
+  lead: str,
+  points: { type: "array", items: str },
   clinical: str,
   caution: nullableStr,
   evidence: nullableStr,
@@ -190,6 +194,10 @@ export const ABSTRACT_JSON_SCHEMA = obj({
   clinicalDetail: str,
   attribution: { type: "array", items: obj({ displayText: str, sourceExcerpt: str }) },
 });
+
+/** 한 문단형 카드 요약의 최대 길이 — 넘으면 문장 단위로 줄인다 */
+const SUMMARY_MAX = 320;
+
 
 /** 카드 flags 에 넣는 "꼭 확인" 표시 — 진료를 바로 바꿀 만한 논문 */
 export const PRIORITY_FLAG = "priority";
@@ -201,7 +209,8 @@ export const PRIORITY_FLAG = "priority";
 export function abstractToCard(value: unknown, opts: DesignOptions = {}): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const v = value as Record<string, unknown>;
-  const summary = clipTo(v.summary, 600);
+  const summary = fitSentences(clipTo(v.summary, 600), SUMMARY_MAX);
+  const points = (Array.isArray(v.points) ? v.points : []).map((t) => clipTo(t, 60)).filter((t): t is string => !!t).slice(0, 3);
   const clinical = clipTo(v.clinical, 320);
   const caution = clipTo(v.caution, 320);
   const attribution = (Array.isArray(v.attribution) ? v.attribution : [])
@@ -217,10 +226,12 @@ export function abstractToCard(value: unknown, opts: DesignOptions = {}): unknow
     schemaVersion: 1,
     category: opts.category ?? null,
     headline: clipTo(v.headline, 110) ?? v.headline,
-    lead: null,
+    lead: clipTo(v.lead, 120),
     layoutVariant: "brief",
     blocks: [
       ...(summary ? [{ kind: "keyPoint", label: "요약", text: summary }] : []),
+      // 라운딩(TV) 화면 전용 짧은 줄 — 모바일·PC 한 문단형 카드에는 보이지 않는다
+      ...(points.length > 0 ? [{ kind: "bullets", label: "라운딩", items: points }] : []),
       ...(clinical ? [{ kind: "clinical", text: clinical }] : []),
       ...(caution ? [{ kind: "caution", text: caution }] : []),
     ],

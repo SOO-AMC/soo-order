@@ -85,6 +85,12 @@ export async function findBriefingPaper(issueDate: string, category: string, rep
     return { ok: false, error: msg };
   }
 
+  // 같은 논문은 두 번 나가지 않는다: 찾는 동안(30초 안팎) 다른 창·루틴이 같은 논문을 넣었을 수 있어 저장 직전에 한 번 더 본다
+  if (found.candidate.doi) {
+    const { data: dup } = await supabase.from("briefing_papers").select("id").ilike("doi", found.candidate.doi).neq("id", old?.id ?? "00000000-0000-0000-0000-000000000000").limit(1);
+    if (dup && dup.length > 0) return { ok: false, error: `방금 같은 ${label} 논문이 다른 곳에서 먼저 들어갔어요. 다시 눌러 주세요.` };
+  }
+
   const ready = found.design.mode === "ai";
   const now = new Date().toISOString();
   const fields = {
