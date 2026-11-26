@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
-import { BookOpen, Check, ChevronRight, ExternalLink, Repeat, Scale, Stethoscope, Target, TriangleAlert } from "lucide-react";
+import { BookOpen, Check, ChevronRight, ExternalLink, PawPrint, Repeat, Scale, Stethoscope, Target, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CATEGORY_LABEL, fitSentences, type CardBlock, type PaperCardContent } from "@/lib/briefing/schema";
 import { clip } from "@/lib/briefing/rule-designer";
@@ -85,12 +85,13 @@ function RoundingBrief({ card }: { card: PaperCardContent }) {
     return (
       <div className="mt-[2.2cqw] flex min-h-0 flex-1 flex-col gap-[1.8cqw] overflow-hidden">
         {card.lead && (
-          <div className="flex shrink-0 items-start gap-[1.4cqw] rounded-[1.2cqw] bg-white/[0.06] px-[2cqw] py-[1.5cqw] ring-1 ring-white/15">
-            <span className="mt-[0.15cqw] flex shrink-0 items-center gap-[0.6cqw] text-[1.6cqw] font-bold text-[var(--bf-gold-300)] [&_svg]:size-[1.9cqw]">
+          <div className="flex shrink-0 items-stretch overflow-hidden rounded-[1.2cqw] bg-white/[0.07] ring-1 ring-white/15 backdrop-blur-[2px]">
+            {/* 시안처럼 왼쪽에 금색 칸 */}
+            <span className="flex shrink-0 items-center gap-[0.6cqw] bg-gradient-to-br from-[var(--bf-gold-300)] to-[var(--bf-gold-500)] px-[1.6cqw] text-[1.6cqw] font-extrabold text-[var(--bf-navy-900)] [&_svg]:size-[1.9cqw]">
               <Target aria-hidden="true" />
               핵심
             </span>
-            <p className="line-clamp-3 text-[2.05cqw] font-semibold leading-[1.45]">{card.lead}</p>
+            <p className="line-clamp-3 px-[2cqw] py-[1.5cqw] text-[2.05cqw] font-semibold leading-[1.45]">{card.lead}</p>
           </div>
         )}
         {tv && (
@@ -288,16 +289,24 @@ export function PaperCard({
   return (
     <article className={cn("bf bf-text @container overflow-hidden rounded-[22px] bg-[var(--bf-ivory-50)] text-[var(--bf-ink)] shadow-[0_18px_40px_-24px_rgb(8_35_68/0.45)] ring-1 ring-[var(--bf-line)]", className)}>
       {/* 머리: 네이비 띠 + 제목 */}
-      <header className={cn("bf-navy-surface text-white", wide ? "px-8 pb-7 pt-6" : "px-5 pb-6 pt-5")}>
-        <div className="flex items-center justify-between gap-3 text-[12px] font-semibold tracking-[0.08em] text-[var(--bf-gold-300)]">
+      <header className={cn("bf-navy-surface relative overflow-hidden text-white", wide ? "px-8 pb-7 pt-6" : "px-5 pb-6 pt-5")}>
+        {/* 배경 장식: 둥근 청록 면 + 청진기·발자국 선 그림 (라운딩 화면과 같은 모티프, 글자 뒤 옅게) */}
+        <span aria-hidden="true" className={cn("bf-arc", wide ? "-bottom-28 -right-16 size-72" : "-bottom-20 -right-14 size-48")} />
+        <span aria-hidden="true" className={cn("bf-decor opacity-[0.13]", wide ? "-bottom-3 right-6" : "-bottom-2 right-2")}>
+          <Stethoscope strokeWidth={1} className={wide ? "size-32" : "size-20"} />
+        </span>
+        <span aria-hidden="true" className={cn("bf-decor opacity-[0.12]", wide ? "bottom-6 right-40" : "bottom-4 right-24")}>
+          <PawPrint strokeWidth={1.2} className={wide ? "size-7" : "size-5"} />
+        </span>
+        <div className="relative flex items-center justify-between gap-3 text-[12px] font-semibold tracking-[0.08em] text-[var(--bf-gold-300)]">
           <span className="whitespace-nowrap">SOO AMC · DAILY JOURNAL</span>
           <span className="shrink-0 whitespace-nowrap tabular-nums text-white/70">{(wide ? [dateLabel, progress] : [progress ?? dateLabel]).filter(Boolean).join("  ·  ")}</span>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="relative mt-4 flex flex-wrap items-center gap-2">
           <CategoryChip card={card} className="text-[12px]" />
           <PriorityChip card={card} className="text-[12px]" />
         </div>
-        <h2 className={cn("mt-3 font-extrabold tracking-tight", wide ? "text-[30px] leading-[1.3]" : "text-[23px] leading-[1.35]")}>{card.headline}</h2>
+        <h2 className={cn("relative mt-3 font-extrabold tracking-tight", wide ? "pr-24 text-[30px] leading-[1.3]" : "pr-8 text-[23px] leading-[1.35]")}>{card.headline}</h2>
       </header>
 
       <div className={cn(wide ? "px-8 py-6" : "px-5 py-5")}>
@@ -386,6 +395,14 @@ function RoundingFace({ card, chrome, qr, className }: { card: PaperCardContent;
     <div className={cn("bf bf-text bf-navy-surface relative aspect-video w-full overflow-hidden text-white [container-type:inline-size]", className)}>
       {/* 가는 금색 테두리 */}
       <div className="pointer-events-none absolute inset-[1.6cqw] rounded-[1.6cqw] ring-1 ring-[var(--bf-gold-400)]/35" aria-hidden="true" />
+      {/* 배경 장식: 오른쪽 둥근 청록 면 + 청진기·발자국 선 그림 (글자·QR 뒤, 옅게) */}
+      <span aria-hidden="true" className="bf-arc -right-[9cqw] top-[14cqw] size-[42cqw]" />
+      <span aria-hidden="true" className="bf-decor right-[5.5cqw] top-[15cqw] opacity-[0.11] [&_svg]:size-[24cqw]">
+        <Stethoscope strokeWidth={0.9} />
+      </span>
+      <span aria-hidden="true" className="bf-decor right-[22cqw] top-[33cqw] opacity-[0.10] [&_svg]:size-[4.5cqw]">
+        <PawPrint strokeWidth={1.2} />
+      </span>
 
       {chrome && (
         <>

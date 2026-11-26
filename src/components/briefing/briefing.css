@@ -30,11 +30,30 @@
 }
 
 /* 네이비 면 위의 가는 금색 곡선 장식 (이미지 없이 CSS만) */
+/* 2026-11-26: 조금 밝게 — 짙은 남색 대신 남색→청록으로 은은하게 넘어가고, 오른쪽 위에 청록 빛 */
 .bf-navy-surface {
   background:
-    radial-gradient(120% 90% at 100% 0%, rgb(38 139 144 / 0.22) 0%, transparent 55%),
-    radial-gradient(90% 70% at 0% 100%, rgb(216 180 127 / 0.1) 0%, transparent 60%),
-    linear-gradient(160deg, var(--bf-navy-900) 0%, var(--bf-navy-950) 100%);
+    radial-gradient(110% 95% at 100% 0%, rgb(38 139 144 / 0.38) 0%, transparent 58%),
+    radial-gradient(90% 70% at 0% 100%, rgb(216 180 127 / 0.12) 0%, transparent 60%),
+    linear-gradient(155deg, var(--bf-navy-800) 0%, var(--bf-navy-900) 62%, #0a2f4c 100%);
+}
+
+/* 배경 선 그림(강아지·고양이·청진기) — 글자 뒤에 옅게. 화면 읽기 프로그램에는 숨긴다 */
+.bf-decor {
+  pointer-events: none;
+  position: absolute;
+  color: var(--bf-gold-300);
+}
+.bf-decor svg {
+  display: block;
+}
+/* 청록 곡선 (시안의 둥근 면) */
+.bf-arc {
+  pointer-events: none;
+  position: absolute;
+  border-radius: 9999px;
+  border: 1px solid rgb(237 206 160 / 0.16);
+  background: radial-gradient(closest-side, rgb(38 139 144 / 0.16), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
