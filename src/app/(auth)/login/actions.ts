@@ -28,7 +28,7 @@ export async function login(
 
   const { data: profile } = await adminClient
     .from("profiles")
-    .select("id, email")
+    .select("id, email, role")
     .eq("full_name", name)
     .single();
 
@@ -66,6 +66,10 @@ export async function login(
   } catch {
     // 기억 못 해도 로그인은 그대로
   }
+
+  // 세미나실 화면 계정은 곧장 라운딩 화면으로 — 주문 화면(/orders)을 거치면 그 화면의 무거운 서버 조회가
+  // 다 돌고 나서야 (main) 레이아웃이 라운딩으로 돌려보내 로그인 뒤 한참 멈춘 것처럼 보였다
+  if (profile.role === "display") redirect("/briefing/rounding");
 
   // 로그인 화면으로 오기 전에 가려던 곳(예: 네이버웍스 알림의 링크)이 있으면 그리로
   redirect(safeNext(formData.get("next"), "/orders"));

@@ -20,16 +20,13 @@ export default async function BriefingRoundingPage() {
 
   // 쿠키에는 로그인이 남아 있어도 서버에서 이미 끝난 로그인일 수 있다(다른 기기에서 로그아웃 등).
   // 그때는 "불러오지 못했어요"가 아니라 "다시 로그인"을 보여 준다.
-  let result: Awaited<ReturnType<typeof fetchTodayBriefing>> | null = null;
-  let sessionExpired = false;
-  try {
-    result = await fetchTodayBriefing();
-  } catch (e) {
-    sessionExpired = e instanceof Error && e.message === "Unauthorized";
-  }
+  // 오늘 브리핑과 지난 브리핑(오늘 것이 없을 때 골라서 틀 것)을 동시에 읽는다 — 차례로 읽으면 화면이 그만큼 늦게 뜬다
+  const [todayRes, pastRes] = await Promise.allSettled([fetchTodayBriefing(), fetchRecentPastBriefings()]);
+  const result = todayRes.status === "fulfilled" ? todayRes.value : null;
+  const sessionExpired = todayRes.status === "rejected" && todayRes.reason instanceof Error && todayRes.reason.message === "Unauthorized";
   const today = result?.today ?? kstDate();
-  // 오늘 것이 없을 때 골라서 틀 지난 브리핑 (못 불러와도 오늘 화면은 그대로)
-  const pastIssues = sessionExpired ? [] : await fetchRecentPastBriefings().catch(() => []);
+  // 지난 브리핑을 못 불러와도 오늘 화면은 그대로
+  const pastIssues = !sessionExpired && pastRes.status === "fulfilled" ? pastRes.value : [];
   return (
     <RoundingScreen
       today={today}
