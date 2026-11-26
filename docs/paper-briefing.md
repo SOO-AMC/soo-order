@@ -70,7 +70,7 @@ pnpm lint
 | 환경변수 | 없을 때 | 있을 때 |
 |---|---|---|
 | `BRIEFING_AI_PROVIDER=anthropic` (+ `ANTHROPIC_API_KEY`) | 규칙 정리(원문 문장을 그대로 배치) | 실제 AI가 카드를 디자인 |
-| `BRIEFING_AI_MODEL` | `claude-opus-5-5` | 지정한 모델 |
+| `BRIEFING_AI_MODEL` | `claude-sonnet-5-5` | 지정한 모델 |
 | `BRIEFING_INTERNAL_NOTIFY=on` | 직원 알림을 보내지 않고 내용만 기록 | 발행 때 직원 알림함에 1건씩 |
 | `BRIEFING_APP_URL` | 네이버웍스 메시지에 경로만 | 전체 주소 |
 | `CRON_SECRET` | 크론 경로가 인증 없이 열림 | `Authorization: Bearer` 확인 |

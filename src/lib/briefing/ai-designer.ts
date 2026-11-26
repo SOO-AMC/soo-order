@@ -17,10 +17,10 @@ import { CATEGORY_KEYS, LAYOUT_VARIANTS, cleanText, fitSentences, parseCard, typ
  *  5. 요약문 전체나 응답을 로그에 남기지 않는다. 실패 사유 코드만 남긴다.
  *
  * 켜는 법: 서버 환경변수 BRIEFING_AI_PROVIDER=anthropic + ANTHROPIC_API_KEY. (기본은 꺼짐 → 규칙 정리)
- * 모델: BRIEFING_AI_MODEL 로 바꿀 수 있다. 기본 claude-opus-5-5.
+ * 모델: BRIEFING_AI_MODEL 로 바꿀 수 있다. 기본 claude-sonnet-5-5 (2026-11-26 비용 때문에 Opus 에서 바꿈 — 매일 4편).
  * 호출 시점: 관리자가 "만들기/다시 만들기"를 누를 때만. 직원 조회·라운딩 반복 때는 부르지 않는다.
  */
-export const DEFAULT_AI_MODEL = "claude-opus-5-5";
+export const DEFAULT_AI_MODEL = "claude-sonnet-5-5";
 export function aiModel(): string {
   return (process.env.BRIEFING_AI_MODEL ?? "").trim() || DEFAULT_AI_MODEL;
 }

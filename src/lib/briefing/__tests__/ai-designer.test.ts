@@ -50,7 +50,7 @@ describe("AI 카드 디자이너", () => {
     expect(res.card.layoutVariant).toBe("comparison");
     expect(res.card.flags).toContain("ai-designed");
     expect(res.providerInfo.provider).toBe("anthropic");
-    expect(res.providerInfo.model).toBe("claude-opus-5-5");
+    expect(res.providerInfo.model).toBe("claude-sonnet-5-5");
     expect(res.warnings.filter((w) => w.type === "number")).toEqual([]);
     expect(calls).toHaveLength(1); // 한 번만 부른다
     expect(parseCard(res.card).ok).toBe(true);
@@ -60,7 +60,7 @@ describe("AI 카드 디자이너", () => {
     const { client, calls } = fakeClient(goodCard());
     await designCardWithAi(RAW, {}, { client });
     const p = calls[0].params;
-    expect(p.model).toBe("claude-opus-5-5");
+    expect(p.model).toBe("claude-sonnet-5-5");
     expect(p.output_config?.format?.type).toBe("json_schema");
     expect(JSON.stringify(AI_CARD_JSON_SCHEMA)).not.toMatch(/slides|pages/);
     expect(p.stream).toBeUndefined();
