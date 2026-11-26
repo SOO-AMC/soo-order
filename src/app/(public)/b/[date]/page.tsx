@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { PUBLIC_SITE_TITLE, issueDescription, publicMetadata } from "@/lib/briefing/public-meta";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { PaperCard } from "@/components/briefing/paper-card";
@@ -7,6 +9,14 @@ import { formatIssueDate } from "@/lib/briefing/kst";
 import { progressLabel } from "@/lib/briefing/publish-rules";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ date: string }> }): Promise<Metadata> {
+  const { date } = await params;
+  const issue = await fetchPublicIssue(date).catch(() => null);
+  if (!issue) return {};
+  // 미리보기 예: "2026.11.26 (목) 수의학 논문 브리핑 · 4건" / "내과 · … / 외과 · …"
+  return publicMetadata(`${formatIssueDate(issue.date)} ${PUBLIC_SITE_TITLE} · ${issue.papers.length}건`, issueDescription(issue.papers), { absoluteTitle: true });
+}
 
 /** 공개: 그날의 카드 전부 (논문 1건 = 카드 1장). 해설이 있는 카드는 "해설 보기"로 해설 페이지에 간다 */
 export default async function PublicBriefingDayPage({ params }: { params: Promise<{ date: string }> }) {
@@ -24,7 +34,7 @@ export default async function PublicBriefingDayPage({ params }: { params: Promis
       <p className="mt-1 text-[14px] text-[var(--bf-slate-500)]">논문 {total}건</p>
       <div className="mt-5 grid gap-6">
         {issue.papers.map((p, i) => (
-          <div key={p.id}>
+          <div key={p.id} id={`p-${p.id}`} className="scroll-mt-4">
             <PaperCard card={p.card} variant="mobile" dateLabel={label} progress={progressLabel(i, total)} detailHref={`/b/paper/${p.id}`} className="lg:hidden" />
             <PaperCard card={p.card} variant="desktop" dateLabel={label} progress={progressLabel(i, total)} detailHref={`/b/paper/${p.id}`} className="hidden lg:block" />
           </div>

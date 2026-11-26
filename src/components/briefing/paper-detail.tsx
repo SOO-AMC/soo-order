@@ -1,4 +1,4 @@
-import { ExternalLink, FileText, Stethoscope } from "lucide-react";
+import { ChevronLeft, ExternalLink, FileText, Stethoscope, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sourceHref } from "@/components/briefing/paper-card";
 import type { PaperCardContent } from "@/lib/briefing/schema";
@@ -8,7 +8,18 @@ import type { PaperCardContent } from "@/lib/briefing/schema";
  * 서버·클라이언트 어디서나 쓸 수 있게 훅을 쓰지 않는다.
  * 해설이 없는 카드(직접 붙여넣은 논문)는 논문 정보만 보여 준다.
  */
-export function PaperDetail({ card, id, className }: { card: PaperCardContent; id?: string; className?: string }) {
+export function PaperDetail({
+  card,
+  id,
+  className,
+  closeHref,
+}: {
+  card: PaperCardContent;
+  id?: string;
+  className?: string;
+  /** "해설 닫기" → 보던 카드로 (같은 화면의 #카드 또는 그날 브리핑의 그 카드). 없으면 버튼 없음 */
+  closeHref?: string;
+}) {
   const d = card.detail;
   const clinical = d?.clinical ?? card.blocks.find((b) => b.kind === "clinical")?.text ?? null;
   const s = card.source;
@@ -24,6 +35,16 @@ export function PaperDetail({ card, id, className }: { card: PaperCardContent; i
 
   return (
     <section id={id} className={cn("bf bf-text scroll-mt-20 rounded-[22px] bg-[var(--bf-ivory-50)] px-5 py-6 text-[var(--bf-ink)] ring-1 ring-[var(--bf-line)] lg:px-8 lg:py-7", className)}>
+      {closeHref && (
+        <div className="-mt-2 mb-3 flex justify-end">
+          <a
+            href={closeHref}
+            className="inline-flex h-9 items-center gap-1 rounded-full bg-white px-3.5 text-[13px] font-bold text-[var(--bf-slate-500)] ring-1 ring-[var(--bf-line)] hover:text-[var(--bf-ink)]"
+          >
+            <X className="size-4" aria-hidden="true" /> 닫기
+          </a>
+        </div>
+      )}
       {d && d.paragraphs.length > 0 && (
         <>
           <h2 className="flex items-center gap-2 text-[17px] font-extrabold">
@@ -70,6 +91,14 @@ export function PaperDetail({ card, id, className }: { card: PaperCardContent; i
         </a>
       )}
       {d && <p className="mt-4 text-[12px] leading-[1.6] text-[var(--bf-slate-500)]">PubMed에 등록된 논문을 AI가 요약·해설했어요. 요약과 해석에 오류가 있을 수 있으니 중요한 판단 전에는 원문을 확인해 주세요.</p>}
+      {closeHref && (
+        <a
+          href={closeHref}
+          className="mt-5 flex items-center justify-center gap-1 rounded-xl bg-[var(--bf-navy-900)] py-3 text-[15px] font-bold text-white transition-opacity hover:opacity-90"
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" /> 해설 닫기 · 카드로 돌아가기
+        </a>
+      )}
     </section>
   );
 }

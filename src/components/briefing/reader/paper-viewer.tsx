@@ -143,7 +143,7 @@ export function PaperViewer({ issue, initialIndex }: { issue: ReaderIssue; initi
         </div>
 
         {/* 카드 1장 */}
-        <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="touch-pan-y">
+        <div id="card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="scroll-mt-28 touch-pan-y">
           <PaperCard key={`m-${paper.id}`} card={paper.card} variant="mobile" dateLabel={dateLabel} progress={progressLabel(index, total)} detailHref="#detail" className="bf-fade lg:hidden" />
           <PaperCard key={`d-${paper.id}`} card={paper.card} variant="desktop" dateLabel={dateLabel} progress={progressLabel(index, total)} detailHref="#detail" className="bf-fade hidden lg:block" />
         </div>
@@ -174,7 +174,7 @@ export function PaperViewer({ issue, initialIndex }: { issue: ReaderIssue; initi
         )}
 
         {/* 해설 (자동으로 찾은 논문) — 카드의 "해설 보기"가 여기로 온다 */}
-        {paper.card.detail && <PaperDetail key={`detail-${paper.id}`} card={paper.card} id="detail" className="mt-4" />}
+        {paper.card.detail && <PaperDetail key={`detail-${paper.id}`} card={paper.card} id="detail" closeHref="#card" className="mt-4" />}
 
         {/* 이전 / 다음 논문 */}
         {total > 1 && (

@@ -74,6 +74,7 @@ export function RoundingScreen({
   sessionExpired,
   pastIssues,
   isDisplayAccount,
+  publicBase,
 }: {
   today: string;
   issue: ReaderIssue | null;
@@ -86,6 +87,8 @@ export function RoundingScreen({
   pastIssues: ReaderIssue[];
   /** 세미나실 전용 계정 — 다른 화면으로 가는 길을 보여 주지 않는다 */
   isDisplayAccount: boolean;
+  /** 해설 QR 에 넣을 운영 주소 (https). null 이면 이 화면의 주소 */
+  publicBase: string | null;
 }) {
   const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -270,7 +273,7 @@ export function RoundingScreen({
               card={paper.card}
               variant="rounding"
               rounding={{ dateLabel, index, total, elapsed: progressOf(loop, intervalSec * 1000), paused, title: isPastPlay ? "지난 논문 브리핑" : undefined }}
-              roundingQr={paper.card.detail ? <QrCode path={`/b/paper/${paper.id}`} label="이 논문 해설 페이지 QR 코드" /> : undefined}
+              roundingQr={paper.card.detail ? <QrCode base={publicBase} path={`/b/paper/${paper.id}`} label="이 논문 해설 페이지 QR 코드" /> : undefined}
             />
           {/* 화면 낭독기용: 논문이 바뀔 때만 알린다 */}
           <p className="sr-only" aria-live="polite">

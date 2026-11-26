@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import "@/components/briefing/briefing.css";
+import { PUBLIC_SITE_DESCRIPTION, PUBLIC_SITE_TITLE, publicMetadata } from "@/lib/briefing/public-meta";
 
 /**
  * 공개 열람 (로그인 없이) — 논문 브리핑 카드·해설만. (main) 레이아웃 밖이라 메뉴·직원 정보가 없다.
  * 검색엔진 노출은 꺼 둔다(링크를 받은 사람이 보는 용도). 켜려면 robots 를 바꾼다.
  */
 export const metadata: Metadata = {
-  title: { default: "오늘의 수의학 논문 브리핑", template: "%s | 수의학 논문 브리핑" },
+  ...publicMetadata("오늘의 수의학 논문 브리핑", PUBLIC_SITE_DESCRIPTION),
+  title: { default: "오늘의 수의학 논문 브리핑", template: `%s | ${PUBLIC_SITE_TITLE}` },
   robots: { index: false, follow: false },
 };
 

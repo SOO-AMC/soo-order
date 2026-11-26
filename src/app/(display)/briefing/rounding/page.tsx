@@ -4,6 +4,7 @@ import { getSessionProfile } from "@/lib/supabase/server";
 import { fetchRecentPastBriefings, fetchTodayBriefing } from "@/lib/actions/briefing-reader-actions";
 import { RoundingScreen } from "@/components/briefing/rounding/rounding-screen";
 import { isPastPublishTime, kstDate } from "@/lib/briefing/kst";
+import { publicAppUrl } from "@/lib/briefing/public-meta";
 
 export const metadata: Metadata = { title: "라운딩 대기 모드" };
 export const dynamic = "force-dynamic";
@@ -38,6 +39,7 @@ export default async function BriefingRoundingPage() {
       sessionExpired={sessionExpired}
       pastIssues={pastIssues}
       isDisplayAccount={role === "display"}
+      publicBase={publicAppUrl()}
     />
   );
 }

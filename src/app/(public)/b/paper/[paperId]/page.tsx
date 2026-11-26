@@ -6,6 +6,7 @@ import { PaperCard } from "@/components/briefing/paper-card";
 import { PaperDetail } from "@/components/briefing/paper-detail";
 import { CopyLinkButton } from "@/components/briefing/copy-link-button";
 import { fetchPublicPaper } from "@/lib/briefing/public-reader";
+import { PUBLIC_SITE_TITLE, publicMetadata } from "@/lib/briefing/public-meta";
 import { formatIssueDate } from "@/lib/briefing/kst";
 import { progressLabel } from "@/lib/briefing/publish-rules";
 
@@ -16,7 +17,8 @@ export async function generateMetadata({ params }: { params: Promise<{ paperId: 
   const found = await fetchPublicPaper(paperId).catch(() => null);
   if (!found) return {};
   const summary = found.paper.card.blocks.find((b) => b.kind === "keyPoint");
-  return { title: found.paper.headline, description: summary && "text" in summary ? summary.text.slice(0, 120) : undefined };
+  const text = summary && "text" in summary ? summary.text : (found.paper.card.lead ?? "");
+  return publicMetadata(found.paper.headline, `${formatIssueDate(found.date)} ${PUBLIC_SITE_TITLE} · ${text}`);
 }
 
 /** 공개: 논문 1건 — 카드 + 해설(긴 해설·임상적 의미·출처·원제·근거 수준·교신저자) */
@@ -35,7 +37,8 @@ export default async function PublicPaperPage({ params }: { params: Promise<{ pa
         <PaperCard card={paper.card} variant="mobile" dateLabel={label} progress={progressLabel(index, total)} className="lg:hidden" />
         <PaperCard card={paper.card} variant="desktop" dateLabel={label} progress={progressLabel(index, total)} className="hidden lg:block" />
       </div>
-      <PaperDetail card={paper.card} id="detail" className="mt-4" />
+      {/* 닫기 → 그날 브리핑의 이 카드 자리로 (QR·링크로 바로 들어왔어도 갈 곳이 있다) */}
+      <PaperDetail card={paper.card} id="detail" closeHref={`/b/${date}#p-${paper.id}`} className="mt-4" />
       <div className="mt-4 flex flex-wrap gap-2">
         <CopyLinkButton
           path={`/b/paper/${paper.id}`}
