@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PUBLIC_SITE_TITLE, issueDescription, publicMetadata } from "@/lib/briefing/public-meta";
+import { issueDescription, issueTitle, publicMetadata } from "@/lib/briefing/public-meta";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { PaperCard } from "@/components/briefing/paper-card";
@@ -14,8 +14,8 @@ export async function generateMetadata({ params }: { params: Promise<{ date: str
   const { date } = await params;
   const issue = await fetchPublicIssue(date).catch(() => null);
   if (!issue) return {};
-  // 미리보기 예: "2026.11.26 (목) 수의학 논문 브리핑 · 4건" / "내과 · … / 외과 · …"
-  return publicMetadata(`${formatIssueDate(issue.date)} ${PUBLIC_SITE_TITLE} · ${issue.papers.length}건`, issueDescription(issue.papers), { absoluteTitle: true });
+  // 미리보기 예: "11.26 수의학 논문 브리핑" / "내과·외과·영상·응급 논문 4편"
+  return publicMetadata(issueTitle(issue.date), issueDescription(issue.papers), { absoluteTitle: true });
 }
 
 /** 공개: 그날의 카드 전부 (논문 1건 = 카드 1장). 해설이 있는 카드는 "해설 보기"로 해설 페이지에 간다 */

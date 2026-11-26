@@ -64,12 +64,14 @@ export function buildShareMessage(date: string, papers: { headline: string; cate
   return [`📚 수의학 논문 브리핑 · ${m}월 ${d}일(${wd})`, ...blocks, `👉 카드·해설 보기 (로그인 없이 열려요)\n${baseUrl.replace(/\/+$/, "")}/b/${date}`].join("\n\n");
 }
 
-/** 그날 묶음 미리보기 설명: "내과 · 제목 / 외과 · 제목 …" */
+/** 그날 묶음 미리보기 제목: "11.26 수의학 논문 브리핑" (네이버웍스 미리보기 카드가 좁아 짧게) */
+export function issueTitle(date: string): string {
+  const [, m, d] = date.split("-");
+  return `${m}.${d} ${PUBLIC_SITE_TITLE}`;
+}
+
+/** 그날 묶음 미리보기 설명: "내과·외과·영상·응급 논문 4편" */
 export function issueDescription(papers: { headline: string; category: string | null }[]): string {
-  return papers
-    .map((p) => {
-      const cat = p.category && p.category in CATEGORY_LABEL ? CATEGORY_LABEL[p.category as CategoryKey].ko : null;
-      return cat ? `${cat} · ${p.headline}` : p.headline;
-    })
-    .join(" / ");
+  const cats = [...new Set(papers.map((p) => (p.category && p.category in CATEGORY_LABEL ? (SHARE_LABEL[p.category as CategoryKey] ?? CATEGORY_LABEL[p.category as CategoryKey].ko) : null)).filter((c): c is string => !!c))];
+  return `${cats.length > 0 ? `${cats.join("·")} ` : ""}논문 ${papers.length}편`;
 }

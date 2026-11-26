@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildShareMessage, issueDescription, publicAppUrl, publicMetadata } from "../public-meta";
+import { buildShareMessage, issueDescription, issueTitle, publicAppUrl, publicMetadata } from "../public-meta";
 
 describe("publicAppUrl (라운딩 QR 주소)", () => {
   it("BRIEFING_APP_URL 이 https 면 그것", () => {
@@ -23,8 +23,10 @@ describe("공개 링크 미리보기", () => {
     expect(m.openGraph?.title).toBe("2026.11.26 (목) 수의학 논문 브리핑 · 2건");
     expect((m.description ?? "").length).toBeLessThanOrEqual(160);
   });
-  it("묶음 설명은 분야 · 제목", () => {
-    expect(issueDescription([{ headline: "가", category: "internal" }, { headline: "나", category: null }])).toBe("내과 · 가 / 나");
+  it("묶음 제목·설명은 짧게: 날짜 + 수의학 논문 브리핑 / 분야 + 편수", () => {
+    expect(issueTitle("2026-11-26")).toBe("11.26 수의학 논문 브리핑");
+    expect(issueDescription([{ headline: "가", category: "internal" }, { headline: "나", category: "emergency" }, { headline: "다", category: null }])).toBe("내과·응급 논문 3편");
+    expect(issueDescription([{ headline: "가", category: null }])).toBe("논문 1편");
   });
 });
 
