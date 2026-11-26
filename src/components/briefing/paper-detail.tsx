@@ -1,4 +1,4 @@
-import { ChevronLeft, ExternalLink, FileText, Stethoscope, X } from "lucide-react";
+import { ChevronLeft, ExternalLink, FileText, Stethoscope, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sourceHref } from "@/components/briefing/paper-card";
 import type { PaperCardContent } from "@/lib/briefing/schema";
@@ -22,6 +22,8 @@ export function PaperDetail({
 }) {
   const d = card.detail;
   const clinical = d?.clinical ?? card.blocks.find((b) => b.kind === "clinical")?.text ?? null;
+  // 휴대폰 카드에는 주의가 안 보이므로 해설에서 보여 준다
+  const caution = card.blocks.find((b) => b.kind === "caution")?.text ?? null;
   const s = card.source;
   const href = sourceHref(card);
   const rows: [string, React.ReactNode][] = [];
@@ -67,6 +69,16 @@ export function PaperDetail({
           </h3>
           <p className="text-[16px] leading-[1.85] lg:text-[17px]">{clinical}</p>
         </div>
+      )}
+
+      {caution && (
+        <p className="mt-4 flex gap-2 text-[15px] leading-[1.8] text-[var(--bf-slate-700)] lg:text-[16px]">
+          <TriangleAlert className="mt-[0.35em] size-4 shrink-0 text-[#8a6426]" aria-hidden="true" />
+          <span>
+            <b className="mr-1.5 font-bold text-[#8a6426]">주의</b>
+            {caution}
+          </span>
+        </p>
       )}
 
       {rows.length > 0 && (

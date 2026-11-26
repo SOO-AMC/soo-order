@@ -47,8 +47,11 @@ function PriorityChip({ card, className }: { card: PaperCardContent; className?:
 /** 한 문단형 본문 (모바일·PC) — 요약 문단 · 임상적 의미 · 주의. 같은 글자 크기·줄 간격 */
 function BriefBody({ card, wide }: { card: PaperCardContent; wide: boolean }) {
   const summary = card.blocks.find((b) => b.kind === "keyPoint");
-  const clinical = card.blocks.find((b) => b.kind === "clinical");
-  const caution = card.blocks.find((b) => b.kind === "caution");
+  // 휴대폰: 제목 + 요약 한 문단만 (인스타 "수의학 데일리 브리핑" 카드처럼 한 화면에). 임상적 의미·주의는 "해설 보기"에서.
+  // 해설이 없는 카드(예전 카드)는 갈 곳이 없으니 그대로 다 보여 준다.
+  const compact = !wide && !!card.detail;
+  const clinical = compact ? undefined : card.blocks.find((b) => b.kind === "clinical");
+  const caution = compact ? undefined : card.blocks.find((b) => b.kind === "caution");
   const size = wide ? "text-[17px] leading-[1.85]" : "text-[16px] leading-[1.8]";
   return (
     <div className="grid gap-5">
@@ -298,7 +301,8 @@ export function PaperCard({
       </header>
 
       <div className={cn(wide ? "px-8 py-6" : "px-5 py-5")}>
-        {card.lead && (
+        {/* 한 문단형은 핵심 한 문장(lead)을 라운딩 TV 에서만 쓴다 — 카드에서는 요약과 겹친다 */}
+        {card.lead && !brief && (
           <div className="mb-5 rounded-2xl bg-[var(--bf-teal-100)] px-4 py-3.5">
             <BlockLabel icon={<Target />}>한 줄 핵심</BlockLabel>
             <p className={cn("font-bold leading-[1.55] text-[var(--bf-ink)]", wide ? "text-[19px]" : "text-[17px]")}>{card.lead}</p>
